@@ -3,15 +3,15 @@
 Peanut OS is a professional, high-performance web platform designed for the operational, technical, and commercial management of IT Service Providers. Initially conceptualized as a robust system for **Borges TI**, it is designed from the ground up with a white-label architecture to support custom branding, and a logical database model that prepares the schema for future multi-tenant operations.
 
 > [!WARNING]
-> **Project Status**: **Initial Development Stage (Fase 0 - Foundation)**. 
-> This is a professional developer portfolio project under active development. Core modules are planned and stubbed but not yet functionally complete.
+> **Project Status**: **Phase 1 Complete (Authentication, RBAC & Client Management)**. 
+> This is a professional developer portfolio project under active development. All Phase 1 modules (Stateless JWT authentication, Tenant-scoped access, Clients CRUD, and inline Contacts management) are fully functional, verified, and build-green!
 
 ---
 
 ## 🛠️ The Tech Stack
 
 - **Monorepo & Task Orchestration**: `pnpm workspaces` + [Turborepo](https://turbo.build/)
-- **Frontend**: [Next.js 14 (App Router)](https://nextjs.org/) + TypeScript + Tailwind CSS + shadcn/ui
+- **Frontend**: [Next.js 14 (App Router)](https://nextjs.org/) + TypeScript + Tailwind CSS + Vanilla CSS Layouts
 - **Backend API**: [NestJS](https://nestjs.com/) Modular Monolith (Fastify Adapter)
 - **Database ORM**: PostgreSQL + [Prisma](https://www.prisma.io/)
 - **Background Jobs & Queues**: Redis + [BullMQ](https://bullmq.io/)
@@ -49,17 +49,26 @@ peanutos/
 
 ## 🚦 Features & Roadmap
 
-### Implemented Foundation (Phase 0)
+### Implemented Modules
+
+#### Foundation (Phase 0)
 - [x] Monorepo & workspaces setup with `pnpm workspaces` & `turbo.json`.
 - [x] Shared packages configured (`@peanut/db`, `@peanut/ui`, `@peanut/types`, `@peanut/validators`, `@peanut/documents`, `@peanut/utils`).
 - [x] Initial relational PostgreSQL database schema with logical `workspaceId` column for future tenant-isolation.
-- [x] Seed script populated with 100% fictive developer data (e.g. Acme Tech).
 - [x] Docker Compose environment for local DB dependency orchestrations.
 - [x] NestJS + Fastify base controller and Next.js Landing page importing shared packages successfully.
 
+#### Authentication & Client Management (Phase 1)
+- [x] Stateless JWT token-based Session Authentication.
+- [x] Unified Role-Based Access Controls (RBAC) with guards supporting `READ_ONLY`, `FINANCIAL`, `TECHNICIAN`, `ADMIN`, and `OWNER` roles.
+- [x] Scoped logical tenancy (`workspaceId`) on all database queries.
+- [x] Safe workspace User CRUD with deactivation blocks on final active `OWNER` accounts.
+- [x] Customers CRUD with multi-field search, pagination, and status badge filters.
+- [x] Client Contacts CRUD with validation checks and single-primary contact toggling limits.
+- [x] Beautiful dark glassmorphic Next.js pages: `/login`, `/dashboard`, `/dashboard/clients`, `/dashboard/clients/new`, `/dashboard/clients/[id]` detail tabs.
+
 ### Planned Modules (Next Phases)
-- [ ] **Phase 1**: Authentication, cookie-based Session/JWT management, and basic RBAC (`OWNER`, `ADMIN`, `TECHNICIAN`, `FINANCIAL`, `READ_ONLY`).
-- [ ] **Phase 2**: Client & Contacts CRUD and Technical Asset Inventory management (with application-level cryptographic envelope stubs).
+- [ ] **Phase 2**: Technical Asset Inventory management (Notebooks, Servers, VPNs, assignments to client users) and application-level secure cryptographic envelope (AES-256-GCM).
 - [ ] **Phase 3**: Ticketing & SLA Engine (SLA timer state machines, technical comments).
 - [ ] **Phase 4**: Financial Quotes, Invoices, and Playwright Worker PDF Render Engine.
 - [ ] **Phase 5**: IT Contracts, SLAs, and recurring subscription fees.
@@ -71,8 +80,16 @@ peanutos/
 
 ### Prerequisites
 - Node.js >= 18.0.0
-- pnpm >= 8.0.0
+- pnpm >= 9.1.1
 - Docker Desktop (for local DB dependencies)
+
+### Local Developer Credentials (Seed)
+Once seeded, the database contains the following mock administrator credentials:
+- **Username / E-mail**: `admin@example.com`
+- **Password**: `ChangeMe123!`
+
+> [!WARNING]
+> **CRITICAL SECURITY NOTE**: The credentials above are strictly fictive developer parameters for local homologation and development. **NEVER** use these credentials in a live or production environment!
 
 ### Quick Start
 1. **Clone the repository and go to the root**:
@@ -107,12 +124,12 @@ peanutos/
    pnpm dev
    ```
    - Frontend Panel: `http://localhost:3000`
-   - Backend API: `http://localhost:3001/api/v1/health`
+   - Backend API: `http://localhost:3001/api/v1`
 
 ---
 
 ## 🛡️ Security Guidelines for Contributors (including AIs)
 1. **White-Label First**: Never hardcode "Borges OS" or specific company names in layout code. Use context variables or `process.env.NEXT_PUBLIC_BRAND_NAME`.
 2. **No Real Data**: The repository is prepared to go public on GitHub. Never commit real CPF, CNPJ, phone numbers, client data, or SMTP credentials.
-3. **No improvising Cryptography**: Always use the stub helpers inside `@peanut/utils` for sensitive asset strings, preparing for robust application-level envelope encryption.
+3. **No improvising Cryptography**: Always use the stub helpers inside `@peanut/utils` for sensitive asset strings, preparing for robust application-level envelope encryption in Phase 2.
 4. **Never commit `.env` files**: All secret configurations must remain local-only. Keep `.env.example` updated with mock parameters.

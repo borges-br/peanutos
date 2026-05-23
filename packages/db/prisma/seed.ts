@@ -18,11 +18,13 @@ async function main() {
   console.log(`- Workspace created/found: ${workspace.name} (${workspace.id})`);
 
   // 2. Create default Admin User (OWNER role)
-  // Mock bcrypt hash for "password123"
-  const passwordHash = '$2b$10$EPf52D.RGA5f.x2XwKz2sOc0d4D6.08CqYfV/P.pYV3x2p9Y74pD2';
+  // Mock bcrypt hash for "ChangeMe123!" (Clearly temporary and stronger dev credential)
+  const passwordHash = '$2b$10$aPtlplAqQ63c8I1GKjQDI.xMC9x3uqAhPH0LOiO33Ow6EqmiudVx6';
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@example.com' },
-    update: {},
+    update: {
+      passwordHash,
+    },
     create: {
       workspaceId: workspace.id,
       name: 'Admin Peanut',

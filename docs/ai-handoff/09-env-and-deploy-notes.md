@@ -13,6 +13,16 @@ This document provides details for local environment setups and deployments.
 
 ---
 
+## Environment Variables for Phase 1 Authentication
+Ensure the following variables are correctly populated in `.env`:
+```ini
+# JWT configuration settings
+JWT_SECRET="change-me-in-production-at-least-32-chars-long"
+JWT_EXPIRES_IN="15m"
+```
+
+---
+
 ## Local Docker Services (Compose)
 To bootstrap the database layers:
 ```bash

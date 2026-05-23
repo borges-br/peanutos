@@ -73,3 +73,29 @@ export const ticketSchema = z.object({
 });
 
 export type TicketInput = z.infer<typeof ticketSchema>;
+
+// User Validation Schema
+export const userSchema = z.object({
+  name: z.string().min(2, { message: 'Nome deve ter no mínimo 2 caracteres' }),
+  email: z.string().email({ message: 'E-mail inválido' }),
+  password: z.string().min(6, { message: 'A senha deve ter no mínimo 6 caracteres' }).optional().or(z.literal('')),
+  role: z.enum(['OWNER', 'ADMIN', 'TECHNICIAN', 'FINANCIAL', 'READ_ONLY']),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']).optional(),
+});
+
+export type UserInput = z.infer<typeof userSchema>;
+
+// Client Contact Validation Schema
+export const clientContactSchema = z.object({
+  name: z.string().min(2, { message: 'Nome é obrigatório' }),
+  email: z.string().email({ message: 'E-mail inválido' }),
+  phone: z.string().optional().nullable().or(z.literal('')),
+  mobile: z.string().optional().nullable().or(z.literal('')),
+  role: z.string().optional().nullable().or(z.literal('')),
+  department: z.string().optional().nullable().or(z.literal('')),
+  isPrimary: z.boolean().default(false),
+  notes: z.string().optional().nullable().or(z.literal('')),
+});
+
+export type ClientContactInput = z.infer<typeof clientContactSchema>;
+

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { AuthProvider } from '../context/AuthContext';
 
 export const metadata: Metadata = {
   title: 'Peanut OS — Sistema de Gestão Operacional de TI',
@@ -14,9 +15,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body>
-        <div id="app-root" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-          {children}
-        </div>
+        <AuthProvider>
+          <div id="app-root" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+            {children}
+          </div>
+        </AuthProvider>
       </body>
     </html>
   );

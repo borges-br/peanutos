@@ -1,31 +1,32 @@
 # 01 — Next Steps
 
-This document outlines the priority checklist for the next AI agent (Codex, Claude, or Cursor) to execute during **Phase 1: Authentication & Client Management**.
+This document outlines the priority checklist for the next AI agent to execute during **Phase 2: Client Inventory & Asset Management**.
 
-## Phase 1 Execution Checklist
+## Phase 2 Execution Checklist
 
-### 1. Local Database Migration & Seeding
-- [ ] Spin up the Docker containers using `docker-compose -f infra/docker/docker-compose.yml up -d`.
-- [ ] Execute initial database migration to PostgreSQL: `pnpm --filter @peanut/db prisma migrate dev --name init`.
-- [ ] Execute the fictive seed script to populate initial workspaces, admin owner, client (Acme), contact, client user, operational assets, and initial ticket: `pnpm db:seed`.
+### 1. Database Connections & Local Seeding
+- [ ] Initialize the Docker Compose services manually using Docker Desktop on the host.
+- [ ] Apply the Prisma schema migrations to the PostgreSQL database.
+- [ ] Seed the fictive dataset using `pnpm db:seed` to populate the default admin (`admin@example.com` / `ChangeMe123!`), clients, and placeholder tickets.
 
-### 2. NestJS Authentication & RBAC Core
-- [ ] Implement a JWT-based, HTTP-only cookie-safe session mechanism inside `apps/api/src/auth`.
-- [ ] Add the following enums for RBAC controls: `OWNER`, `ADMIN`, `TECHNICIAN`, `FINANCIAL`, `READ_ONLY`.
-- [ ] Implement an `@Roles()` decorator and `RolesGuard` to lock routes down.
-- [ ] Bind users to `workspaceId` upon session instantiation to verify logical tenant isolation.
+### 2. Client Users Registry CRUD
+- [ ] Implement CRUD REST endpoints in `apps/api` for the `ClientUser` model (`/clients/:clientId/users`).
+- [ ] Scopes all operations strictly to the user's active `workspaceId`.
+- [ ] Integrate appropriate Zod validators.
 
-### 3. NestJS Auditing & Logging Guard
-- [ ] Create an `AuditService` in `apps/api/src/audit` that writes user actions into the `AuditLog` table.
-- [ ] Create an `AuditInterceptor` to automatically record modifications on sensitive endpoints (e.g. client editing, asset deletions).
+### 3. Technical Asset Inventory CRUD (NestJS API)
+- [ ] Create `AssetsModule` in `apps/api` managing the `Asset` model.
+- [ ] Expose CRUD REST endpoints (`GET /assets`, `POST /assets`, `PATCH /assets/:id`, `PATCH /assets/:id/status`) scoped by `workspaceId`.
+- [ ] Support multi-field searches (name, serialNumber, hostname, assetTag) and filters by client and status.
+- [ ] Support physical equipment assignment: allow linking an `Asset` to a specific `ClientUser`.
 
-### 4. Client & Contact CRUD REST Endpoints
-- [ ] Implement `GET /clients`, `POST /clients`, `GET /clients/:id`, `PATCH /clients/:id`, `DELETE /clients/:id` with strict Zod validation from `@peanut/validators`.
-- [ ] Implement `GET /clients/:id/contacts` and matching CRUD operations for the `ClientContact` model.
-- [ ] Verify that every REST controller filters records by the authenticated user's `workspaceId`.
+### 4. Symmetric Encryption Envelope (`@peanut/utils`)
+- [ ] Upgrade the encryption stubs in `packages/utils/src/index.ts`.
+- [ ] Implement secure AES-256-GCM symmetric encryption using a 32-byte key defined in `process.env.APPLICATION_ENCRYPTION_KEY`.
+- [ ] Ensure that before saving sensitive credentials (like server passwords or remote desktop keys) to `sensitiveDataEncrypted` in the `Asset` table, the data is encrypted in the API, and decrypted on read.
 
-### 5. Frontend Authentication & Client Dashboard
-- [ ] Implement a premium dark glassmorphic Login screen in `apps/web/src/app/login` with Zod validation.
-- [ ] Configure client-side React session context (`AuthProvider`).
-- [ ] Build a sleek responsive table layout in `apps/web/src/app/dashboard/clients` to list and create Clients.
-- [ ] Integrate appropriate skeleton loaders, error states, and empty states.
+### 5. Frontend Inventory Panels & Forms (Next.js)
+- [ ] Build a responsive listing table at `/dashboard/inventory` (or inside `/dashboard/clients/[id]`) showing active assets, skeleton loaders, and filters.
+- [ ] Build an asset creation and edit form validating inputs with Zod.
+- [ ] Integrate secure detail sheets allowing authorized users (`OWNER`, `ADMIN`, `TECHNICIAN`) to view decrypted credentials.
+- [ ] Build a client users listing tab inside `/dashboard/clients/[id]` supporting inline CRUD actions.

@@ -4,19 +4,11 @@ This document maps all the remaining features for the development of **Peanut OS
 
 ---
 
-## 🔐 Phase 1: Authentication & Client Management
-- **NextJS / NestJS Login**: Session authentication with HTTP-only cookies.
-- **RBAC Policy**: Route permissions matching roles (`OWNER`, `ADMIN`, `TECHNICIAN`, `FINANCIAL`, `READ_ONLY`).
-- **Audit Logging**: Application-level action tracking inside PostgreSQL.
-- **Clients CRUD**: Management of client entities and related primary contacts.
-- **Client Users**: Registry of client users, departments, and specific technical rules.
-
----
-
 ## 🖥️ Phase 2: Technical Asset Inventory
 - **Asset CRUD**: Centralized hardware & software inventory modules (Notebooks, Servers, VPNs, etc.).
 - **Asset Assignment**: Link physical workstations and printers to specific Client Users.
-- **Sensitive Data Cryptographic Envelope**: Real symmetric application-level envelope encryption (AES-256-GCM) inside `@peanut/utils` to secure server passwords, remote desktop connections, and passwords.
+- **Sensitive Data Cryptographic Envelope**: Real symmetric application-level envelope encryption (AES-256-GCM) inside `@peanut/utils` to secure server passwords, remote desktop credentials, and sensitive notes.
+- **Client Users**: Registry of client users, departments, and specific technical rules (originally scheduled in Phase 1, deferred to Phase 2 to group with Asset assignments).
 
 ---
 

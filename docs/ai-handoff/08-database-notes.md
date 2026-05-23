@@ -9,6 +9,14 @@ This document captures relational database schema architectures of **Peanut OS**
 
 ---
 
+## Phase 1 Status
+The relational database models defined in `packages/db/prisma/schema.prisma` already housed complete structural properties for all Phase 1 features.
+- We successfully validated the database schemas using local Prisma `v5.22.0` engines.
+- **No migrations or database changes were required** during Phase 1.
+- Updated `packages/db/prisma/seed.ts` to replace the weak seed password with a stronger, temporary development password: `ChangeMe123!`. The password is saved as a secure, pre-computed bcrypt hash: `$2b$10$aPtlplAqQ63c8I1GKjQDI.xMC9x3uqAhPH0LOiO33Ow6EqmiudVx6`.
+
+---
+
 ## Critical Entity Mappings
 
 ### `Workspace`
@@ -19,6 +27,9 @@ This document captures relational database schema architectures of **Peanut OS**
 
 ### `Client` & `ClientUser`
 - Mapped as one-to-many. `ClientUser` represents physical end-users within a client's company (e.g. employees of Acme).
+
+### `ClientContact`
+- Mapped as one-to-many with `Client`. Houses parameters for contact names, emails, and phones, with a unique `isPrimary` Boolean field that determines communication routing.
 
 ### `Asset`
 - Holds structural specs for workstation telemetry. Sensitive properties (like access credentials) map to `sensitiveDataEncrypted`.
