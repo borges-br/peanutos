@@ -1,0 +1,555 @@
+// ==============================================================================
+// PEANUT OS - PRISMA SCHEMA DEFINITION
+// ==============================================================================
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ------------------------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------------------------
+
+enum UserRole {
+  OWNER
+  ADMIN
+  TECHNICIAN
+  FINANCIAL
+  READ_ONLY
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  PROSPECT
+}
+
+enum AssetType {
+  WORKSTATION
+  NOTEBOOK
+  SERVER
+  PRINTER
+  ROUTER
+  SWITCH
+  ACCESS_POINT
+  CAMERA
+  NVR
+  UPS
+  RACK
+  LICENSE
+  CLOUD_SERVICE
+  VPN
+  STORAGE
+  OTHER
+}
+
+enum AssetStatus {
+  OPERATIONAL
+  MAINTENANCE
+  OUT_OF_STANDARD
+  STOCK
+  RETIRED
+  SCRAPPED
+  LOST
+  PENDING_VALIDATION
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CLIENT
+  WAITING_THIRD_PARTY
+  RESOLVED
+  CLOSED
+}
+
+enum DocumentType {
+  QUOTE
+  INVOICE
+  TICKET_CLOSURE
+  CONTRACT
+  REPORT
+}
+
+// ------------------------------------------------------------------------------
+// MODELS
+// ------------------------------------------------------------------------------
+
+model Workspace {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(100)
+  slug      String   @unique @db.VarChar(100)
+  status    String   @default("ACTIVE") @db.VarChar(20)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  users               User[]
+  clients             Client[]
+  assets              Asset[]
+  tickets             Ticket[]
+  quotes              Quote[]
+  invoices            Invoice[]
+  contracts           Contract[]
+  fileObjects         FileObject[]
+  generatedDocuments  GeneratedDocument[]
+  outboxEvents        OutboxEvent[]
+  auditLogs           AuditLog[]
+
+  @@map("workspaces")
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  workspaceId  String     @db.Uuid
+  name         String     @db.VarChar(150)
+  email        String     @unique @db.VarChar(150)
+  passwordHash String     @db.VarChar(255)
+  role         UserRole   @default(READ_ONLY)
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+
+  // Relationships
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assignedTickets Ticket[]       @relation("AssignedTo")
+  ticketComments TicketComment[]
+  auditLogs      AuditLog[]
+
+  @@index([workspaceId])
+  @@map("users")
+}
+
+model Client {
+  id          String       @id @default(uuid()) @db.Uuid
+  workspaceId String       @db.Uuid
+  type        String       @default("LEGAL_PERSON") @db.VarChar(30) // LEGAL_PERSON or NATURAL_PERSON
+  legalName   String       @db.VarChar(200)
+  tradeName   String       @db.VarChar(200)
+  document    String       @db.VarChar(20) // CPF or CNPJ
+  email       String       @db.VarChar(150)
+  phone       String       @db.VarChar(30)
+  website     String?      @db.VarChar(255)
+  notes       String?      @db.Text
+  status      ClientStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relationships
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts       ClientContact[]
+  clientUsers    ClientUser[]
+  assets         Asset[]
+  tickets        Ticket[]
+  quotes         Quote[]
+  invoices       Invoice[]
+  contracts      Contract[]
+
+  @@unique([workspaceId, document])
+  @@index([workspaceId])
+  @@map("clients")
+}
+
+model ClientContact {
+  id           String   @id @default(uuid()) @db.Uuid
+  clientId     String   @db.Uuid
+  name         String   @db.VarChar(150)
+  email        String   @db.VarChar(150)
+  phone        String?  @db.VarChar(30)
+  mobile       String?  @db.VarChar(30)
+  role         String?  @db.VarChar(100)
+  department   String?  @db.VarChar(100)
+  isPrimary    Boolean  @default(false)
+  notes        String?  @db.Text
+  status       String   @default("ACTIVE") @db.VarChar(20)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tickets      Ticket[]
+
+  @@index([clientId])
+  @@map("client_contacts")
+}
+
+model ClientUser {
+  id                 String   @id @default(uuid()) @db.Uuid
+  clientId           String   @db.Uuid
+  fullName           String   @db.VarChar(150)
+  email              String   @db.VarChar(150)
+  department         String?  @db.VarChar(100)
+  jobTitle           String?  @db.VarChar(100)
+  status             String   @default("ACTIVE") @db.VarChar(20)
+  primaryAssetId     String?  @db.Uuid
+  folderPermissions  String?  @db.Text
+  printerAccess      String?  @db.Text
+  accessHours        String?  @db.VarChar(100)
+  storageQuota       BigInt?
+  notes              String?  @db.Text
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relationships
+  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assets             Asset[]  @relation("AssetUser")
+  tickets            Ticket[]
+
+  @@index([clientId])
+  @@map("client_users")
+}
+
+model Asset {
+  id                     String      @id @default(uuid()) @db.Uuid
+  workspaceId            String      @db.Uuid
+  clientId               String      @db.Uuid
+  assignedClientUserId   String?     @db.Uuid
+  name                   String      @db.VarChar(150)
+  hostname               String?     @db.VarChar(100)
+  type                   AssetType   @default(WORKSTATION)
+  status                 AssetStatus @default(OPERATIONAL)
+  manufacturer           String?     @db.VarChar(100)
+  model                  String?     @db.VarChar(100)
+  serialNumber           String?     @db.VarChar(100)
+  assetTag               String?     @db.VarChar(50)
+  macAddress             String?     @db.VarChar(50)
+  operatingSystem        String?     @db.VarChar(100)
+  location               String?     @db.VarChar(100)
+  remoteAccessId         String?     @db.VarChar(100)
+  sensitiveDataEncrypted String?     @db.Text
+  notes                  String?     @db.Text
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
+
+  // Relationships
+  workspace          Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client             Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignedClientUser ClientUser? @relation("AssetUser", fields: [assignedClientUserId], references: [id], onDelete: SetNull)
+  tickets            Ticket[]
+
+  @@index([workspaceId, clientId, type])
+  @@index([clientId, status])
+  @@map("assets")
+}
+
+model Ticket {
+  id                    String         @id @default(uuid()) @db.Uuid
+  workspaceId           String         @db.Uuid
+  clientId              String         @db.Uuid
+  contactId             String?        @db.Uuid
+  clientUserId          String?        @db.Uuid
+  assetId               String?        @db.Uuid
+  contractId            String?        @db.Uuid
+  number                String         @unique @db.VarChar(50)
+  title                 String         @db.VarChar(200)
+  description           String         @db.Text
+  channel               String         @default("EMAIL") @db.VarChar(30)
+  priority              TicketPriority @default(MEDIUM)
+  status                TicketStatus   @default(OPEN)
+  assignedToId          String?        @db.Uuid
+  openedAt              DateTime       @default(now())
+  firstResponseAt       DateTime?
+  startedAt             DateTime?
+  resolvedAt            DateTime?
+  closedAt              DateTime?
+  slaDueFirstResponseAt DateTime?
+  slaDueStartAt         DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  // Relationships
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client       Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contact      ClientContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  clientUser   ClientUser?    @relation(fields: [clientUserId], references: [id], onDelete: SetNull)
+  asset        Asset?         @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  contract     Contract?      @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  assignedTo   User?          @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  comments     TicketComment[]
+  closure      TicketClosure?
+  invoices     Invoice[]
+
+  @@index([workspaceId, status, priority])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id          String   @id @default(uuid()) @db.Uuid
+  ticketId    String   @db.Uuid
+  userId      String?  @db.Uuid
+  content     String   @db.Text
+  isInternal  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId])
+  @@map("ticket_comments")
+}
+
+model TicketClosure {
+  id                 String    @id @default(uuid()) @db.Uuid
+  ticketId           String    @unique @db.Uuid
+  closureSummary     String    @db.Text
+  rootCause          String?   @db.Text
+  preventiveAction   String?   @db.Text
+  technicalHoursUsed Decimal   @default(0) @db.Decimal(5, 2)
+  clientApproved     Boolean   @default(false)
+  clientSignatureName String?   @db.VarChar(150)
+  closedAt           DateTime  @default(now())
+
+  // Relationships
+  ticket             Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_closures")
+}
+
+model Quote {
+  id                 String      @id @default(uuid()) @db.Uuid
+  workspaceId        String      @db.Uuid
+  clientId           String      @db.Uuid
+  number             String      @unique @db.VarChar(50)
+  status             String      @default("DRAFT") @db.VarChar(20) // DRAFT, SENT, ACCEPTED, REJECTED, CANCELLED
+  issueDate          DateTime    @default(now())
+  validUntil         DateTime
+  subtotalServices   Decimal     @db.Decimal(12, 2)
+  subtotalMaterials  Decimal     @db.Decimal(12, 2)
+  discountAmount     Decimal     @default(0) @db.Decimal(12, 2)
+  totalAmount        Decimal     @db.Decimal(12, 2)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  // Relationships
+  workspace          Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client             Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  items              QuoteItem[]
+  invoices           Invoice[]
+
+  @@index([workspaceId, status, validUntil])
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  quoteId     String   @db.Uuid
+  type        String   @db.VarChar(30) // SERVICE or MATERIAL
+  description String   @db.Text
+  quantity    Decimal  @db.Decimal(10, 2)
+  unit        String   @db.VarChar(20)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  totalPrice  Decimal  @db.Decimal(12, 2)
+  sortOrder   Int      @default(0)
+
+  // Relationships
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+  @@map("quote_items")
+}
+
+model Invoice {
+  id            String        @id @default(uuid()) @db.Uuid
+  workspaceId   String        @db.Uuid
+  clientId      String        @db.Uuid
+  quoteId       String?       @db.Uuid
+  contractId    String?       @db.Uuid
+  ticketId      String?       @db.Uuid
+  number        String        @unique @db.VarChar(50)
+  status        String        @default("DRAFT") @db.VarChar(20) // DRAFT, ISSUED, PAID, OVERDUE, CANCELLED
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime
+  paymentMethod String        @default("PIX") @db.VarChar(30)
+  pixKey        String?       @db.VarChar(100)
+  totalAmount   Decimal       @db.Decimal(12, 2)
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relationships
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  quote         Quote?        @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  contract      Contract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  ticket        Ticket?       @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  items         InvoiceItem[]
+
+  @@index([workspaceId, status, dueDate])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  invoiceId   String   @db.Uuid
+  type        String   @db.VarChar(30) // SERVICE or MATERIAL
+  description String   @db.Text
+  quantity    Decimal  @db.Decimal(10, 2)
+  unit        String   @db.VarChar(20)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  totalPrice  Decimal  @db.Decimal(12, 2)
+  sortOrder   Int      @default(0)
+
+  // Relationships
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model Contract {
+  id                     String    @id @default(uuid()) @db.Uuid
+  workspaceId            String    @db.Uuid
+  clientId               String    @db.Uuid
+  number                 String    @unique @db.VarChar(50)
+  title                  String    @db.VarChar(150)
+  version                Int       @default(1)
+  status                 String    @default("ACTIVE") @db.VarChar(20) // ACTIVE, SUSPENDED, TERMINATED, DRAFT
+  startDate              DateTime
+  endDate                DateTime?
+  monthlyValue           Decimal   @db.Decimal(12, 2)
+  billingDay             Int       @default(5)
+  scope                  String?   @db.Text
+  includedServices       String?   @db.Text
+  excludedServices       String?   @db.Text
+  slaPolicyId            String?   @db.Uuid
+  onsiteSupportAllowance Int       @default(0)
+  maxUsers               Int?
+  maxAssets              Int?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  // Relationships
+  workspace              Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client                 Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tickets                Ticket[]
+  invoices               Invoice[]
+
+  @@index([workspaceId])
+  @@map("contracts")
+}
+
+model FileObject {
+  id               String   @id @default(uuid()) @db.Uuid
+  workspaceId      String   @db.Uuid
+  bucket           String   @db.VarChar(100)
+  key              String   @db.VarChar(255)
+  originalFilename String   @db.VarChar(255)
+  mimeType         String   @db.VarChar(100)
+  sizeBytes        BigInt
+  sha256           String   @db.VarChar(64)
+  visibility       String   @default("PRIVATE") @db.VarChar(20) // PRIVATE or PUBLIC
+  createdById      String?  @db.Uuid
+  createdAt        DateTime @default(now())
+
+  // Relationships
+  workspace        Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  generatedDocuments GeneratedDocument[]
+
+  @@index([workspaceId])
+  @@map("file_objects")
+}
+
+model GeneratedDocument {
+  id            String       @id @default(uuid()) @db.Uuid
+  workspaceId   String       @db.Uuid
+  entityType    String       @db.VarChar(50) // QUOTE, INVOICE, TICKET_CLOSURE
+  entityId      String       @db.Uuid
+  documentType  DocumentType
+  version       Int          @default(1)
+  fileObjectId  String       @db.Uuid
+  sha256        String       @db.VarChar(64)
+  generatedById String?      @db.Uuid
+  generatedAt   DateTime     @default(now())
+  metadata      String?      @db.Text
+
+  // Relationships
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  fileObject    FileObject   @relation(fields: [fileObjectId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId])
+  @@map("generated_documents")
+}
+
+model OutboxEvent {
+  id            String             @id @default(uuid()) @db.Uuid
+  workspaceId   String             @db.Uuid
+  eventType     String             @db.VarChar(100)
+  payload       String             @db.Text
+  status        String             @default("PENDING") @db.VarChar(20) // PENDING, PROCESSING, COMPLETED, FAILED
+  attempts      Int                @default(0)
+  nextAttemptAt DateTime?          @default(now())
+  lastError     String?            @db.Text
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  // Relationships
+  workspace     Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries    WebhookDelivery[]
+
+  @@index([status, nextAttemptAt])
+  @@index([workspaceId])
+  @@map("outbox_events")
+}
+
+model WebhookDelivery {
+  id             String      @id @default(uuid()) @db.Uuid
+  outboxEventId  String      @db.Uuid
+  endpointUrl    String      @db.VarChar(255)
+  responseStatus Int?
+  responseBody   String?     @db.Text
+  attempts       Int         @default(1)
+  durationMs     Int?
+  error          String?     @db.Text
+  status         String      @db.VarChar(20) // SUCCESS or FAILED
+  deliveredAt    DateTime    @default(now())
+
+  // Relationships
+  outboxEvent    OutboxEvent @relation(fields: [outboxEventId], references: [id], onDelete: Cascade)
+
+  @@index([outboxEventId])
+  @@map("webhook_deliveries")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  actorUserId String?  @db.Uuid
+  action      String   @db.VarChar(100)
+  entityType  String   @db.VarChar(50)
+  entityId    String   @db.Uuid
+  beforeJson  String?  @db.Text
+  afterJson   String?  @db.Text
+  ipAddress   String?  @db.VarChar(50)
+  userAgent   String?  @db.VarChar(255)
+  severity    String   @default("INFO") @db.VarChar(20) // INFO, WARN, SECURITY_ALERT
+  createdAt   DateTime @default(now())
+
+  // Relationships
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actorUser   User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, entityType, entityId])
+  @@map("audit_logs")
+}

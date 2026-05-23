@@ -1,0 +1,21 @@
+{
+  "name": "@peanut/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prisma ORM database definitions, migrations, and seed scripts for Peanut OS",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "seed": "ts-node prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.14.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.14.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

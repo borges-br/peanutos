@@ -1,0 +1,48 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Next.js build
+.next/
+out/
+
+# NestJS and general TypeScript build
+dist/
+.build/
+*.tsbuildinfo
+
+# Turbo cache
+.turbo
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Prisma local database files (if any sqlite or local DBs are created for testing)
+*.db
+*.db-journal
+
+# Local docker files and persistent volumes
+/infra/docker/volumes/

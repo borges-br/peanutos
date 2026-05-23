@@ -1,0 +1,18 @@
+{
+  "name": "@peanut/validators",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared schemas and DTO validators for Peanut OS using Zod",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@peanut/ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared Design System and UI Component library for Peanut OS built on Tailwind CSS",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "typescript": "^5.4.5"
+  }
+}

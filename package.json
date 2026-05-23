@@ -1,0 +1,27 @@
+{
+  "name": "peanut-os",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Peanut OS - Operational Management Platform for IT Service Providers",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "db:generate": "pnpm --filter @peanut/db generate",
+    "db:migrate": "pnpm --filter @peanut/db migrate",
+    "db:seed": "pnpm --filter @peanut/db seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "turbo": "^1.13.0",
+    "typescript": "^5.4.5"
+  },
+  "packageManager": "pnpm@9.1.1"
+}

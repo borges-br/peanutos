@@ -1,0 +1,23 @@
+{
+  "name": "peanut-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Peanut OS Background Job Worker built with BullMQ",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/main.ts",
+    "start": "node dist/main"
+  },
+  "dependencies": {
+    "@peanut/db": "workspace:*",
+    "@peanut/types": "workspace:*",
+    "@peanut/utils": "workspace:*",
+    "bullmq": "^5.8.1",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
