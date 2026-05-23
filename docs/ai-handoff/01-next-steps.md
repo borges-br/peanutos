@@ -1,42 +1,48 @@
 # 01 — Next Steps
 
-This document outlines the priority checklist for the next AI agent to execute during **Phase 3: Ticketing & SLA Foundation**.
+This document outlines the priority checklist for the next AI agent to execute during **Phase 4: Contracts & Recurring Billing Foundation**.
 
-## Phase 3 Execution Checklist
+The objective of Phase 4 is to build the contractual backbone of the platform, enabling service providers to register client contracts, manage user/asset limits, set recurring monthly fees, specify billing days, and render a financial MRR summary dashboard.
 
-### 1. Database Migrations
-- [ ] Spin up the Docker Compose PostgreSQL container manually.
-- [ ] Apply the Prisma schema migrations for Phase 2 and Phase 3:
-  ```bash
-  npx pnpm --filter @peanut/db prisma migrate dev --name phase_2_and_3
-  ```
-- [ ] Seed the database using `pnpm db:seed` to verify mock technical assets, client end users, and notes exist locally.
+---
 
-### 2. SLA & Priority Engine
-- [ ] Review ticket urgency rules and response/resolution SLAs in `schema.prisma`.
-- [ ] Build a priority engine matching priority levels (`LOW`, `MEDIUM`, `HIGH`, `URGENT`) with SLA deadlines.
-- [ ] Automatically calculate `slaDueFirstResponseAt` and `slaDueStartAt` on ticket writes.
+## Phase 4 Execution Checklist
 
-### 3. Ticketing API (NestJS Monolith)
-- [ ] Create `TicketsModule` in `apps/api/src/tickets/` managing the `Ticket` and `TicketComment` models.
+### 1. Database Migrations (Prisma Schema)
+- [ ] Inspect existing `Contract` and `Invoice` models in `schema.prisma`.
+- [ ] Ensure correct relationships are established (Client -> Contract -> SLA Policy).
+- [ ] Update models or enums if necessary to represent draft, active, suspended, or terminated contracts.
+- [ ] Regenerate Prisma client offline using `prisma generate` if Docker PostgreSQL is still offline.
+
+### 2. Contract Tracking Engine (NestJS Monolith)
+- [ ] Create `ContractsModule` in `apps/api/src/contracts/`.
 - [ ] Expose REST endpoints:
-  - `GET /tickets` (Global dashboard list, searchable, paginated, and status-filtered).
-  - `GET /clients/:clientId/tickets` (Client-specific tickets).
-  - `POST /clients/:clientId/tickets` (Create new ticket linking contact, client user, and asset).
-  - `GET /tickets/:ticketId` (Retrieve ticket details, comments, and lifecycle logs).
-  - `POST /tickets/:ticketId/comments` (Add internal or client-facing comments).
-  - `PATCH /tickets/:ticketId/status` (Update ticket status and record SLA completion metrics).
+  - `GET /contracts` (Paginated list, filterable by status, client, and search).
+  - `GET /clients/:clientId/contracts` (Client-specific contract details).
+  - `POST /contracts` (Create contracts capturing startDate, endDate, monthlyValue, billingDay, quotas for maxUsers/maxAssets, and custom SLAs).
+  - `PATCH /contracts/:contractId` (Edit details).
+  - `PATCH /contracts/:contractId/status` (Activate, suspend, or terminate contracts).
+- [ ] Enforce quota rules:
+  - Implement service-level validation checking if adding a new Technical Asset or Client User exceeds the active contract's `maxAssets` or `maxUsers` limits.
+  - Throw a `BadRequestException` if limits are exceeded, prompting contract upgrade.
 
-### 4. Background SLA Monitor (BullMQ)
-- [ ] Implement SLA monitoring tasks in `apps/worker`.
-- [ ] Periodically check for approaching SLA breach events.
-- [ ] Dispatch background warnings to the technical logs or console if a ticket is about to breach its priority deadlines.
+### 3. Financial Recurring Engine (MRR)
+- [ ] Create simple MRR calculation service in `apps/api/src/contracts/financials.service.ts`.
+- [ ] Provide statistics endpoints:
+  - `GET /financials/summary` returning total MRR (sum of all monthlyValues of active contracts), counts of active/suspended contracts, and next billing date aggregates.
+  - Ensure strict tenant workspace isolation (`workspaceId`).
+  - Restrict access strictly to `OWNER`, `ADMIN`, and `FINANCIAL` roles using `@Roles(...)` decorators.
 
-### 5. Next.js Support Panels (Next.js `/dashboard`)
-- [ ] Add `/dashboard/tickets` navigation to the sidebar.
-- [ ] Build a Helpdesk board `/dashboard/tickets/page.tsx` displaying cards/tables of tickets, priority indicators, and SLA warning icons.
-- [ ] Build a sleek ticket creation form, enabling operators to choose the Client, then dynamically search and select Client Contacts, Client Users, and Assets.
-- [ ] Build a rich ticket details view at `/dashboard/tickets/[id]`, including:
-  - Chat-like conversation stream displaying internal vs. public comments.
-  - Sidebar displaying linked client information, active asset details (with quick link to asset specs), and SLA timers.
-  - Close Ticket form capturing resolution summaries and technical hours.
+### 4. Background Billing Scheduler (BullMQ)
+- [ ] Inside `apps/worker/src/main.ts`, introduce `billing-scheduler.queue` and `billing-scheduler.worker`.
+- [ ] The billing worker scans active contracts whose `billingDay` is today or approaching to log invoice draft generation requests.
+- [ ] Standard try-catch connection error events to avoid breaking local runs if Redis is offline.
+
+### 5. Next.js Financial & Contract Panels (Next.js `/dashboard`)
+- [ ] Add `/dashboard/contracts` and `/dashboard/financials` routes to Layout Sidebar.
+- [ ] Restrict financials sidebar visibility to OWNER, ADMIN, and FINANCIAL roles.
+- [ ] Create Contracts Board (`/dashboard/contracts`):
+  - Lists company contracts, current quotas progress bars (e.g. "Assets used: 4/10", "Users used: 2/5"), status badges, and active value.
+  - Create contract editor/creation forms.
+- [ ] Create Financial Overview Board (`/dashboard/financials`):
+  - Display stunning MRR HSL-based cards, active monthly value streams, and upcoming billings lists.

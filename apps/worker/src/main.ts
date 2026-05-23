@@ -3,6 +3,7 @@
 // ==============================================================================
 import * as dotenv from 'dotenv';
 import { Worker, Job } from 'bullmq';
+import { prisma } from '@peanut/db';
 
 // Load environment variables from root or local
 dotenv.config();
@@ -58,12 +59,88 @@ const webhookWorker = new Worker(
   { connection }
 );
 
+/**
+ * SLA MONITOR JOB WORKER
+ * ============================================================================
+ * Periodic job scanning active tickets for SLA breach warnings.
+ * ============================================================================
+ */
+const slaMonitorWorker = new Worker(
+  'sla-monitor',
+  async (job: Job) => {
+    console.log(`[SLA Monitor Worker] Running SLA check scan job ${job.id}...`);
+    try {
+      const activeTickets = await prisma.ticket.findMany({
+        where: {
+          status: {
+            notIn: ['RESOLVED', 'CLOSED', 'CANCELLED'],
+          },
+        },
+      });
+
+      const now = new Date();
+      console.log(`[SLA Monitor Worker] Found ${activeTickets.length} active tickets to scan.`);
+
+      for (const ticket of activeTickets) {
+        // 1. First Response SLA Check
+        if (!ticket.firstResponseAt && ticket.slaDueFirstResponseAt) {
+          const due = new Date(ticket.slaDueFirstResponseAt);
+          if (now > due) {
+            console.warn(`[SLA Monitor Worker] BREACHED: Ticket ${ticket.number} ("${ticket.title}") has breached its First Response SLA.`);
+          } else {
+            const diffMs = due.getTime() - now.getTime();
+            const diffMin = Math.floor(diffMs / 60000);
+            if (diffMin <= 30) {
+              console.log(`[SLA Monitor Worker] WARNING: Ticket ${ticket.number} is within ${diffMin} minutes of first response breach.`);
+            }
+          }
+        }
+
+        // 2. Resolution SLA Check
+        if (!ticket.resolvedAt && ticket.slaDueResolutionAt) {
+          const due = new Date(ticket.slaDueResolutionAt);
+          if (now > due) {
+            console.warn(`[SLA Monitor Worker] BREACHED: Ticket ${ticket.number} ("${ticket.title}") has breached its Resolution SLA.`);
+          } else {
+            const diffMs = due.getTime() - now.getTime();
+            const diffMin = Math.floor(diffMs / 60000);
+            if (diffMin <= 60) {
+              console.log(`[SLA Monitor Worker] WARNING: Ticket ${ticket.number} is within ${diffMin} minutes of resolution breach.`);
+            }
+          }
+        }
+      }
+
+      return { processedCount: activeTickets.length };
+    } catch (err) {
+      console.error('[SLA Monitor Worker] Error sweeping SLA policies:', err);
+      throw err;
+    }
+  },
+  { connection }
+);
+
+// --- ERROR & FAILURE EVENTS LOGGING (Graceful fallbacks when Redis is offline) ---
+
 pdfWorker.on('failed', (job, err) => {
   console.error(`[PDF Worker] Job ${job?.id} failed:`, err);
+});
+pdfWorker.on('error', (err) => {
+  console.warn('[PDF Worker] Redis is offline (safe bypass):', err.message);
 });
 
 webhookWorker.on('failed', (job, err) => {
   console.error(`[Webhook Worker] Job ${job?.id} failed:`, err);
 });
+webhookWorker.on('error', (err) => {
+  console.warn('[Webhook Worker] Redis is offline (safe bypass):', err.message);
+});
 
-console.log('✅ Workers are listening to queues [pdf-generation, webhook-dispatch] on Redis.');
+slaMonitorWorker.on('failed', (job, err) => {
+  console.error(`[SLA Monitor Worker] Job ${job?.id} failed:`, err);
+});
+slaMonitorWorker.on('error', (err) => {
+  console.warn('[SLA Monitor Worker] Redis is offline (safe bypass):', err.message);
+});
+
+console.log('✅ Workers are listening to queues [pdf-generation, webhook-dispatch, sla-monitor] on Redis.');

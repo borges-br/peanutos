@@ -21,7 +21,7 @@ import { userSchema } from "@peanut/validators";
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Roles("OWNER", "ADMIN")
+  @Roles("OWNER", "ADMIN", "TECHNICIAN")
   @Get()
   async list(@CurrentUser() user: any) {
     return this.usersService.list(user.workspaceId);

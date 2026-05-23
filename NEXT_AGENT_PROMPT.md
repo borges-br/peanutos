@@ -3,26 +3,24 @@
 ## Context Overview
 You are continuing the implementation of **Peanut OS**, a modular operational platform for IT Service Providers designed with logical multi-tenancy (`workspaceId`) and white-label customizability.
 
-**Phase 2 (Client Inventory & Asset Management)** is 100% complete, verified, and build-green! All packages compile cleanly, typechecks are green, and linters pass successfully across all workspaces.
+**Phase 3 (Helpdesk, Ticketing & SLA Foundation)** is 100% complete, verified, and build-green! All packages compile cleanly, typechecks are green, and linters pass successfully across all workspaces.
 
 ---
 
 ## 📈 Commands Executed & Diagnostic Report
 
 ### 1. Commands Executed Successfully:
-- **Monorepo Compilation**: `npx pnpm run build` compiled all workspaces cleanly in Turborepo (under Next.js server components optimizations).
-- **TypeScript Core Typecheck**: `npx pnpm run typecheck` validated all modules 100% type-safe.
-- **ESLint stabilization**: resolved linter dependencies in NestJS and Next.js applications devDependencies. `npx pnpm run lint` passes across all packages successfully!
+- **Monorepo Compilation**: `npx pnpm run build` compiled all workspaces cleanly in Turborepo (generating optimized static React pages and NestJS/Fastify monolithic backend assets).
+- **TypeScript Core Typecheck**: `npx pnpm run typecheck` validated all modules as 100% type-safe.
+- **ESLint stabilization**: linter checks pass 100% successfully across all packages (`npx pnpm run lint`).
 - **Prisma Schema Validation**: `npx prisma validate` checked the Postgres schema as 100% syntactically correct.
-- **Symmetric Cryptography**: implemented real `AES-256-GCM` envelope encryption in `@peanut/utils` and fully updated seed configurations.
+- **Prisma Client Compilation**: generated local Prisma typings offline utilizing `prisma generate`, updating local packages cleanly.
 
 ### 2. Issues Encountered & Resolved:
-- *Error*: `notes` field name clash inside `Asset` model.
-  - *Resolution*: Renamed the relation field to `assetNotes` in `Asset` to avoid clash with the simple `notes` string field.
-- *Error*: Missing `phone` field in `ClientUser` during services development.
-  - *Resolution*: Expanded `ClientUser` model in `schema.prisma` to include `phone String? @db.VarChar(30)` matching suggested fields.
-- *Error*: Unbound type signature for `sensitiveDataEncrypted` inside `InventoryService` create function.
-  - *Resolution*: Added explicit `string | null` type signature to resolve NestJS compilation.
+- *Error*: Unused `setSubcategory` hook warning blocking Next.js strict compiler checks in `/dashboard/tickets/new/page.tsx`.
+  - *Resolution*: Replaced state hook with a clean static constant since subcategory isn't utilized by the initial creation wizard layout.
+- *Error*: Import depth mismatches on `apiRequest` client library in tickets new and board forms.
+  - *Resolution*: Corrected relative import path offsets (e.g. `../../../../lib/api` vs `../../../lib/api`) to match folder depth structures.
 
 ### 3. Known Issues & Environment Workarounds (Pay attention!):
 - *Service Block*: Windows powershell access restrictions prevent starting the local Docker Compose daemon dynamically.
@@ -30,57 +28,61 @@ You are continuing the implementation of **Peanut OS**, a modular operational pl
 
 ---
 
-## 📂 Critical Files Created / Modified in Phase 2
+## 📂 Critical Files Created / Modified in Phase 3
 
-### Cryptography & Database Schema:
-- [schema.prisma](file:///C:/Github/peanutos/packages/db/prisma/schema.prisma) - Prisma schema including `ClientUser.workspaceId`, `ClientUser.phone`, `AssetHistory` and `AssetNote` models.
-- [index.ts](file:///C:/Github/peanutos/packages/utils/src/index.ts) - AES-256-GCM symmetric envelope cryptography.
-- [index.ts](file:///C:/Github/peanutos/packages/types/src/index.ts) - Updated type specifications.
-- [index.ts](file:///C:/Github/peanutos/packages/validators/src/index.ts) - Comprehensive Zod schemas for inventory, users, notes and assignments.
+### Database Schema & Validators:
+- [schema.prisma](file:///C:/Github/peanutos/packages/db/prisma/schema.prisma) - Prisma schema expanded for `SlaPolicy`, `TicketComment` workspace constraints, `TicketHistory`, and `TicketTimeEntry`.
+- [index.ts](file:///C:/Github/peanutos/packages/types/src/index.ts) - Updated type specifications for helpdesk and SLA policies.
+- [index.ts](file:///C:/Github/peanutos/packages/validators/src/index.ts) - Comprehensive Zod schemas for tickets, status transitions, reassigns, time logs, and SLA configurations.
 
 ### NestJS Backend Modules:
-- [client-users.service.ts](file:///C:/Github/peanutos/apps/api/src/client-users/client-users.service.ts) - Client end users registry isolated by workspace.
-- [inventory.service.ts](file:///C:/Github/peanutos/apps/api/src/inventory/inventory.service.ts) - Central hardware/software registry, assignments, password-rejection note generators, and audited reveal hooks.
-- [app.module.ts](file:///C:/Github/peanutos/apps/api/src/app.module.ts) - Registered modules.
-- [audit.service.ts](file:///C:/Github/peanutos/apps/api/src/audit/audit.service.ts) - Automatically sanitizing GCM payloads and switch passwords in audits.
+- [ticket-state-machine.ts](file:///C:/Github/peanutos/apps/api/src/tickets/ticket-state-machine.ts) - Central state transition lifecycle engine.
+- [sla.service.ts](file:///C:/Github/peanutos/apps/api/src/tickets/sla.service.ts) - Isolated SLA policy calculator using calendar minutes.
+- [tickets.service.ts](file:///C:/Github/peanutos/apps/api/src/tickets/tickets.service.ts) - Scoped operations, validations, comment terms blockers, and time entries duration checks.
+- [tickets.controller.ts](file:///C:/Github/peanutos/apps/api/src/tickets/tickets.controller.ts) - Exposing endpoints under `/tickets` and scoped client routes `/clients/:clientId/tickets`.
+- [users.controller.ts](file:///C:/Github/peanutos/apps/api/src/users/users.controller.ts) - Opened read access on user lists to Technicians to enable UI assignments.
+- [seed.ts](file:///C:/Github/peanutos/packages/db/prisma/seed.ts) - Updated db seed to populate standard SLA Policies, and specific mock tickets (`TCK-000001` / `TCK-000002` / `TCK-000003`).
 
 ### Next.js Dashboard Shells:
-- [layout.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/layout.tsx) - Configured sidebar navigation hooks.
-- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/inventory/page.tsx) - Central inventory table showing hostname, location, IP and links.
-- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/clients/%5Bid%5D/users/page.tsx) - Client users manager in modern glassmorphic modals.
-- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/clients/%5Bid%5D/inventory/page.tsx) - Client specific assets manager.
-- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/clients/%5Bid%5D/assets/%5BassetId%5D/page.tsx) - Technical spec cards, history logs, diagnostics notes feed, and secure reveal creds overlays.
+- [layout.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/layout.tsx) - Integrated "Chamados" navigation item to sidebar menu and headers.
+- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/tickets/page.tsx) - Interactive Tickets Board with countdown SLA badges.
+- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/tickets/new/page.tsx) - Dynamic cascading wizard for new support registrations.
+- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/tickets/%5BticketId%5D/page.tsx) - Split layout displaying chat timeline, confidential padlock notes, working log grids, re-assign buttons, and transitions.
+- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/clients/%5Bid%5D/tickets/page.tsx) - Client specific tickets dashboard tab.
+- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/clients/%5Bid%5D/page.tsx) - Activated clickable client detail action cards.
 
 ---
 
-## 🎯 Your Mission: Phase 3 — Helpdesk, Ticketing & SLA Foundation
+## 🎯 Your Mission: Phase 4 — Advanced Contracts & Recurring Billing Foundation
 
-Your objective is to deliver operational tracking of tickets, comment registers, priority engines, and background SLA monitor daemons.
+Your objective is to deliver the contractual and recurring financial layer of the platform, enabling service providers to register service contracts, manage user/asset quotas, set recurring monthly fees, specify billing days, and render a financial MRR summary dashboard.
 
-### Step 1: Database connections
-- Manually run Docker Desktop. Apply migration `phase_2_inventory` dev and seed the database using `pnpm db:seed`.
+### Step 1: Database Setup
+- If Docker PostgreSQL is running, apply the generated dev migrations. If it remains offline, proceed with schema verification and type safety using `prisma generate` to compile types.
 
-### Step 2: SLA Deadlines Priority Engine
-- Build a priority engine matching priority levels (`LOW`, `MEDIUM`, `HIGH`, `URGENT`) with SLA time windows.
-- Calculate `slaDueFirstResponseAt` and `slaDueStartAt` dynamically on ticket writes.
+### Step 2: Contract Tracking & Quota Enforcer (NestJS)
+- Implement `ContractsModule` exposing paginated workspace-isolated `/contracts` routes.
+- Enforce active contract quotas:
+  - Add validator hooks inside Asset addition and ClientUser creation services.
+  - If a technician attempts to create an Asset or User that exceeds the active client contract's `maxAssets` or `maxUsers` limits, block the write and throw a `BadRequestException` ("Quota limite de ativos/usuários do contrato atingida. Por favor, faça um upgrade no contrato do cliente.").
 
-### Step 3: Ticketing API Scopes
-- Implement isolated tickets REST routes (`/tickets` and `/clients/:clientId/tickets`).
-- Support linking a ticket to a Contact, ClientUser, and technical Asset.
-- Create `/comments` routes protecting internal notes vs public communications.
+### Step 3: Financial MRR Calculation Service
+- Build `financials.service.ts` to compute:
+  - Total Monthly Recurring Revenue (MRR) based on active contracts.
+  - Metrics detailing active contract counts, billing day progress bars, and next billing timelines.
+  - Restrict access strictly to `OWNER`, `ADMIN`, and `FINANCIAL` roles in controllers.
 
-### Step 4: Background SLA monitors (BullMQ)
-- Setup cron workers in `apps/worker` to monitor tickets SLA breach limits.
-- Alert when limits are about to breach.
+### Step 4: Background Billing Schedulers (BullMQ)
+- Expand the background worker daemon in `apps/worker` to monitor active contracts whose `billingDay` is today or approaching, and automatically log billing draft events.
 
-### Step 5: Support dashboard boards (Next.js)
-- Build `/dashboard/tickets` displaying active helpdesk cards.
-- Integrate dynamic ticket creation wizards searching contacts and assets.
-- Build ticket details chat-like conversations streams and SLA tickers.
+### Step 5: Next.js Contract & Financial Dashboards
+- Integrate `/dashboard/contracts` and `/dashboard/financials` inlayout sidebars.
+- Display quota utilization progress bars (used/allowed assets) on client profiles.
+- Display MRR stat cards, invoices lists, and contract creation/editing forms.
 
 ---
 
 ## 🛡️ Rules of Engagement
 1. **Never hardcode secrets**: keep local cryptography customized in `.env`.
-2. **Strictly fictive seeds**: ensure database seed remains populated with dummy data (Maria & João Example / Acme Tech).
-3. **Preserve continuity logs**: at the end of your run, update AI handoff logs inside `docs/ai-handoff/` and write a new `NEXT_AGENT_PROMPT.md` preparing Phase 4.
+2. **Strictly fictive seeds**: ensure database seed remains populated with dummy data (Maria & João Example / Acme Tech / TCK-000001).
+3. **Preserve continuity logs**: at the end of your run, update AI handoff logs inside `docs/ai-handoff/` and write a new `NEXT_AGENT_PROMPT.md` preparing Phase 5.

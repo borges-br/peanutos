@@ -63,16 +63,85 @@ export const assetSchema = z.object({
 export type AssetInput = z.infer<typeof assetSchema>;
 
 // Ticket Validation Schema
+const ticketPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'] as const;
+const ticketStatuses = ['OPEN', 'TRIAGE', 'IN_PROGRESS', 'WAITING_CLIENT', 'WAITING_THIRD_PARTY', 'RESOLVED', 'CLOSED', 'CANCELLED'] as const;
+const ticketChannels = ['WHATSAPP', 'EMAIL', 'PHONE', 'PORTAL', 'MANUAL', 'OTHER'] as const;
+
 export const ticketSchema = z.object({
   title: z.string().min(5, { message: 'O título do chamado deve ter pelo menos 5 caracteres' }),
   description: z.string().min(10, { message: 'A descrição detalhada do chamado deve ter pelo menos 10 caracteres' }),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']),
   clientId: z.string().uuid({ message: 'Cliente inválido' }),
   assetId: z.string().uuid().optional().nullable(),
   clientUserId: z.string().uuid().optional().nullable(),
 });
 
 export type TicketInput = z.infer<typeof ticketSchema>;
+
+export const ticketCreateSchema = z.object({
+  title: z.string().min(5, { message: 'O título do chamado deve ter pelo menos 5 caracteres' }),
+  description: z.string().min(10, { message: 'A descrição detalhada do chamado deve ter pelo menos 10 caracteres' }),
+  priority: z.enum(ticketPriorities),
+  channel: z.enum(ticketChannels).default('EMAIL'),
+  clientId: z.string().uuid({ message: 'Cliente inválido' }),
+  contactId: z.string().uuid({ message: 'Contato inválido' }).optional().nullable(),
+  clientUserId: z.string().uuid({ message: 'Usuário final inválido' }).optional().nullable(),
+  assetId: z.string().uuid({ message: 'Ativo inválido' }).optional().nullable(),
+  assignedToId: z.string().uuid({ message: 'Técnico designado inválido' }).optional().nullable(),
+  category: z.string().optional().nullable(),
+  subcategory: z.string().optional().nullable(),
+});
+
+export type TicketCreateInput = z.infer<typeof ticketCreateSchema>;
+
+export const ticketUpdateSchema = ticketCreateSchema.partial();
+
+export type TicketUpdateInput = z.infer<typeof ticketUpdateSchema>;
+
+export const ticketStatusUpdateSchema = z.object({
+  status: z.enum(ticketStatuses),
+});
+
+export type TicketStatusUpdateInput = z.infer<typeof ticketStatusUpdateSchema>;
+
+export const ticketAssignSchema = z.object({
+  assignedToId: z.string().uuid({ message: 'ID de técnico designado inválido' }).nullable(),
+});
+
+export type TicketAssignInput = z.infer<typeof ticketAssignSchema>;
+
+export const ticketCommentCreateSchema = z.object({
+  content: z.string().min(1, { message: 'O comentário não pode ser vazio' }),
+  visibility: z.enum(['INTERNAL', 'CLIENT_VISIBLE_FUTURE']).default('INTERNAL'),
+});
+
+export type TicketCommentCreateInput = z.infer<typeof ticketCommentCreateSchema>;
+
+export const ticketTimeEntryCreateSchema = z.object({
+  startedAt: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de início inválida' }),
+  endedAt: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de término inválida' }).optional().nullable().or(z.literal('')),
+  description: z.string().min(3, { message: 'A descrição deve ter pelo menos 3 caracteres' }),
+  billable: z.boolean().default(true),
+});
+
+export type TicketTimeEntryCreateInput = z.infer<typeof ticketTimeEntryCreateSchema>;
+
+export const slaPolicyCreateSchema = z.object({
+  name: z.string().min(3, { message: 'O nome da política de SLA deve ter pelo menos 3 caracteres' }),
+  description: z.string().optional().nullable(),
+  priority: z.enum(ticketPriorities),
+  firstResponseMinutes: z.number().int().min(1, { message: 'Tempo de primeira resposta deve ser de pelo menos 1 minuto' }),
+  startMinutes: z.number().int().min(1, { message: 'Tempo de início deve ser de pelo menos 1 minuto' }),
+  resolutionMinutes: z.number().int().min(1, { message: 'Tempo de resolução deve ser de pelo menos 1 minuto' }),
+  businessHoursOnly: z.boolean().default(false),
+  active: z.boolean().default(true),
+});
+
+export type SlaPolicyCreateInput = z.infer<typeof slaPolicyCreateSchema>;
+
+export const slaPolicyUpdateSchema = slaPolicyCreateSchema.partial();
+
+export type SlaPolicyUpdateInput = z.infer<typeof slaPolicyUpdateSchema>;
 
 // User Validation Schema
 export const userSchema = z.object({

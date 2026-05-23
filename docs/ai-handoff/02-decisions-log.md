@@ -1,42 +1,37 @@
 # 02 — Decisions Log
 
-This document records the key architectural, design, and coding decisions made during **Phase 2: Client Inventory & Asset Management**.
+This document records the architectural and technical design decisions made during the development of **Peanut OS**.
 
 ---
 
-## 1. ESLint Monorepo Stabilization
-- **Context**: Executing `pnpm run lint` was throwing package dependency errors because ESLint packages and configurations were omitted in `apps/api` and `apps/web`.
-- **Decision**: Added standard NestJS linting dependencies (`eslint`, `@typescript-eslint/eslint-plugin`, `@typescript-eslint/parser`, `eslint-config-prettier`, `eslint-plugin-prettier`) as local devDependencies in `apps/api/package.json`, and added a basic `.eslintrc.js` config file. Additionally, added `eslint` and `eslint-config-next` to `apps/web/package.json` devDependencies and created `apps/web/.eslintrc.json` to prevent interactive CLI configurations from blocking Turborepo runs.
-- **Rationale**: Keeps linting standards extremely clean, uniform, and fully functional under Turborepo orchestrations without rewriting the entire monorepo setup.
+## Phase 3 — Helpdesk, Ticketing & SLA Foundation
 
----
+### 1. SLA Policy Calculations (Simple Calendar Minutes)
+- **Decision**: Deadlines for response, technical start, and overall resolution are computed strictly using **simple calendar minutes** rather than complex business hour calendars.
+- **Rationale**: Keeps the implementation simple and highly testable for this first foundation phase, without expending excessive tokens or complexity on business hour calendar mappings.
+- **Future Evolution**: The `businessHoursOnly` boolean flag is successfully added to the `SlaPolicy` schema and persists in the database to allow seamless future calendar calculations.
 
-## 2. Multi-Tenant Database Schema Extensions
-- **Context**: The `ClientUser` model lacked `workspaceId`, making direct multi-tenant scoping difficult, and models for logging equipment life-cycle history and technical notes were missing.
-- **Decision**:
-  - Added `workspaceId String @db.Uuid` to `ClientUser` in `schema.prisma` and mapped it to Workspace to ensure strict isolation.
-  - Added `phone String? @db.VarChar(30)` to `ClientUser` to capture direct contact details.
-  - Mapped a dedicated `AssetHistory` model to log creation, updates, notes additions, assignments, and secure credential reveals.
-  - Mapped a dedicated `AssetNote` model to support internal technical comments.
-  - Expanded `AssetType` and `AssetStatus` enums with all necessary types and statuses.
-- **Rationale**: Mapped proper relations in Prisma to enable highly efficient, queryable, and structurally integral multi-tenancy.
+### 2. Visiblity Levels for Technical Comments
+- **Decision**: Stored comments support two distinct visibility scopes: `INTERNAL` (technicians/admin only) and `CLIENT_VISIBLE_FUTURE` (for future client portals).
+- **Rationale**: Since the Client Portal does not exist in Phase 3, we default visibility to `INTERNAL` in all comments while keeping types and schemas ready for client-exposed notes in subsequent portal development.
 
----
+### 3. Centralized Ticket Status State Machine
+- **Decision**: Transition pathways are evaluated inside a single module helper `apps/api/src/tickets/ticket-state-machine.ts` rather than being spread inside controllers or UI buttons.
+- **Rationale**: Centralizes transition rules, making status lifecycles extremely robust, easily testable, and protected against manual API patches bypassing state rules.
+- **Enforced State Flow**:
+  - `OPEN` -> `TRIAGE` | `IN_PROGRESS` | `CANCELLED`
+  - `TRIAGE` -> `IN_PROGRESS` | `CANCELLED`
+  - `IN_PROGRESS` -> `WAITING_CLIENT` | `WAITING_THIRD_PARTY` | `RESOLVED` | `CANCELLED`
+  - `WAITING_CLIENT` -> `IN_PROGRESS`
+  - `WAITING_THIRD_PARTY` -> `IN_PROGRESS`
+  - `RESOLVED` -> `CLOSED`
+- Reopening closed or cancelled tickets is strictly blocked in Phase 3.
 
-## 3. Cryptographic Envelope Envelope (AES-256-GCM)
-- **Context**: Legacies stubs were utilizing unsafe Base64 conversions for sensitive information.
-- **Decision**: Replaced all base64 stubs in `@peanut/utils` (`packages/utils/src/index.ts`) with a secure symmetric crypto implementation. Standardized on `AES-256-GCM` algorithm using native Node.js `crypto`.
-- **Envelope Format**: `v1:gcm:base64(iv):base64(authTag):base64(cipherText)`
-- **Key Resolution**: Supported both `APP_ENCRYPTION_KEY` and `APPLICATION_ENCRYPTION_KEY` environment variables. Enforced robust key validation (requiring exactly 32-bytes, parsed from raw, hex, or base64 strings) and threw detailed errors on invalid configuration.
-- **Rationale**: Prevents storing raw credentials on disk, providing state-of-the-art corporate cryptography envelope compliance.
+### 4. Credentials Safeguard (Comment Content Blocker)
+- **Decision**: Comments containing plaintext words like `senha`, `password`, `token`, `secret`, `api_key`, `credential`, or `authorization` are rejected with a user-friendly API error and blocked from database storage.
+- **Rationale**: Prevents accidental plaintext password logging in database comments. Decrypted technical asset credentials must only be stored inside encrypted specs fields and viewed using the audited Click-to-Reveal overlay.
+- **Auditing**: Rejections are handled at controller level and *never* recorded in audit trails to avoid logging leaked sensitive content.
 
----
-
-## 4. Secure click-to-reveal credentials overlay
-- **Context**: Exposing decrypted switcher or server passwords in general API payloads or holding them in persistent localStorage/sessionStorage/cookies exposes the provider's clients to leaks.
-- **Decision**:
-  - Developed a dedicated, highly audited endpoint `POST /clients/:clientId/assets/:assetId/reveal-sensitive-data` to handle credential decryption on-demand.
-  - Exposes secrets exclusively to authenticated `OWNER`, `ADMIN`, or `TECHNICIAN` roles.
-  - Automatically logs the reveal event in the asset history and registers a `SECURITY_ALERT` audit event on the server, masking the actual secret.
-  - Returns credentials solely in memory, ensuring they are cleared instantly on modal close or unmount in the frontend dashboard.
-- **Rationale**: Completely isolates sensitive operations, guaranteeing maximum visual and logical security.
+### 5. Offline Database Compilation Strategy
+- **Decision**: Since Docker PostgreSQL is offline in local developer environments, migrations were skipped at database write level, but Prisma schema type safety is 100% generated using `prisma generate`.
+- **Rationale**: Guarantees typechecker safety and compiler integrity, allowing the entire Turborepo workspace to build green while documenting the database startup constraint.

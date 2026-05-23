@@ -1,6 +1,6 @@
 # 03 — Implemented Features
 
-This document details all implemented and fully functional features in **Peanut OS** up to the conclusion of **Phase 2 (Client Inventory & Asset Management)** on **May 23, 2026**.
+This document details all implemented and fully functional features in **Peanut OS** up to the conclusion of **Phase 3 (Helpdesk, Ticketing & SLA Foundation)** on **May 23, 2026**.
 
 ---
 
@@ -73,3 +73,18 @@ This document details all implemented and fully functional features in **Peanut 
 - **Client Users Manager (`/dashboard/clients/[id]/users`)**: Tab shell displaying end users list, active status badges, linked assets count, and addition/editing modals.
 - **Client Inventory Tab (`/dashboard/clients/[id]/inventory`)**: Tab shell displaying client assets, quick actions, and creation modal.
 - **Asset Details Sheet (`/dashboard/clients/[id]/assets/[assetId]`)**: Spec cards, dynamic technical comments board, visual history timeline, and click-to-reveal credential overlays.
+
+---
+
+## 10. Helpdesk, Ticketing & SLA Foundation (Phase 3)
+- **Central Helpdesk Board (`/dashboard/tickets`)**: High-performance dashboard displaying support tickets, text searching, quick status/client/technician selectors, and color-coded SLA alerts.
+- **New Incident Form (`/dashboard/tickets/new`)**: Premium form equipped with cascading dropdowns that load contacts, end-users, and technical assets on client selection. Uses client-side Zod validation.
+- **Support Detail Sheet (`/dashboard/tickets/[ticketId]`)**: Visual split layout rendering descriptions, timeline logs, visual audit trails, assignment controls, and state selectors.
+- **Client-Specific Tickets (`/dashboard/clients/[id]/tickets`)**: Scoped list detailing tickets and SLA targets belonging exclusively to a client.
+- **Centralized Ticket State Machine**: Restricts status updates strictly to authorized, logical transitions (e.g. blocking reopenings, protecting closures), enforced at service level.
+- **Incremental Human-Readable Numbering**: Automatically registers tickets with incremental tracking numbers (`TCK-000001`, `TCK-000002`) in transactional writes.
+- **SLA Calculation Service**: isolated SLA policy calculator computing response and resolution targets using fallback standard constants (e.g. Critical 15m, High 1h, Low 4h) or database records.
+- **Comments Sanitization Safeguard**: Case-insensitive password keyword scanner rejecting plaintext credentials in ticket notes, skipping audit trails for safety.
+- **Visibility-Controlled Notes**: Support for internal confidential notes (padlock badge, yellow layout) vs. public comments.
+- **Technical Hour Logs**: Time logs tracking faturable working hours. Automatically checks for positive durations (`startedAt < endedAt`).
+- **SLA Monitor Daemon (BullMQ)**: Background monitor sweeping active tickets, logging SLA warning countdowns and breaches. Connection error bypasses keep worker robust if Redis is offline.

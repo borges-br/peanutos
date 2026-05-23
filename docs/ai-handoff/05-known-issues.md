@@ -18,12 +18,23 @@ This document records all known issues, resolved bugs, and environment limitatio
 
 ### 🔌 Database Offline during Dev Migration
 - **Warning**: Running `prisma migrate dev` fails if the local Docker Compose PostgreSQL database server is offline.
-- **Mitigation**: Run `npx prisma validate` to confirm schema syntactical correctness, and run `npx prisma generate` to generate local typescript Prisma Client typings so compilation passes 100% green. Apply migration `phase_2_inventory` immediately after spinning up Docker services.
-- **Status**: Development workaround verified.
+- **Mitigation**: Run `npx prisma validate` to confirm schema syntactical correctness, and run `npx prisma generate` to generate local typescript Prisma Client typings so compilation passes 100% green. Apply migration `phase_3_ticketing_sla` immediately after spinning up Docker services.
+- **Status**: Development workaround verified. All package typechecks and Next/Nest compilations are 100% stable and build green.
 
 ---
 
-## 2. Resolved in Phase 2
+## 2. Resolved in Phase 3
+
+### ⚠️ React Hook useEffect Missing Dependency Warnings in Next.js Build
+- **Issue**: Strict NextJS production compilation failed in the ticket forms due to React Hook `useEffect` dependency analysis and unused destructured variables (`setSubcategory` in `/tickets/new/page.tsx`).
+- **Resolution**:
+  - Removed the unused `setSubcategory` state hook to clean up the code.
+  - Aligned all path depth references (e.g. `../../../../lib/api` and `../../../lib/api`) so compiler imports resolve successfully.
+- **Status**: **100% Fixed and Stable**. Production Turborepo build compiles successfully.
+
+---
+
+## 3. Resolved in Phase 2
 
 ### ⚠️ Missing ESLint Dependency in apps/api & apps/web
 - **Issue**: Executing `pnpm run lint` was failing across the monorepo because `eslint` and its configurations were omitted in NestJS and Next.js applications devDependencies.

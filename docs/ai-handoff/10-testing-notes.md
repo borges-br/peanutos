@@ -1,6 +1,6 @@
 # 10 — Testing Notes
 
-This document provides verification procedures, diagnostic logs, and manual test strategies for **Phase 2: Client Inventory & Asset Management**.
+This document provides verification procedures, diagnostic logs, and manual test strategies for **Phase 3: Helpdesk, Ticketing & SLA Foundation**.
 
 ---
 
@@ -9,11 +9,11 @@ This document provides verification procedures, diagnostic logs, and manual test
 To verify that the monorepo builds, typechecks, and complies with standards, execute the following commands in the workspace root:
 
 ### 1.1 Complete Clean Build
-Compiles all shared packages and applications:
+Compiles all shared packages and applications (monolithic API, Next.js frontend, BullMQ background worker):
 ```bash
 npx pnpm run build
 ```
-*Result*: **100% Success**. Output files are successfully written in `dist/` and optimized Next.js pages generated cleanly.
+*Result*: **100% Success**. Next.js production builds and NestJS compilations complete successfully.
 
 ### 1.2 TypeScript Static Typecheck
 Validates typescript typings across all packages:
@@ -49,49 +49,66 @@ npx prisma generate --schema=packages/db/prisma/schema.prisma
 
 ---
 
-## 3. Cryptography Envelope Verification
+## 3. Ticketing State Machine Transitions
 
-To verify that `AES-256-GCM` encryption is functioning correctly and validating keys:
+To test that the status transition validations are functioning correctly, try pushing status changes via `PATCH /tickets/:ticketId/status`:
 
-### 3.1 Verify key generators
-Operators can generate safe, local 32-byte keys using Node:
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
+### 3.1 Valid Transitions (Approved)
+- `OPEN` -> `TRIAGE` (Ready for sorting)
+- `OPEN` -> `IN_PROGRESS` (Started work)
+- `IN_PROGRESS` -> `WAITING_CLIENT` (Pending feedback)
+- `WAITING_CLIENT` -> `IN_PROGRESS` (Resume work)
+- `IN_PROGRESS` -> `RESOLVED` (Mark solved)
+- `RESOLVED` -> `CLOSED` (Immutable lock)
 
-### 3.2 Key Validation safeguards
-- If no key is provided, the API throws: `Chave de criptografia não fornecida (...)`
-- If an invalid key is provided (e.g. 10 bytes), the API throws: `Chave de criptografia inválida. A chave deve ter exatamente 32 bytes (...)`
-- Payload layout: `v1:gcm:base64(iv):base64(authTag):base64(cipherText)`
+### 3.2 Blocked Transitions (Invalid)
+- `CLOSED` -> `IN_PROGRESS` (Rejected)
+- `CANCELLED` -> `IN_PROGRESS` (Rejected)
+- `CLOSED` -> `RESOLVED` (Rejected)
+- Reopening closed or cancelled tickets is strictly blocked in Phase 3.
 
 ---
 
-## 4. Manual Verification Scenarios
+## 4. Credentials Safeguard in Ticket Comments
 
-Once the database Docker containers are spun up (`docker compose up -d`) and seed is run (`pnpm db:seed`), execute the following manual tests:
+To verify that the plaintext password checker blocks unauthorized credential logs:
 
-### 4.1 Client Users CRUD
-- **Route**: `GET /clients/:clientId/users`
-- **Action**: Add a new user via dashboard modal at `/dashboard/clients/[id]/users`. Check that:
-  - Phone, email, department are saved.
-  - Email uniqueness within client is enforced.
-  - Scoping by `workspaceId` isolates search results.
+### 4.1 Blocked Comment Test
+- **Action**: Post a comment via `POST /tickets/:ticketId/comments` containing:
+  - `"A senha de acesso do roteador é admin123"`
+  - `"The password was set to Admin!"`
+- **Result**: The API must reject the write with `400 Bad Request` and message: `"O comentário contém termos confidenciais (...) e foi bloqueado por segurança."`
+- **Audit Logging**: Confirm that the blocked text is never logged to `audit_logs` or server history.
 
-### 4.2 Asset Inventory CRUD
-- **Route**: `/dashboard/inventory` and `/dashboard/clients/[id]/inventory`
-- **Action**: Create an asset notebook NB-ACME-002.
-  - Fill specifications.
-  - Put a credentials password inside `sensitiveDataEncrypted`.
-  - Validate that saving works, and inspection in DB shows the encrypted envelope `v1:gcm:...` instead of raw text.
+### 4.2 Valid Comment Test
+- **Action**: Post a comment containing:
+  - `"Entramos em contato com o suporte do AP para atualização de firmware."`
+- **Result**: Comment is accepted, saved, and listed instantly on the detail card stream.
 
-### 4.3 Click-to-Reveal Credentials
-- **Action**: Access the asset detail sheet at `/dashboard/clients/[id]/assets/[assetId]`.
-  - Click **"Reveal Credenciais Confidenciais"**.
-  - Check that a warning notice displays, and credentials display correctly.
-  - Check that a `SECURITY_ALERT` audit log is created on the server, and the history registers `SENSITIVE_DATA_REVEALED`.
-  - Verify that closing the modal or switching screens clears the decrypted text from memory completely.
+---
 
-### 4.4 Internal Technical Notes
-- **Action**: Write a technical note.
-  - Try writing: "A senha do switch é 1234". The validator must reject the note, indicating that passwords should be saved in the encrypted envelope.
-  - Write a normal comment like: "Limpeza física realizada no rack". Note must be added and listed instantly.
+## 5. Time Tracking Verification
+
+To verify that faturable time entry parameters are validated:
+
+### 5.1 Invalid Duration Test
+- **Action**: Post a time entry via `POST /tickets/:ticketId/time-entries` with `startedAt` as `"2026-05-23T12:00:00Z"` and `endedAt` as `"2026-05-23T11:00:00Z"`.
+- **Result**: The API must reject the write with `400 Bad Request` and message: `"A data de término não pode ser anterior à data de início."`
+
+### 5.2 Valid Duration Test
+- **Action**: Post a time entry with `startedAt` as `"2026-05-23T10:00:00Z"` and `endedAt` as `"2026-05-23T11:30:00Z"`.
+- **Result**: Entry is saved, duration is auto-calculated as exactly `90 minutes`, and faturable flag is stored.
+
+---
+
+## 6. Background SLA Monitor Sweeper
+
+To verify that the background sweeper worker handles Redis connection losses gracefully:
+
+### 6.1 Redis Connection Refusal Test
+- **Action**: Stop the Redis server (or keep Docker daemon offline) and launch the background worker:
+  ```bash
+  npx pnpm --filter peanut-worker run build
+  node apps/worker/dist/main.js
+  ```
+- **Result**: The process must print `[SLA Monitor Worker] Redis is offline (safe bypass)` warning messages instead of throwing uncaught exception crashes, allowing the helpdesk API monolith to remain fully functional.

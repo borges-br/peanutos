@@ -375,18 +375,22 @@ export default function ClientDetailPage() {
           </section>
         </div>
 
-        {/* Right Column: Placeholders for Phase 2 */}
+        {/* Right Column: Active Navigation Cards */}
         <div style={styles.rightCol}>
-          <section style={styles.cardPlaceholder}>
-            <h2 style={styles.placeholderTitle}>Inventário (Fase 2)</h2>
-            <p style={styles.placeholderText}>Dispositivos, servidores, licenças e computadores cadastrados.</p>
-            <div style={styles.placeholderBadge}>Em Breve</div>
+          <section style={{ ...styles.card, padding: '24px', gap: '8px' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 600, color: '#3b82f6' }}>Inventário Técnico</h2>
+            <p style={{ fontSize: '12px', color: '#9ca3af', lineHeight: 1.4 }}>Dispositivos, servidores, licenças e computadores cadastrados.</p>
+            <Button variant="outline" onClick={() => router.push(`/dashboard/clients/${clientId}/inventory`)} style={{ alignSelf: 'flex-start', marginTop: '8px', fontSize: '12px', padding: '6px 12px' }}>
+              Ver Inventário
+            </Button>
           </section>
 
-          <section style={styles.cardPlaceholder}>
-            <h2 style={styles.placeholderTitle}>Chamados (Fase 2)</h2>
-            <p style={styles.placeholderText}>Histórico de suporte técnico e chamados em aberto.</p>
-            <div style={styles.placeholderBadge}>Em Breve</div>
+          <section style={{ ...styles.card, padding: '24px', gap: '8px' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 600, color: '#3b82f6' }}>Chamados & SLAs</h2>
+            <p style={{ fontSize: '12px', color: '#9ca3af', lineHeight: 1.4 }}>Histórico de suporte técnico e chamados de helpdesk em aberto.</p>
+            <Button variant="outline" onClick={() => router.push(`/dashboard/clients/${clientId}/tickets`)} style={{ alignSelf: 'flex-start', marginTop: '8px', fontSize: '12px', padding: '6px 12px' }}>
+              Ver Chamados
+            </Button>
           </section>
 
           <section style={styles.cardPlaceholder}>

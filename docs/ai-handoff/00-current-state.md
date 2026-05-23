@@ -1,6 +1,6 @@
 # 00 — Current State
 
-This document outlines the real, verified technical state of **Peanut OS** as of the conclusion of **Phase 2 (Client Inventory & Asset Management)** on **May 23, 2026**.
+This document outlines the real, verified technical state of **Peanut OS** as of the conclusion of **Phase 3 (Helpdesk, Ticketing & SLA Foundation)** on **May 23, 2026**.
 
 ## What Exists in the Repository
 
@@ -12,43 +12,45 @@ This document outlines the real, verified technical state of **Peanut OS** as of
   - `tsconfig.base.json` defining strict TypeScript guidelines.
   - `.env` and `.env.example` templates containing symmetric AES-256-GCM keys.
 - **Shared Packages (`packages/`)**:
-  - `@peanut/db`: Full PostgreSQL relational data schemas mapped in Prisma (`prisma/schema.prisma`), including the new `ClientUser.workspaceId`, `AssetHistory` and `AssetNote` models. Fully compiled to `dist/`.
+  - `@peanut/db`: Full PostgreSQL relational data schemas mapped in Prisma (`prisma/schema.prisma`), updated for Phase 3 to support enums (`TicketPriority` critical, `TicketStatus` triage/cancelled, `TicketChannel`), expand `Ticket` and `TicketComment` models with SLA/visibility fields, and define new models `SlaPolicy`, `TicketHistory` and `TicketTimeEntry`. Fully compiled to `dist/`.
   - `@peanut/ui`: Base React components including standard custom `Button`.
-  - `@peanut/types`: Common business models, status enums, and expanded `AssetType` and `AssetStatus` definitions.
-  - `@peanut/validators`: Zod validator schemas for Login, Clients, Client Contacts, Users, and the newly added `ClientUser`, `Asset`, `AssetNote`, and `SensitiveData` schemas.
+  - `@peanut/types`: Common business models, status enums, and expanded interfaces for SlaPolicy, Ticket, TicketComment, TicketHistory, and TicketTimeEntry.
+  - `@peanut/validators`: Zod validator schemas for Login, Clients, Client Contacts, Users, ClientUsers, Assets, and the newly added `ticketCreateSchema`, `ticketUpdateSchema`, `ticketStatusUpdateSchema`, `ticketAssignSchema`, `ticketCommentCreateSchema`, `ticketTimeEntryCreateSchema`, `slaPolicyCreateSchema`, and `slaPolicyUpdateSchema`.
   - `@peanut/documents`: Base HTML generator for rendering immutable A4 documents.
-  - `@peanut/utils`: Base formatting utilities and robust AES-256-GCM symmetric envelope encryption/decryption functions (`encryptString`, `decryptString`, `encryptSensitiveData`, `decryptSensitiveData`).
+  - `@peanut/utils`: Base formatting utilities and robust AES-256-GCM symmetric envelope encryption/decryption functions.
   - `@peanut/config`: Extensible base configurations for CJS/ESM.
 - **Apps (`apps/`)**:
   - `apps/web`: Next.js 14 App Router dashboard shell, housing:
     - `/login`: Premium dark glassmorphic interface with validations.
-    - `/dashboard`: Layout sidebar and overview cards.
+    - `/dashboard`: Layout sidebar with new "Chamados" nav item.
     - `/dashboard/clients`: Searchable customer list.
-    - `/dashboard/clients/[id]`: Detail tabs, Contact CRUD, Client Users panel, and Client Assets list.
-    - `/dashboard/inventory`: Central technical assets dashboard with advanced multi-field search and filters.
-    - `/dashboard/clients/[id]/assets/[assetId]`: Dynamic specs card, history timeline, inline notes, and secure click-to-reveal credentials overlay.
-  - `apps/api`: NestJS Fastify adapter backend monolith, housing:
+    - `/dashboard/clients/[id]`: Detail tabs, Company details, Contact CRUD, active technical inventory links, and active support tickets links.
+    - `/dashboard/clients/[id]/tickets`: Client-specific tickets dashboard list with filters.
+    - `/dashboard/inventory`: Central technical assets dashboard.
+    - `/dashboard/tickets`: Central helpdesk tickets board, equipped with filters (status, client, priority, technician), text search, and color-coded SLA countdown/breach badges.
+    - `/dashboard/tickets/new`: Incidents creator form with cascading dropdown selectors (populates contacts, users, and assets as soon as a client is selected), backed by client-side Zod validators.
+    - `/dashboard/tickets/[ticketId]`: Ticket details card, internal confidential notes (padlock icon / yellow tint) vs. public comments chat stream, technical time logging logs (durationMinutes auto-calculated), visual audit logs timeline, technician re-assigners, and state machine transition action selectors.
+  - `apps/api`: NestJS monolith, housing:
     - `/auth`: Bearer token JWT state and RolesGuard/RBAC.
-    - `/audit`: Global sanitization logger stripping passwords and GCM sensitive payloads.
-    - `/users`: Internal tenant-isolated users CRUD.
-    - `/clients`: Isolated customer directory.
-    - `/client-users`: Isolated end-users database under `/clients/:clientId/users`.
-    - `/inventory`: Global and client asset registers, assignments, technical notes, and audited `/reveal-sensitive-data`.
-  - `apps/worker`: BullMQ isolated worker daemon.
+    - `/users`: Internal users CRUD list, now allowing TECHNICIANS to read user lists for re-assignments.
+    - `/audit`: Global sanitization logger stripping passwords, credentials and comments text.
+    - `/clients` and `/client-users`: Isolated customer directories.
+    - `/inventory`: Workspace-isolated technical asset registers.
+    - `/tickets` (NEW Module): Managing tenant-isolated tickets operations, cascaded validations, custom/fallback SLA computing services (`sla.service.ts`), state transition constraint machines (`ticket-state-machine.ts`), Visiblity filters, time entries logger, and comment term filters (password/secret blocks).
+  - `apps/worker`: BullMQ background worker daemon, housing `pdfWorker`, `webhookWorker` and the new `slaMonitorWorker` which sweeps unresolved tickets to log SLA breach alerts. Includes connection `'error'` events to safely bypass offline Redis local connections.
 
 ## What is Functional & Verified
 
 - **Monorepo Dependency Imports**: Code imports across workspaces compile and resolve without errors.
-- **ESLint Stabilization**: Fully resolved missing backend ESLint dependencies. `npx pnpm run lint` passes across all 10 packages cleanly.
+- **ESLint Stabilization**: lint checks pass across all 10 packages cleanly.
 - **Prisma Schema Validation**: Syntactically 100% valid using `npx prisma validate`.
-- **Workspace Build status**: Verified compilation output 100% green using `turbo run build` across all monorepo packages.
-- **NextJS Static Generation**: Compiled successfully under Next.js server component optimization rules.
 - **TypeScript Core Verification**: Verified 100% successful via `turbo run typecheck`.
+- **Workspace Build status**: Verified compilation output 100% green using `turbo run build` across all monorepo packages, NextJS static pages, NestJS controllers, and BullMQ worker.
 
 ## What is Pending Validation / Execution
 
-- **Active Docker DB connection**: Local Docker daemon service has startup permissions restrictions. Applying actual db migrations requires a running PostgreSQL container.
+- **Active Docker DB connection**: Local Docker daemon service is offline in local developer environment. Applying actual database migrations and seeding requires an active running PostgreSQL container. Prisma schema generated types successfully offline, compile checks are green.
 
 ## Last Completed Milestone
 
-- **Phase 2 — Client Inventory & Asset Management**.
+- **Phase 3 — Helpdesk, Ticketing & SLA Foundation**.

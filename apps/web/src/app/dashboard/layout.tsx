@@ -34,6 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Visão Geral', path: '/dashboard' },
     { name: 'Clientes', path: '/dashboard/clients' },
     { name: 'Inventário', path: '/dashboard/inventory' },
+    { name: 'Chamados', path: '/dashboard/tickets' },
   ];
 
   // Only OWNER or ADMIN can manage users
@@ -91,6 +92,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {pathname === '/dashboard' && 'Visão Geral'}
             {pathname?.startsWith('/dashboard/clients') && 'Gestão de Clientes'}
             {pathname?.startsWith('/dashboard/inventory') && 'Inventário de Ativos'}
+            {pathname?.startsWith('/dashboard/tickets') && 'Gestão de Chamados'}
           </div>
           <div style={styles.badge}>{user.role} Account</div>
         </header>

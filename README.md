@@ -2,9 +2,9 @@
 
 Peanut OS is a professional, high-performance web platform designed for the operational, technical, and commercial management of IT Service Providers. Initially conceptualized as a robust system for **Borges TI**, it is designed from the ground up with a white-label architecture to support custom branding, and a logical database model that prepares the schema for future multi-tenant operations.
 
-> [!WARNING]
-> **Project Status**: **Phase 2 Complete (Client Inventory & Asset Management)**. 
-> This is a professional developer portfolio project under active development. All Phase 2 modules (Hardware & Software Inventory, Client End Users Registry, AES-256-GCM symmetric envelope cryptography, Life-cycle histories, internal technical notes, and click-to-reveal credentials overlay) are fully functional, verified, and build-green!
+> [!NOTE]
+> **Project Status**: **Phase 3 Complete (Helpdesk, Ticketing & SLA Foundation)**. 
+> This is a professional developer portfolio project under active development. All Phase 3 modules (Helpdesk tickets board, incident cascading selectors, visual detail panel, client-specific tickets tab, centralized state transitions, automatic SLA calculations, comments visibility filters, password blocking safeguards, technical time entries log, and background SLA BullMQ worker sweeper) are fully functional, verified, and build-green!
 
 ---
 
@@ -76,9 +76,19 @@ peanutos/
 - [x] Audited click-to-reveal credentials overlay for technical operators, leaving no credentials in local storage/session or logs.
 - [x] Sleek, responsive Next.js technical sheets: `/dashboard/inventory`, `/dashboard/clients/[id]/users`, `/dashboard/clients/[id]/inventory`, and detailed `/dashboard/clients/[id]/assets/[assetId]` spec views.
 
+#### Helpdesk, Ticketing & SLA Foundation (Phase 3)
+- [x] Incidents board `/dashboard/tickets` with advanced search, page paginators, client/priority/technician dropdown filters, and SLA remaining timers.
+- [x] Creation forms `/dashboard/tickets/new` loading cascading contacts, users, and assets dynamically based on Client selection, backed by client-side Zod validators.
+- [x] Split detailed panel `/dashboard/tickets/[ticketId]` mapping technical descriptions, communications timeline (Padlock notes vs. public chat), working time logs, re-assignment controls, and state transitions.
+- [x] Centralized ticket status state machines protecting ticket lifecycles against invalid status updates.
+- [x] Automatic SLA Policy calculations computing response/resolution deadlines using fallback approved policy hours.
+- [x] Plaintext password checker rejecting un-audited credentials in ticket comments case-insensitively.
+- [x] Time logging tracking faturable working hours with start/end duration positive checks.
+- [x] BullMQ background SLA worker sweeping unresolved tickets and logging breach warnings.
+- [x] Client tickets view `/dashboard/clients/[id]/tickets` scoping list under the client detail tab.
+
 ### Planned Modules (Next Phases)
-- [ ] **Phase 3**: Helpdesk, Ticketing & SLA priority calculation engines (SLA deadline timer calculation, background breach monitors, visual ticket comments feed).
-- [ ] **Phase 4**: Advanced IT Contracts, SLAs policies, and recurring subscription fee schedules.
+- [ ] **Phase 4**: Advanced IT Contracts, quota limitations validations, billing days schedules, monthly MRR financials dashboard, and background billing schedulers.
 - [ ] **Phase 5**: Playwright Worker PDF Render Engine for closed tickets and invoices.
 - [ ] **Phase 6**: Outbox Event dispatcher and secure HMAC signed webhooks to n8n.
 

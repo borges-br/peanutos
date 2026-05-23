@@ -6,6 +6,7 @@ import { UsersModule } from "./users/users.module";
 import { ClientsModule } from "./clients/clients.module";
 import { ClientUsersModule } from "./client-users/client-users.module";
 import { InventoryModule } from "./inventory/inventory.module";
+import { TicketsModule } from "./tickets/tickets.module";
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { InventoryModule } from "./inventory/inventory.module";
     ClientsModule,
     ClientUsersModule,
     InventoryModule,
+    TicketsModule,
   ],
   controllers: [HealthController],
   providers: [],

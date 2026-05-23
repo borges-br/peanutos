@@ -77,15 +77,27 @@ enum TicketPriority {
   MEDIUM
   HIGH
   URGENT
+  CRITICAL
 }
 
 enum TicketStatus {
   OPEN
+  TRIAGE
   IN_PROGRESS
   WAITING_CLIENT
   WAITING_THIRD_PARTY
   RESOLVED
   CLOSED
+  CANCELLED
+}
+
+enum TicketChannel {
+  WHATSAPP
+  EMAIL
+  PHONE
+  PORTAL
+  MANUAL
+  OTHER
 }
 
 enum DocumentType {
@@ -123,6 +135,10 @@ model Workspace {
   generatedDocuments  GeneratedDocument[]
   outboxEvents        OutboxEvent[]
   auditLogs           AuditLog[]
+  ticketComments      TicketComment[]
+  ticketHistories     TicketHistory[]
+  ticketTimeEntries   TicketTimeEntry[]
+  slaPolicies         SlaPolicy[]
 
   @@map("workspaces")
 }
@@ -147,6 +163,8 @@ model User {
   auditLogs      AuditLog[]
   assetNotes     AssetNote[]
   assetHistories AssetHistory[]
+  ticketHistories TicketHistory[]
+  ticketTimeEntries TicketTimeEntry[]
 
   @@index([workspaceId])
   @@map("users")
@@ -280,10 +298,11 @@ model Ticket {
   clientUserId          String?        @db.Uuid
   assetId               String?        @db.Uuid
   contractId            String?        @db.Uuid
+  slaPolicyId           String?        @db.Uuid
   number                String         @unique @db.VarChar(50)
   title                 String         @db.VarChar(200)
   description           String         @db.Text
-  channel               String         @default("EMAIL") @db.VarChar(30)
+  channel               TicketChannel  @default(EMAIL)
   priority              TicketPriority @default(MEDIUM)
   status                TicketStatus   @default(OPEN)
   assignedToId          String?        @db.Uuid
@@ -294,20 +313,24 @@ model Ticket {
   closedAt              DateTime?
   slaDueFirstResponseAt DateTime?
   slaDueStartAt         DateTime?
+  slaDueResolutionAt    DateTime?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
   // Relationships
-  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  client       Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  contact      ClientContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  clientUser   ClientUser?    @relation(fields: [clientUserId], references: [id], onDelete: SetNull)
-  asset        Asset?         @relation(fields: [assetId], references: [id], onDelete: SetNull)
-  contract     Contract?      @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  assignedTo   User?          @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
-  comments     TicketComment[]
-  closure      TicketClosure?
-  invoices     Invoice[]
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client        Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contact       ClientContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  clientUser    ClientUser?     @relation(fields: [clientUserId], references: [id], onDelete: SetNull)
+  asset         Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  contract      Contract?       @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  slaPolicy     SlaPolicy?      @relation(fields: [slaPolicyId], references: [id], onDelete: SetNull)
+  assignedTo    User?           @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  comments      TicketComment[]
+  closure       TicketClosure?
+  invoices      Invoice[]
+  history       TicketHistory[]
+  timeEntries   TicketTimeEntry[]
 
   @@index([workspaceId, status, priority])
   @@map("tickets")
@@ -315,18 +338,22 @@ model Ticket {
 
 model TicketComment {
   id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
   ticketId    String   @db.Uuid
   userId      String?  @db.Uuid
   content     String   @db.Text
   isInternal  Boolean  @default(false)
+  visibility  String   @default("INTERNAL") @db.VarChar(50) // INTERNAL or CLIENT_VISIBLE_FUTURE
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relationships
-  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ticket      Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([ticketId])
+  @@index([workspaceId])
   @@map("ticket_comments")
 }
 
@@ -617,5 +644,69 @@ model AssetNote {
   @@index([assetId])
   @@index([workspaceId])
   @@map("asset_notes")
+}
+
+model TicketHistory {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  ticketId    String   @db.Uuid
+  actorUserId String?  @db.Uuid
+  event       String   @db.VarChar(50) // TICKET_CREATED, STATUS_CHANGED, etc.
+  description String   @db.Text
+  before      String?  @db.Text
+  after       String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ticket      Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actorUser   User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId])
+  @@index([workspaceId])
+  @@map("ticket_history")
+}
+
+model TicketTimeEntry {
+  id              String    @id @default(uuid()) @db.Uuid
+  workspaceId     String    @db.Uuid
+  ticketId        String    @db.Uuid
+  userId          String    @db.Uuid
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationMinutes Int?
+  description     String    @db.Text
+  billable        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ticket    Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([workspaceId])
+  @@map("ticket_time_entries")
+}
+
+model SlaPolicy {
+  id                   String   @id @default(uuid()) @db.Uuid
+  workspaceId          String   @db.Uuid
+  name                 String   @db.VarChar(100)
+  description          String?  @db.Text
+  priority             TicketPriority
+  firstResponseMinutes Int
+  startMinutes         Int
+  resolutionMinutes    Int
+  businessHoursOnly    Boolean  @default(false)
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tickets   Ticket[]
+
+  @@unique([workspaceId, priority])
+  @@index([workspaceId])
+  @@map("sla_policies")
 }
 

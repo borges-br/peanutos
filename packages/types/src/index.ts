@@ -43,15 +43,36 @@ export type AssetStatus =
   | 'PENDING_VALIDATION'
   | 'PENDING_REVIEW';
 
-export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
 
 export type TicketStatus =
   | 'OPEN'
+  | 'TRIAGE'
   | 'IN_PROGRESS'
   | 'WAITING_CLIENT'
   | 'WAITING_THIRD_PARTY'
   | 'RESOLVED'
-  | 'CLOSED';
+  | 'CLOSED'
+  | 'CANCELLED';
+
+export type TicketChannel = 'WHATSAPP' | 'EMAIL' | 'PHONE' | 'PORTAL' | 'MANUAL' | 'OTHER';
+
+export type TicketCommentVisibility = 'INTERNAL' | 'CLIENT_VISIBLE_FUTURE';
+
+export type TicketHistoryEvent =
+  | 'TICKET_CREATED'
+  | 'TICKET_UPDATED'
+  | 'STATUS_CHANGED'
+  | 'PRIORITY_CHANGED'
+  | 'ASSIGNED'
+  | 'COMMENT_ADDED'
+  | 'FIRST_RESPONSE_RECORDED'
+  | 'STARTED'
+  | 'RESOLVED'
+  | 'CLOSED'
+  | 'CANCELLED'
+  | 'SLA_WARNING'
+  | 'SLA_BREACHED';
 
 export type DocumentType = 'QUOTE' | 'INVOICE' | 'TICKET_CLOSURE' | 'CONTRACT' | 'REPORT';
 
@@ -175,17 +196,79 @@ export interface Ticket {
   id: string;
   workspaceId: string;
   clientId: string;
+  contactId?: string | null;
   clientUserId?: string | null;
   assetId?: string | null;
+  contractId?: string | null;
+  slaPolicyId?: string | null;
   number: string;
   title: string;
   description: string;
+  channel: TicketChannel;
   priority: TicketPriority;
   status: TicketStatus;
   assignedToId?: string | null;
   openedAt: Date;
+  firstResponseAt?: Date | null;
+  startedAt?: Date | null;
   resolvedAt?: Date | null;
   closedAt?: Date | null;
+  slaDueFirstResponseAt?: Date | null;
+  slaDueStartAt?: Date | null;
+  slaDueResolutionAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TicketComment {
+  id: string;
+  workspaceId: string;
+  ticketId: string;
+  userId?: string | null;
+  content: string;
+  isInternal: boolean;
+  visibility: TicketCommentVisibility;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TicketHistory {
+  id: string;
+  workspaceId: string;
+  ticketId: string;
+  actorUserId?: string | null;
+  event: string;
+  description: string;
+  before?: string | null;
+  after?: string | null;
+  createdAt: Date;
+}
+
+export interface TicketTimeEntry {
+  id: string;
+  workspaceId: string;
+  ticketId: string;
+  userId: string;
+  startedAt: Date;
+  endedAt?: Date | null;
+  durationMinutes?: number | null;
+  description: string;
+  billable: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SlaPolicy {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string | null;
+  priority: TicketPriority;
+  firstResponseMinutes: number;
+  startMinutes: number;
+  resolutionMinutes: number;
+  businessHoursOnly: boolean;
+  active: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

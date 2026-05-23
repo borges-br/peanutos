@@ -248,36 +248,131 @@ async function main() {
     }
   });
 
-  // 8. Create a Ticket
-  const ticket = await prisma.ticket.create({
+  // 8. Seed default SLA Policies
+  console.log('- Seeding default SLA Policies...');
+  const priorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'] as const;
+  const slaConfigs: Record<typeof priorities[number], { name: string; response: number; start: number; resolution: number }> = {
+    LOW: { name: 'SLA Padrão - Baixa', response: 240, start: 960, resolution: 7200 },
+    MEDIUM: { name: 'SLA Padrão - Média', response: 120, start: 240, resolution: 2880 },
+    HIGH: { name: 'SLA Padrão - Alta', response: 60, start: 120, resolution: 1440 },
+    URGENT: { name: 'SLA Padrão - Urgente', response: 30, start: 60, resolution: 480 },
+    CRITICAL: { name: 'SLA Padrão - Crítica', response: 15, start: 30, resolution: 240 },
+  };
+
+  const slaPolicies: Record<string, string> = {};
+  for (const prio of priorities) {
+    const config = slaConfigs[prio];
+    const policy = await prisma.slaPolicy.upsert({
+      where: {
+        workspaceId_priority: {
+          workspaceId: workspace.id,
+          priority: prio,
+        },
+      },
+      update: {},
+      create: {
+        workspaceId: workspace.id,
+        name: config.name,
+        priority: prio,
+        firstResponseMinutes: config.response,
+        startMinutes: config.start,
+        resolutionMinutes: config.resolution,
+        businessHoursOnly: false,
+        active: true,
+      },
+    });
+    slaPolicies[prio] = policy.id;
+  }
+
+  // 9. Create standard tickets
+  const now = new Date();
+
+  // Ticket 1: TCK-000001
+  const t1DueResp = new Date(now); t1DueResp.setMinutes(t1DueResp.getMinutes() + 120); // MEDIUM: 2h
+  const t1DueRes = new Date(now); t1DueRes.setMinutes(t1DueRes.getMinutes() + 2880); // MEDIUM: 48h
+  const ticket1 = await prisma.ticket.create({
     data: {
       workspaceId: workspace.id,
       clientId: client.id,
       contactId: contact.id,
       clientUserId: clientUser1.id,
-      assetId: serverAsset.id,
-      number: 'TKT-2026-0001',
-      title: 'Aviso de lentidão no banco de dados de teste',
-      description: 'Usuários relatam intermitência no acesso ao banco de dados no final da tarde.',
-      channel: 'EMAIL',
-      priority: 'HIGH',
+      assetId: notebookAsset.id,
+      slaPolicyId: slaPolicies['MEDIUM'],
+      number: 'TCK-000001',
+      title: 'Notebook não conecta no Wi-Fi',
+      description: 'Dispositivo ThinkPad T14 (Maria Example) perde conectividade de rede sem fio repetidamente.',
+      channel: 'WHATSAPP',
+      priority: 'MEDIUM',
       status: 'OPEN',
       assignedToId: adminUser.id,
+      openedAt: now,
+      slaDueFirstResponseAt: t1DueResp,
+      slaDueResolutionAt: t1DueRes,
     },
   });
-  console.log(`- Fictive ticket created: ${ticket.number} - "${ticket.title}"`);
 
-  // 9. Create a Ticket Comment
+  // Ticket 2: TCK-000002
+  const t2DueResp = new Date(now); t2DueResp.setMinutes(t2DueResp.getMinutes() + 30); // URGENT: 30m
+  const t2DueRes = new Date(now); t2DueRes.setMinutes(t2DueRes.getMinutes() + 480); // URGENT: 8h
+  const ticket2 = await prisma.ticket.create({
+    data: {
+      workspaceId: workspace.id,
+      clientId: client.id,
+      contactId: contact.id,
+      clientUserId: clientUser2.id,
+      assetId: serverAsset.id,
+      slaPolicyId: slaPolicies['URGENT'],
+      number: 'TCK-000002',
+      title: 'Servidor com alerta de espaço em disco',
+      description: 'Volume /var do servidor Dell PowerEdge R740 atingiu 92% de ocupação e requer limpeza.',
+      channel: 'EMAIL',
+      priority: 'URGENT',
+      status: 'IN_PROGRESS',
+      assignedToId: adminUser.id,
+      openedAt: now,
+      startedAt: now,
+      slaDueFirstResponseAt: t2DueResp,
+      slaDueResolutionAt: t2DueRes,
+    },
+  });
+
+  // Ticket 3: TCK-000003
+  const t3DueResp = new Date(now); t3DueResp.setMinutes(t3DueResp.getMinutes() + 240); // LOW: 4h
+  const t3DueRes = new Date(now); t3DueRes.setMinutes(t3DueRes.getMinutes() + 7200); // LOW: 120h
+  const ticket3 = await prisma.ticket.create({
+    data: {
+      workspaceId: workspace.id,
+      clientId: client.id,
+      contactId: contact.id,
+      assetId: printerAsset.id,
+      slaPolicyId: slaPolicies['LOW'],
+      number: 'TCK-000003',
+      title: 'Impressora não imprime',
+      description: 'HP LaserJet Pro no setor financeiro está apresentando código de erro offline constante.',
+      channel: 'PHONE',
+      priority: 'LOW',
+      status: 'TRIAGE',
+      openedAt: now,
+      slaDueFirstResponseAt: t3DueResp,
+      slaDueResolutionAt: t3DueRes,
+    },
+  });
+
+  console.log(`- Fictive tickets created: ${ticket1.number}, ${ticket2.number}, ${ticket3.number}`);
+
+  // 10. Seed comments with workspaceId!
   await prisma.ticketComment.create({
     data: {
-      ticketId: ticket.id,
+      workspaceId: workspace.id,
+      ticketId: ticket1.id,
       userId: adminUser.id,
-      content: 'Análise inicial concluída. Iremos verificar a utilização de memória no servidor nas próximas horas.',
+      content: 'Verificando as configurações do access point principal para Maria.',
       isInternal: true,
+      visibility: 'INTERNAL',
     },
   });
 
-  // 10. Create an Audit Log
+  // 11. Create an Audit Log
   await prisma.auditLog.create({
     data: {
       workspaceId: workspace.id,
