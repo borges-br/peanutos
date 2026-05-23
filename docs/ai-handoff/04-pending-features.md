@@ -1,37 +1,31 @@
 # 04 — Pending Features
 
-This document maps all the remaining features for the development of **Peanut OS**, organized by phases.
+This document maps all remaining operational and technical features planned for **Peanut OS** in future phases.
 
 ---
 
-## 🖥️ Phase 2: Technical Asset Inventory
-- **Asset CRUD**: Centralized hardware & software inventory modules (Notebooks, Servers, VPNs, etc.).
-- **Asset Assignment**: Link physical workstations and printers to specific Client Users.
-- **Sensitive Data Cryptographic Envelope**: Real symmetric application-level envelope encryption (AES-256-GCM) inside `@peanut/utils` to secure server passwords, remote desktop credentials, and sensitive notes.
-- **Client Users**: Registry of client users, departments, and specific technical rules (originally scheduled in Phase 1, deferred to Phase 2 to group with Asset assignments).
+## 1. Ticketing & SLA Foundation (Phase 3)
+- **SLA Priority Engine**: Calculate response and resolution deadlines automatically based on priority level (`LOW`, `MEDIUM`, `HIGH`, `URGENT`).
+- **Helpdesk Board**: Visual Next.js dashboard at `/dashboard/tickets` displaying cards of tickets, priority markers, and SLA warnings.
+- **SLA Alert System**: BullMQ background workers dispatching alerts if a ticket is approaching breach.
+- **Closure Summaries**: Capturing technical hours used and resolution details upon ticket closure.
 
 ---
 
-## 🎫 Phase 3: Ticketing & SLA Engine
-- **Ticket Workflow**: Strict state-machine routing (`OPEN` -> `IN_PROGRESS` -> `RESOLVED` -> `CLOSED`).
-- **SLA Tracking**: Responding and starting timers against specific contracted schedules.
-- **Technical Comments**: Auditable internal and external support log commentary.
-- **Closure Module**: Formal Ticket Closures documenting root causes, resolution hours, and technician logs.
+## 2. Advanced Contracts, SLA & Financials (Phase 4)
+- **Contract Tracking**: Association of service contracts to clients, enforcing user/asset quotas.
+- **Billing Days**: Automated tracking of monthly contract values and pix keys.
+- **Financial summary dashboard**: Showing overall monthly recurring revenue (MRR) and active billing summaries.
 
 ---
 
-## 💳 Phase 4: Financial & PDF Engine
-- **Quotes**: Multi-item commercial estimates, validity dates, and customer sign-off hooks.
-- **Invoices**: Invoicing schedules linked to active contracts, tickets, or quotes.
-- **PDF Playwright Render**: Chromium isolated worker compiling Invoices, Quotes, and Ticket Closures to A4 snapshots and writing files to MinIO/S3 private buckets.
+## 3. Documents Engine & PDF Exports (Phase 5)
+- **Playwright PDF Worker**: Background service rendering clean, print-ready PDF attachments for closed tickets, invoice quotes, and quarterly reports.
+- **Immutable Storage**: Archiving generated files in local MinIO or remote AWS S3 buckets.
 
 ---
 
-## 📜 Phase 5: SLA Contracts
-- **Contracts**: Customer subscription parameters, included monthly hours, onsite allowance, and billing day integrations.
-
----
-
-## 🔗 Phase 6: Outbox Events & Webhooks
-- **Transactional Outbox Event Dispatcher**: Background worker sending HMAC SHA-256 signed JSON payloads to automated n8n workflows.
-- **Webhook Registry**: Manage n8n target webhook URLs and trace delivery reports.
+## 4. White-Label Branding & Portals (Phase 6)
+- **Operator customization**: Dynamic workspace branding logos, custom slug subdomains, and color templates.
+- **Client Portal**: Restrictive, secure login portal for client contacts to view their own inventory, tickets, and contracts.
+- **Webhook Dispatcher**: Dispatching events to third-party APIs (like n8n) signed with HMAC SHA256 signatures.

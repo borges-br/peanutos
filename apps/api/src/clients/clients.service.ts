@@ -1,7 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { prisma, ClientStatus } from '@peanut/db';
-import { AuditService } from '../audit/audit.service';
-import { ClientInput, ClientContactInput } from '@peanut/validators';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import { prisma, ClientStatus } from "@peanut/db";
+import { AuditService } from "../audit/audit.service";
+import { ClientInput, ClientContactInput } from "@peanut/validators";
 
 @Injectable()
 export class ClientsService {
@@ -9,7 +13,12 @@ export class ClientsService {
 
   async list(
     workspaceId: string,
-    query: { page?: number; limit?: number; search?: string; status?: ClientStatus }
+    query: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: ClientStatus;
+    },
   ) {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
@@ -26,10 +35,10 @@ export class ClientsService {
     if (query.search) {
       const searchPattern = query.search;
       where.OR = [
-        { legalName: { contains: searchPattern, mode: 'insensitive' } },
-        { tradeName: { contains: searchPattern, mode: 'insensitive' } },
-        { document: { contains: searchPattern, mode: 'insensitive' } },
-        { email: { contains: searchPattern, mode: 'insensitive' } },
+        { legalName: { contains: searchPattern, mode: "insensitive" } },
+        { tradeName: { contains: searchPattern, mode: "insensitive" } },
+        { document: { contains: searchPattern, mode: "insensitive" } },
+        { email: { contains: searchPattern, mode: "insensitive" } },
       ];
     }
 
@@ -39,7 +48,7 @@ export class ClientsService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
 
@@ -61,31 +70,39 @@ export class ClientsService {
       where: { id, workspaceId },
       include: {
         contacts: {
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
         },
       },
     });
 
     if (!client) {
-      throw new NotFoundException('Cliente não encontrado');
+      throw new NotFoundException("Cliente não encontrado");
     }
 
     return client;
   }
 
-  async create(input: ClientInput, workspaceId: string, actorUserId: string, ipAddress?: string, userAgent?: string) {
+  async create(
+    input: ClientInput,
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const existing = await prisma.client.findFirst({
       where: { workspaceId, document: input.document },
     });
 
     if (existing) {
-      throw new BadRequestException('Já existe um cliente cadastrado com este documento');
+      throw new BadRequestException(
+        "Já existe um cliente cadastrado com este documento",
+      );
     }
 
     const newClient = await prisma.client.create({
       data: {
         workspaceId,
-        type: 'LEGAL_PERSON',
+        type: "LEGAL_PERSON",
         legalName: input.legalName,
         tradeName: input.tradeName,
         document: input.document,
@@ -93,15 +110,15 @@ export class ClientsService {
         phone: input.phone,
         website: input.website || null,
         notes: input.notes || null,
-        status: 'ACTIVE',
+        status: "ACTIVE",
       },
     });
 
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'client.created',
-      entityType: 'CLIENT',
+      action: "client.created",
+      entityType: "CLIENT",
       entityId: newClient.id,
       after: newClient,
       ipAddress,
@@ -111,13 +128,20 @@ export class ClientsService {
     return newClient;
   }
 
-  async update(id: string, input: Partial<ClientInput>, workspaceId: string, actorUserId: string, ipAddress?: string, userAgent?: string) {
+  async update(
+    id: string,
+    input: Partial<ClientInput>,
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const client = await prisma.client.findFirst({
       where: { id, workspaceId },
     });
 
     if (!client) {
-      throw new NotFoundException('Cliente não encontrado');
+      throw new NotFoundException("Cliente não encontrado");
     }
 
     const before = { ...client };
@@ -127,7 +151,9 @@ export class ClientsService {
         where: { workspaceId, document: input.document, id: { not: id } },
       });
       if (existing) {
-        throw new BadRequestException('Já existe um cliente cadastrado com este documento');
+        throw new BadRequestException(
+          "Já existe um cliente cadastrado com este documento",
+        );
       }
     }
 
@@ -148,8 +174,8 @@ export class ClientsService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'client.updated',
-      entityType: 'CLIENT',
+      action: "client.updated",
+      entityType: "CLIENT",
       entityId: id,
       before,
       after: updatedClient,
@@ -160,13 +186,20 @@ export class ClientsService {
     return updatedClient;
   }
 
-  async updateStatus(id: string, status: ClientStatus, workspaceId: string, actorUserId: string, ipAddress?: string, userAgent?: string) {
+  async updateStatus(
+    id: string,
+    status: ClientStatus,
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const client = await prisma.client.findFirst({
       where: { id, workspaceId },
     });
 
     if (!client) {
-      throw new NotFoundException('Cliente não encontrado');
+      throw new NotFoundException("Cliente não encontrado");
     }
 
     const before = { ...client };
@@ -179,8 +212,8 @@ export class ClientsService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'client.status_changed',
-      entityType: 'CLIENT',
+      action: "client.status_changed",
+      entityType: "CLIENT",
       entityId: id,
       before,
       after: updatedClient,
@@ -199,12 +232,12 @@ export class ClientsService {
     });
 
     if (!client) {
-      throw new NotFoundException('Cliente não encontrado');
+      throw new NotFoundException("Cliente não encontrado");
     }
 
     return prisma.clientContact.findMany({
       where: { clientId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
   }
 
@@ -214,14 +247,14 @@ export class ClientsService {
     workspaceId: string,
     actorUserId: string,
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ) {
     const client = await prisma.client.findFirst({
       where: { id: clientId, workspaceId },
     });
 
     if (!client) {
-      throw new NotFoundException('Cliente não encontrado');
+      throw new NotFoundException("Cliente não encontrado");
     }
 
     if (input.isPrimary) {
@@ -242,15 +275,15 @@ export class ClientsService {
         department: input.department || null,
         isPrimary: input.isPrimary,
         notes: input.notes || null,
-        status: 'ACTIVE',
+        status: "ACTIVE",
       },
     });
 
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'client_contact.created',
-      entityType: 'CLIENT_CONTACT',
+      action: "client_contact.created",
+      entityType: "CLIENT_CONTACT",
       entityId: newContact.id,
       after: newContact,
       ipAddress,
@@ -267,14 +300,14 @@ export class ClientsService {
     workspaceId: string,
     actorUserId: string,
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ) {
     const client = await prisma.client.findFirst({
       where: { id: clientId, workspaceId },
     });
 
     if (!client) {
-      throw new NotFoundException('Cliente não encontrado');
+      throw new NotFoundException("Cliente não encontrado");
     }
 
     const contact = await prisma.clientContact.findFirst({
@@ -282,7 +315,7 @@ export class ClientsService {
     });
 
     if (!contact) {
-      throw new NotFoundException('Contato não encontrado');
+      throw new NotFoundException("Contato não encontrado");
     }
 
     const before = { ...contact };
@@ -300,7 +333,8 @@ export class ClientsService {
     if (input.phone !== undefined) data.phone = input.phone || null;
     if (input.mobile !== undefined) data.mobile = input.mobile || null;
     if (input.role !== undefined) data.role = input.role || null;
-    if (input.department !== undefined) data.department = input.department || null;
+    if (input.department !== undefined)
+      data.department = input.department || null;
     if (input.isPrimary !== undefined) data.isPrimary = input.isPrimary;
     if (input.notes !== undefined) data.notes = input.notes || null;
 
@@ -312,8 +346,8 @@ export class ClientsService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'client_contact.updated',
-      entityType: 'CLIENT_CONTACT',
+      action: "client_contact.updated",
+      entityType: "CLIENT_CONTACT",
       entityId: contactId,
       before,
       after: updatedContact,
@@ -330,14 +364,14 @@ export class ClientsService {
     workspaceId: string,
     actorUserId: string,
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ) {
     const client = await prisma.client.findFirst({
       where: { id: clientId, workspaceId },
     });
 
     if (!client) {
-      throw new NotFoundException('Cliente não encontrado');
+      throw new NotFoundException("Cliente não encontrado");
     }
 
     const contact = await prisma.clientContact.findFirst({
@@ -345,7 +379,7 @@ export class ClientsService {
     });
 
     if (!contact) {
-      throw new NotFoundException('Contato não encontrado');
+      throw new NotFoundException("Contato não encontrado");
     }
 
     await prisma.clientContact.delete({
@@ -355,8 +389,8 @@ export class ClientsService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'client_contact.deleted',
-      entityType: 'CLIENT_CONTACT',
+      action: "client_contact.deleted",
+      entityType: "CLIENT_CONTACT",
       entityId: contactId,
       before: contact,
       ipAddress,

@@ -1,32 +1,42 @@
 # 01 — Next Steps
 
-This document outlines the priority checklist for the next AI agent to execute during **Phase 2: Client Inventory & Asset Management**.
+This document outlines the priority checklist for the next AI agent to execute during **Phase 3: Ticketing & SLA Foundation**.
 
-## Phase 2 Execution Checklist
+## Phase 3 Execution Checklist
 
-### 1. Database Connections & Local Seeding
-- [ ] Initialize the Docker Compose services manually using Docker Desktop on the host.
-- [ ] Apply the Prisma schema migrations to the PostgreSQL database.
-- [ ] Seed the fictive dataset using `pnpm db:seed` to populate the default admin (`admin@example.com` / `ChangeMe123!`), clients, and placeholder tickets.
+### 1. Database Migrations
+- [ ] Spin up the Docker Compose PostgreSQL container manually.
+- [ ] Apply the Prisma schema migrations for Phase 2 and Phase 3:
+  ```bash
+  npx pnpm --filter @peanut/db prisma migrate dev --name phase_2_and_3
+  ```
+- [ ] Seed the database using `pnpm db:seed` to verify mock technical assets, client end users, and notes exist locally.
 
-### 2. Client Users Registry CRUD
-- [ ] Implement CRUD REST endpoints in `apps/api` for the `ClientUser` model (`/clients/:clientId/users`).
-- [ ] Scopes all operations strictly to the user's active `workspaceId`.
-- [ ] Integrate appropriate Zod validators.
+### 2. SLA & Priority Engine
+- [ ] Review ticket urgency rules and response/resolution SLAs in `schema.prisma`.
+- [ ] Build a priority engine matching priority levels (`LOW`, `MEDIUM`, `HIGH`, `URGENT`) with SLA deadlines.
+- [ ] Automatically calculate `slaDueFirstResponseAt` and `slaDueStartAt` on ticket writes.
 
-### 3. Technical Asset Inventory CRUD (NestJS API)
-- [ ] Create `AssetsModule` in `apps/api` managing the `Asset` model.
-- [ ] Expose CRUD REST endpoints (`GET /assets`, `POST /assets`, `PATCH /assets/:id`, `PATCH /assets/:id/status`) scoped by `workspaceId`.
-- [ ] Support multi-field searches (name, serialNumber, hostname, assetTag) and filters by client and status.
-- [ ] Support physical equipment assignment: allow linking an `Asset` to a specific `ClientUser`.
+### 3. Ticketing API (NestJS Monolith)
+- [ ] Create `TicketsModule` in `apps/api/src/tickets/` managing the `Ticket` and `TicketComment` models.
+- [ ] Expose REST endpoints:
+  - `GET /tickets` (Global dashboard list, searchable, paginated, and status-filtered).
+  - `GET /clients/:clientId/tickets` (Client-specific tickets).
+  - `POST /clients/:clientId/tickets` (Create new ticket linking contact, client user, and asset).
+  - `GET /tickets/:ticketId` (Retrieve ticket details, comments, and lifecycle logs).
+  - `POST /tickets/:ticketId/comments` (Add internal or client-facing comments).
+  - `PATCH /tickets/:ticketId/status` (Update ticket status and record SLA completion metrics).
 
-### 4. Symmetric Encryption Envelope (`@peanut/utils`)
-- [ ] Upgrade the encryption stubs in `packages/utils/src/index.ts`.
-- [ ] Implement secure AES-256-GCM symmetric encryption using a 32-byte key defined in `process.env.APPLICATION_ENCRYPTION_KEY`.
-- [ ] Ensure that before saving sensitive credentials (like server passwords or remote desktop keys) to `sensitiveDataEncrypted` in the `Asset` table, the data is encrypted in the API, and decrypted on read.
+### 4. Background SLA Monitor (BullMQ)
+- [ ] Implement SLA monitoring tasks in `apps/worker`.
+- [ ] Periodically check for approaching SLA breach events.
+- [ ] Dispatch background warnings to the technical logs or console if a ticket is about to breach its priority deadlines.
 
-### 5. Frontend Inventory Panels & Forms (Next.js)
-- [ ] Build a responsive listing table at `/dashboard/inventory` (or inside `/dashboard/clients/[id]`) showing active assets, skeleton loaders, and filters.
-- [ ] Build an asset creation and edit form validating inputs with Zod.
-- [ ] Integrate secure detail sheets allowing authorized users (`OWNER`, `ADMIN`, `TECHNICIAN`) to view decrypted credentials.
-- [ ] Build a client users listing tab inside `/dashboard/clients/[id]` supporting inline CRUD actions.
+### 5. Next.js Support Panels (Next.js `/dashboard`)
+- [ ] Add `/dashboard/tickets` navigation to the sidebar.
+- [ ] Build a Helpdesk board `/dashboard/tickets/page.tsx` displaying cards/tables of tickets, priority indicators, and SLA warning icons.
+- [ ] Build a sleek ticket creation form, enabling operators to choose the Client, then dynamically search and select Client Contacts, Client Users, and Assets.
+- [ ] Build a rich ticket details view at `/dashboard/tickets/[id]`, including:
+  - Chat-like conversation stream displaying internal vs. public comments.
+  - Sidebar displaying linked client information, active asset details (with quick link to asset specs), and SLA timers.
+  - Close Ticket form capturing resolution summaries and technical hours.

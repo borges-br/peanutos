@@ -43,12 +43,17 @@ enum AssetType {
   ROUTER
   SWITCH
   ACCESS_POINT
+  FIREWALL
   CAMERA
   NVR
   UPS
   RACK
-  LICENSE
+  NAS
+  MOBILE_DEVICE
+  VIRTUAL_MACHINE
   CLOUD_SERVICE
+  LICENSE
+  SOFTWARE_LICENSE
   VPN
   STORAGE
   OTHER
@@ -59,10 +64,12 @@ enum AssetStatus {
   MAINTENANCE
   OUT_OF_STANDARD
   STOCK
+  IN_STOCK
   RETIRED
   SCRAPPED
   LOST
   PENDING_VALIDATION
+  PENDING_REVIEW
 }
 
 enum TicketPriority {
@@ -104,7 +111,10 @@ model Workspace {
   // Relationships
   users               User[]
   clients             Client[]
+  clientUsers         ClientUser[]
   assets              Asset[]
+  assetHistories      AssetHistory[]
+  assetNotes          AssetNote[]
   tickets             Ticket[]
   quotes              Quote[]
   invoices            Invoice[]
@@ -135,6 +145,8 @@ model User {
   assignedTickets Ticket[]       @relation("AssignedTo")
   ticketComments TicketComment[]
   auditLogs      AuditLog[]
+  assetNotes     AssetNote[]
+  assetHistories AssetHistory[]
 
   @@index([workspaceId])
   @@map("users")
@@ -160,6 +172,8 @@ model Client {
   contacts       ClientContact[]
   clientUsers    ClientUser[]
   assets         Asset[]
+  assetHistories AssetHistory[]
+  assetNotes     AssetNote[]
   tickets        Ticket[]
   quotes         Quote[]
   invoices       Invoice[]
@@ -195,9 +209,11 @@ model ClientContact {
 
 model ClientUser {
   id                 String   @id @default(uuid()) @db.Uuid
+  workspaceId        String   @db.Uuid
   clientId           String   @db.Uuid
   fullName           String   @db.VarChar(150)
   email              String   @db.VarChar(150)
+  phone              String?  @db.VarChar(30)
   department         String?  @db.VarChar(100)
   jobTitle           String?  @db.VarChar(100)
   status             String   @default("ACTIVE") @db.VarChar(20)
@@ -211,11 +227,13 @@ model ClientUser {
   updatedAt          DateTime @updatedAt
 
   // Relationships
-  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  assets             Asset[]  @relation("AssetUser")
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client             Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assets             Asset[]   @relation("AssetUser")
   tickets            Ticket[]
 
   @@index([clientId])
+  @@index([workspaceId])
   @@map("client_users")
 }
 
@@ -242,10 +260,12 @@ model Asset {
   updatedAt              DateTime    @updatedAt
 
   // Relationships
-  workspace          Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  client             Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  assignedClientUser ClientUser? @relation("AssetUser", fields: [assignedClientUserId], references: [id], onDelete: SetNull)
+  workspace          Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client             Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignedClientUser ClientUser?    @relation("AssetUser", fields: [assignedClientUserId], references: [id], onDelete: SetNull)
   tickets            Ticket[]
+  history            AssetHistory[]
+  assetNotes         AssetNote[]
 
   @@index([workspaceId, clientId, type])
   @@index([clientId, status])
@@ -553,3 +573,49 @@ model AuditLog {
   @@index([workspaceId, entityType, entityId])
   @@map("audit_logs")
 }
+
+model AssetHistory {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  clientId    String   @db.Uuid
+  assetId     String   @db.Uuid
+  actorUserId String?  @db.Uuid
+  event       String   @db.VarChar(50) // ASSET_CREATED, ASSET_UPDATED, STATUS_CHANGED, ASSIGNED, UNASSIGNED, NOTE_ADDED, SENSITIVE_DATA_UPDATED, SENSITIVE_DATA_REVEALED
+  description String   @db.Text
+  before      String?  @db.Text
+  after       String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  // Relationships
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  actorUser   User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([assetId])
+  @@index([workspaceId])
+  @@map("asset_history")
+}
+
+model AssetNote {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String   @db.Uuid
+  clientId     String   @db.Uuid
+  assetId      String   @db.Uuid
+  authorUserId String?  @db.Uuid
+  content      String   @db.Text
+  visibility   String   @default("INTERNAL") @db.VarChar(50)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client       Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  asset        Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  authorUser   User?     @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([assetId])
+  @@index([workspaceId])
+  @@map("asset_notes")
+}
+

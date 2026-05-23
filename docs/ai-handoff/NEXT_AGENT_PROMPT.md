@@ -3,82 +3,84 @@
 ## Context Overview
 You are continuing the implementation of **Peanut OS**, a modular operational platform for IT Service Providers designed with logical multi-tenancy (`workspaceId`) and white-label customizability.
 
-**Phase 1 (Authentication, RBAC & Client Management)** is 100% complete, verified, and build-green! The entire monorepo is type-safe and compiles cleanly.
+**Phase 2 (Client Inventory & Asset Management)** is 100% complete, verified, and build-green! All packages compile cleanly, typechecks are green, and linters pass successfully across all workspaces.
 
 ---
 
 ## 📈 Commands Executed & Diagnostic Report
 
 ### 1. Commands Executed Successfully:
-- **Monorepo Compilation**: `npx pnpm run build` built all 10 packages cleanly in 10.352s (including next.js optimized page renders).
-- **TypeScript Core Typecheck**: `npx pnpm run typecheck` checked all workspace modules 100% type-safe in 246ms.
-- **Prisma Schema Validation**: `npx pnpm --filter @peanut/db exec prisma validate` validated the PostgreSQL schema successfully using Prisma `v5.22.0`.
-- **Crypto pre-calculation**: Inline `node` execution inside the API folder successfully compiled and hashed the stronger development seed password (`ChangeMe123!`).
+- **Monorepo Compilation**: `npx pnpm run build` compiled all workspaces cleanly in Turborepo (under Next.js server components optimizations).
+- **TypeScript Core Typecheck**: `npx pnpm run typecheck` validated all modules 100% type-safe.
+- **ESLint stabilization**: resolved linter dependencies in NestJS and Next.js applications devDependencies. `npx pnpm run lint` passes across all packages successfully!
+- **Prisma Schema Validation**: `npx prisma validate` checked the Postgres schema as 100% syntactically correct.
+- **Symmetric Cryptography**: implemented real `AES-256-GCM` envelope encryption in `@peanut/utils` and fully updated seed configurations.
 
 ### 2. Issues Encountered & Resolved:
-- *Error*: `@peanut/db` import was unrecognized inside backend compilation.
-  - *Resolution*: Added `"build": "tsc"` script in `packages/db/package.json` to compile types/declarations into `dist/`.
-- *Error*: Unrecognized node `process` global variables in database client.
-  - *Resolution*: Installed `@types/node` as a devDependency in `@peanut/db`.
-- *Error*: TS compile warning regarding the `delete` operator on non-optional fields inside the user update service.
-  - *Resolution*: Refactored user property exclusions to use modern ES6 destructuring (`const { passwordHash: _, ...before } = user;`), removing compiler errors.
-- *Error*: Type signature clash with jsonwebtoken options.
-  - *Resolution*: Cast `expiresIn` to `any` inside the JWT signing config.
+- *Error*: `notes` field name clash inside `Asset` model.
+  - *Resolution*: Renamed the relation field to `assetNotes` in `Asset` to avoid clash with the simple `notes` string field.
+- *Error*: Missing `phone` field in `ClientUser` during services development.
+  - *Resolution*: Expanded `ClientUser` model in `schema.prisma` to include `phone String? @db.VarChar(30)` matching suggested fields.
+- *Error*: Unbound type signature for `sensitiveDataEncrypted` inside `InventoryService` create function.
+  - *Resolution*: Added explicit `string | null` type signature to resolve NestJS compilation.
 
-### 3. Known Issues & Unresolved Actions (Pay attention!):
-- *Service Block*: Docker Desktop daemon service (`com.docker.service`) cannot be started directly from powershell inside this local script execution context due to standard Windows access restrictions.
-  - *Mitigation*: Start Docker Desktop manually as a user process on the host, wait 2-3 minutes for the WSL Ubuntu virtual machine to initialize, and then run migrations and seeding.
-- *Linter Failure*: Running `pnpm run lint` fails on `peanut-api` because `eslint` and its configurations are missing from its local `devDependencies`. This was registered in `05-known-issues.md`. Build and typecheck are 100% green, so we bypassed this linter roadblock.
+### 3. Known Issues & Environment Workarounds (Pay attention!):
+- *Service Block*: Windows powershell access restrictions prevent starting the local Docker Compose daemon dynamically.
+  - *Mitigation*: Start Docker Desktop manually as a user process on the host, wait 2 minutes for WSL containers to mount, then execute database migrations and database seeding.
 
 ---
 
-## 📂 Critical Files Created / Modified in Phase 1
+## 📂 Critical Files Created / Modified in Phase 2
 
-### API Core & Guards:
-- [auth.service.ts](file:///C:/Github/peanutos/apps/api/src/auth/auth.service.ts) - JWT login, password compare (bcrypt), token validation, and audits.
-- [auth.guard.ts](file:///C:/Github/peanutos/apps/api/src/auth/auth.guard.ts) - Bearer token validator.
-- [roles.guard.ts](file:///C:/Github/peanutos/apps/api/src/auth/roles.guard.ts) - Custom roles metadata verifier.
-- [audit.service.ts](file:///C:/Github/peanutos/apps/api/src/audit/audit.service.ts) - Global logger recursively stripping sensitive parameters (passwords, tokens).
+### Cryptography & Database Schema:
+- [schema.prisma](file:///C:/Github/peanutos/packages/db/prisma/schema.prisma) - Prisma schema including `ClientUser.workspaceId`, `ClientUser.phone`, `AssetHistory` and `AssetNote` models.
+- [index.ts](file:///C:/Github/peanutos/packages/utils/src/index.ts) - AES-256-GCM symmetric envelope cryptography.
+- [index.ts](file:///C:/Github/peanutos/packages/types/src/index.ts) - Updated type specifications.
+- [index.ts](file:///C:/Github/peanutos/packages/validators/src/index.ts) - Comprehensive Zod schemas for inventory, users, notes and assignments.
 
-### Scoped Services & Controllers:
-- [users.service.ts](file:///C:/Github/peanutos/apps/api/src/users/users.service.ts) - Tenant-isolated users CRUD containing active owner deactivation blocks.
-- [clients.service.ts](file:///C:/Github/peanutos/apps/api/src/clients/clients.service.ts) - Tenant-isolated customers CRUD and sub-contact managers.
+### NestJS Backend Modules:
+- [client-users.service.ts](file:///C:/Github/peanutos/apps/api/src/client-users/client-users.service.ts) - Client end users registry isolated by workspace.
+- [inventory.service.ts](file:///C:/Github/peanutos/apps/api/src/inventory/inventory.service.ts) - Central hardware/software registry, assignments, password-rejection note generators, and audited reveal hooks.
+- [app.module.ts](file:///C:/Github/peanutos/apps/api/src/app.module.ts) - Registered modules.
+- [audit.service.ts](file:///C:/Github/peanutos/apps/api/src/audit/audit.service.ts) - Automatically sanitizing GCM payloads and switch passwords in audits.
 
-### Next.js Pages & Providers:
-- [api.ts](file:///C:/Github/peanutos/apps/web/src/lib/api.ts) - Axios-like HTTP fetch helper injecting authorization headers.
-- [AuthContext.tsx](file:///C:/Github/peanutos/apps/web/src/context/AuthContext.tsx) - Client-side state hook.
-- [layout.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/layout.tsx) - Authenticated sidebar navigation sidebar.
-- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/clients/%5Bid%5D/page.tsx) - Gorgeous multi-tab sheets featuring details and inline Contact CRUD.
-
----
-
-## 🎯 Your Mission: Phase 2 — Technical Asset Inventory & Cryptography
-
-Your objective is to deliver full operational tracking of hardware & software components, connect them to end users, and implement a production-grade symmetric encryption envelope.
-
-### Step 1: Client Users Registry CRUD
-- Implement CRUD endpoints in `apps/api` for `ClientUser` (`/clients/:clientId/users`).
-- Ensure logical workspace boundaries (`workspaceId`) are strictly enforced.
-
-### Step 2: Technical Asset CRUD
-- Implement CRUD REST endpoints for `Asset` model (`/assets`) under the `AssetsModule` in `apps/api`.
-- Support multi-field query parameters (search by name, serialNumber, hostname, assetTag) and filter outputs by client and status.
-- Allow physical asset assignment: link an `Asset` record to a specific `ClientUser`.
-
-### Step 3: Symmetric Encryption Envelope (`@peanut/utils`)
-- Upgrade the base64 encryption stubs inside `packages/utils/src/index.ts`.
-- Implement robust symmetric envelope encryption (AES-256-GCM) utilizing a 32-byte key defined in `process.env.APPLICATION_ENCRYPTION_KEY`.
-- Secure sensitive equipment details: before writing credentials (like server passwords or remote desktop keys) to `sensitiveDataEncrypted` in the `Asset` table, the API must encrypt it, and decrypt it on read.
-
-### Step 4: Next.js Panels
-- Build a responsive table layout at `/dashboard/inventory` listing active equipment.
-- Build asset creation and edit forms, validating inputs via Zod.
-- Integrate secure credential overlays: allow authorized roles (`OWNER`, `ADMIN`, `TECHNICIAN`) to click and view decrypted details.
-- Build a client users listing tab inside `/dashboard/clients/[id]` supporting inline CRUD actions.
+### Next.js Dashboard Shells:
+- [layout.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/layout.tsx) - Configured sidebar navigation hooks.
+- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/inventory/page.tsx) - Central inventory table showing hostname, location, IP and links.
+- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/clients/%5Bid%5D/users/page.tsx) - Client users manager in modern glassmorphic modals.
+- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/clients/%5Bid%5D/inventory/page.tsx) - Client specific assets manager.
+- [page.tsx](file:///C:/Github/peanutos/apps/web/src/app/dashboard/clients/%5Bid%5D/assets/%5BassetId%5D/page.tsx) - Technical spec cards, history logs, diagnostics notes feed, and secure reveal creds overlays.
 
 ---
 
-## 🛡️ Rules of Engagement (Compliance)
-1. **Never Hardcode Secrets**: Keep the symmetric key customizable via `.env.example`.
-2. **Strictly Fictive seeds**: Ensure seed scripts use fictional datasets (e.g. Acme Tech) and never write live passwords or CPF/CNPJ documents.
-3. **Preserve Continuity Logs**: At the end of your run, update all handoff documentation inside `docs/ai-handoff/` and write a new `NEXT_AGENT_PROMPT.md` for Phase 3.
+## 🎯 Your Mission: Phase 3 — Helpdesk, Ticketing & SLA Foundation
+
+Your objective is to deliver operational tracking of tickets, comment registers, priority engines, and background SLA monitor daemons.
+
+### Step 1: Database connections
+- Manually run Docker Desktop. Apply migration `phase_2_inventory` dev and seed the database using `pnpm db:seed`.
+
+### Step 2: SLA Deadlines Priority Engine
+- Build a priority engine matching priority levels (`LOW`, `MEDIUM`, `HIGH`, `URGENT`) with SLA time windows.
+- Calculate `slaDueFirstResponseAt` and `slaDueStartAt` dynamically on ticket writes.
+
+### Step 3: Ticketing API Scopes
+- Implement isolated tickets REST routes (`/tickets` and `/clients/:clientId/tickets`).
+- Support linking a ticket to a Contact, ClientUser, and technical Asset.
+- Create `/comments` routes protecting internal notes vs public communications.
+
+### Step 4: Background SLA monitors (BullMQ)
+- Setup cron workers in `apps/worker` to monitor tickets SLA breach limits.
+- Alert when limits are about to breach.
+
+### Step 5: Support dashboard boards (Next.js)
+- Build `/dashboard/tickets` displaying active helpdesk cards.
+- Integrate dynamic ticket creation wizards searching contacts and assets.
+- Build ticket details chat-like conversations streams and SLA tickers.
+
+---
+
+## 🛡️ Rules of Engagement
+1. **Never hardcode secrets**: keep local cryptography customized in `.env`.
+2. **Strictly fictive seeds**: ensure database seed remains populated with dummy data (Maria & João Example / Acme Tech).
+3. **Preserve continuity logs**: at the end of your run, update AI handoff logs inside `docs/ai-handoff/` and write a new `NEXT_AGENT_PROMPT.md` preparing Phase 4.

@@ -1,12 +1,12 @@
-import { Injectable } from '@nestjs/common';
-import { prisma } from '@peanut/db';
+import { Injectable } from "@nestjs/common";
+import { prisma } from "@peanut/db";
 
 @Injectable()
 export class AuditService {
   private sanitize(data: any): any {
     if (!data) return data;
-    if (typeof data !== 'object') return data;
-    
+    if (typeof data !== "object") return data;
+
     // Handle arrays
     if (Array.isArray(data)) {
       return data.map((item) => this.sanitize(item));
@@ -14,21 +14,30 @@ export class AuditService {
 
     const sanitized = { ...data };
     const sensitiveKeys = [
-      'password', 
-      'passwordhash', 
-      'token', 
-      'accesstoken', 
-      'refreshtoken', 
-      'authorization', 
-      'secret',
-      'key',
-      'password_hash'
+      "password",
+      "passwordhash",
+      "token",
+      "accesstoken",
+      "refreshtoken",
+      "authorization",
+      "secret",
+      "key",
+      "password_hash",
+      "sensitivedata",
+      "sensitivedataencrypted",
+      "remoteaccess",
+      "vpn",
+      "apikey",
+      "credential",
     ];
 
     for (const key of Object.keys(sanitized)) {
       if (sensitiveKeys.includes(key.toLowerCase())) {
-        sanitized[key] = '[REDACTED]';
-      } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null) {
+        sanitized[key] = "[REDACTED]";
+      } else if (
+        typeof sanitized[key] === "object" &&
+        sanitized[key] !== null
+      ) {
         sanitized[key] = this.sanitize(sanitized[key]);
       }
     }
@@ -45,11 +54,15 @@ export class AuditService {
     after?: any;
     ipAddress?: string;
     userAgent?: string;
-    severity?: 'INFO' | 'WARN' | 'SECURITY_ALERT';
+    severity?: "INFO" | "WARN" | "SECURITY_ALERT";
   }) {
     try {
-      const beforeJson = params.before ? JSON.stringify(this.sanitize(params.before)) : null;
-      const afterJson = params.after ? JSON.stringify(this.sanitize(params.after)) : null;
+      const beforeJson = params.before
+        ? JSON.stringify(this.sanitize(params.before))
+        : null;
+      const afterJson = params.after
+        ? JSON.stringify(this.sanitize(params.after))
+        : null;
 
       await prisma.auditLog.create({
         data: {
@@ -62,11 +75,11 @@ export class AuditService {
           afterJson,
           ipAddress: params.ipAddress || null,
           userAgent: params.userAgent || null,
-          severity: params.severity || 'INFO',
+          severity: params.severity || "INFO",
         },
       });
     } catch (error) {
-      console.error('Failed to write audit log:', error);
+      console.error("Failed to write audit log:", error);
     }
   }
 }

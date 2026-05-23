@@ -1,78 +1,42 @@
 # 02 — Decisions Log
 
-This document tracks all high-level technical decisions made during the design and bootstrap of **Peanut OS**.
+This document records the key architectural, design, and coding decisions made during **Phase 2: Client Inventory & Asset Management**.
 
 ---
 
-## 2026-05-23 — English Routing Conventions for Frontend Runtimes
-
-- **Decision**: Adopt a clean, consistent English routing layout inside Next.js App Router: `/login`, `/dashboard`, `/dashboard/clients`, `/dashboard/clients/new`, `/dashboard/clients/[id]`.
-- **Reason**: Standardizing on English in routing parameters aligns directly with database schemas, model entities (`Client`, `ClientContact`), REST API paths, and validator models, reducing semantic translation debt for developers.
-- **Alternatives considered**: Translating routes to Portuguese (`/clientes`). Rejected to prevent friction.
-- **Future Impact**: Sleek, predictable route matching.
+## 1. ESLint Monorepo Stabilization
+- **Context**: Executing `pnpm run lint` was throwing package dependency errors because ESLint packages and configurations were omitted in `apps/api` and `apps/web`.
+- **Decision**: Added standard NestJS linting dependencies (`eslint`, `@typescript-eslint/eslint-plugin`, `@typescript-eslint/parser`, `eslint-config-prettier`, `eslint-plugin-prettier`) as local devDependencies in `apps/api/package.json`, and added a basic `.eslintrc.js` config file. Additionally, added `eslint` and `eslint-config-next` to `apps/web/package.json` devDependencies and created `apps/web/.eslintrc.json` to prevent interactive CLI configurations from blocking Turborepo runs.
+- **Rationale**: Keeps linting standards extremely clean, uniform, and fully functional under Turborepo orchestrations without rewriting the entire monorepo setup.
 
 ---
 
-## 2026-05-23 — Bearer JWT Stateless Token MVP
-
-- **Decision**: Use Bearer token authorization headers containing signed stateless JSON Web Tokens for authentication, stored in client-side localStorage.
-- **Reason**: Simplifies initial integration across Next.js static layouts and NestJS monolith runtimes in local monorepo settings, without introducing complex cookie domain coordinations or CORS frictions.
-- **Future Evolution**:slated for production exposition, this decision must be evolved to secure HttpOnly cookies to protect tokens from XSS vulnerabilities. This is registered as a planned evolution.
-
----
-
-## 2026-05-23 — Global Sanitized Auditing Service
-
-- **Decision**: Implement a global `@Global()` `AuditService` that recursively traverses logged request data and scrubs keys matching `password`, `passwordHash`, `token`, `authorization`, or `secret`, replacing values with `[REDACTED]`.
-- **Reason**: Guarantees compliance with strict security parameters by preventing any sensitive passwords, cryptographic keys, or active JWT credentials from entering PostgreSQL logs.
-- **Future Impact**: Secure, auditable trail.
+## 2. Multi-Tenant Database Schema Extensions
+- **Context**: The `ClientUser` model lacked `workspaceId`, making direct multi-tenant scoping difficult, and models for logging equipment life-cycle history and technical notes were missing.
+- **Decision**:
+  - Added `workspaceId String @db.Uuid` to `ClientUser` in `schema.prisma` and mapped it to Workspace to ensure strict isolation.
+  - Added `phone String? @db.VarChar(30)` to `ClientUser` to capture direct contact details.
+  - Mapped a dedicated `AssetHistory` model to log creation, updates, notes additions, assignments, and secure credential reveals.
+  - Mapped a dedicated `AssetNote` model to support internal technical comments.
+  - Expanded `AssetType` and `AssetStatus` enums with all necessary types and statuses.
+- **Rationale**: Mapped proper relations in Prisma to enable highly efficient, queryable, and structurally integral multi-tenancy.
 
 ---
 
-## 2026-05-23 — Workspace Owner Deactivation Safeguard
-
-- **Decision**: Enforce a strict validation check counting active `OWNER` roles in a tenant workspace before deactivating/changing any user status, rejecting the mutation if it targets the sole active `OWNER`.
-- **Reason**: Prevents tenant lockouts where a workspace is left with zero administrators, which would require manual database interventions to repair.
-- **Future Impact**: High tenant operations safety.
-
----
-
-## 2026-05-23 — Database Types Compilations (`@peanut/db` build script)
-
-- **Decision**: Add an explicit `"build": "tsc"` script to `packages/db/package.json` and install `@types/node` as a devDependency.
-- **Reason**: Ensures that Turborepo task orchestration compiles Prisma schema bindings and TypeScript declarations into `./dist` cleanly before other apps or runtimes invoke the database package, preventing type reference crashes.
+## 3. Cryptographic Envelope Envelope (AES-256-GCM)
+- **Context**: Legacies stubs were utilizing unsafe Base64 conversions for sensitive information.
+- **Decision**: Replaced all base64 stubs in `@peanut/utils` (`packages/utils/src/index.ts`) with a secure symmetric crypto implementation. Standardized on `AES-256-GCM` algorithm using native Node.js `crypto`.
+- **Envelope Format**: `v1:gcm:base64(iv):base64(authTag):base64(cipherText)`
+- **Key Resolution**: Supported both `APP_ENCRYPTION_KEY` and `APPLICATION_ENCRYPTION_KEY` environment variables. Enforced robust key validation (requiring exactly 32-bytes, parsed from raw, hex, or base64 strings) and threw detailed errors on invalid configuration.
+- **Rationale**: Prevents storing raw credentials on disk, providing state-of-the-art corporate cryptography envelope compliance.
 
 ---
 
-## 2026-05-23 — Monorepo Architecture with PNPM Workspaces & Turborepo (Phase 0)
-
-- **Decision**: Adopt a strict Monorepo structure using `pnpm workspaces` and orchestrate builds/linting with `Turborepo`.
-- **Reason**: The product contains multiple runtimes (`apps/web`, `apps/api`, `apps/worker`) that share domain models, schemas, and validators. A monorepo prevents double-declaring types or copy-pasting schemas.
-
----
-
-## 2026-05-23 — White-Label Configuration First (Phase 0)
-
-- **Decision**: Codebases must avoid hardcoded brand labels like "Borges OS" and reference environmental settings, defaulting to "Peanut OS".
-- **Reason**: The tool will serve as an internal platform initially but is engineered as a commercial asset suitable for open-source or SaaS reselling.
-
----
-
-## 2026-05-23 — Fastify Adapter for NestJS API (Phase 0)
-
-- **Decision**: Configure the NestJS modular monolith to use the Fastify adapter rather than Express.
-- **Reason**: Fastify offers up to 2-3x higher performance and throughput for JSON-based payloads, which is critical for handling large technical inventory objects.
-
----
-
-## 2026-05-23 — Structural workspaceId (Future Tenant Isolation) (Phase 0)
-
-- **Decision**: Include `workspaceId` as a structural relation in the initial database schemas and relational entities, but defer billing or tenancy routers for later phases.
-- **Reason**: Refactoring a single-tenant database schema to support multi-tenancy at a later stage is notoriously painful. By introducing `workspaceId` today, the schema is naturally prepared for tenant-isolation without implementing complex SaaS logic during the MVP.
-
----
-
-## 2026-05-23 — Playwright Worker for PDF Compilation (Phase 0)
-
-- **Decision**: PDF Generation is executed asynchronously inside an isolated `worker` queue consumer using Playwright headless Chromium, rather than synchronously in the HTTP API thread.
-- **Reason**: PDF rendering is CPU-intensive. Offloading to BullMQ + Redis protects API uptime, and Playwright allows generating highly sophisticated styling using React/Tailwind/HTML templates.
+## 4. Secure click-to-reveal credentials overlay
+- **Context**: Exposing decrypted switcher or server passwords in general API payloads or holding them in persistent localStorage/sessionStorage/cookies exposes the provider's clients to leaks.
+- **Decision**:
+  - Developed a dedicated, highly audited endpoint `POST /clients/:clientId/assets/:assetId/reveal-sensitive-data` to handle credential decryption on-demand.
+  - Exposes secrets exclusively to authenticated `OWNER`, `ADMIN`, or `TECHNICIAN` roles.
+  - Automatically logs the reveal event in the asset history and registers a `SECURITY_ALERT` audit event on the server, masking the actual secret.
+  - Returns credentials solely in memory, ensuring they are cleared instantly on modal close or unmount in the frontend dashboard.
+- **Rationale**: Completely isolates sensitive operations, guaranteeing maximum visual and logical security.

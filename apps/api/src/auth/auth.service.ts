@@ -1,13 +1,14 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { prisma } from '@peanut/db';
-import * as bcrypt from 'bcryptjs';
-import * as jwt from 'jsonwebtoken';
-import { AuditService } from '../audit/audit.service';
-import { LoginInput } from '@peanut/validators';
+import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { prisma } from "@peanut/db";
+import * as bcrypt from "bcryptjs";
+import * as jwt from "jsonwebtoken";
+import { AuditService } from "../audit/audit.service";
+import { LoginInput } from "@peanut/validators";
 
 @Injectable()
 export class AuthService {
-  private readonly jwtSecret = process.env.JWT_SECRET || 'change-me-in-production-at-least-32-chars-long';
+  private readonly jwtSecret =
+    process.env.JWT_SECRET || "change-me-in-production-at-least-32-chars-long";
 
   constructor(private readonly auditService: AuditService) {}
 
@@ -18,22 +19,22 @@ export class AuthService {
       where: { email },
     });
 
-    if (!user || user.status !== 'ACTIVE') {
+    if (!user || user.status !== "ACTIVE") {
       // Find a fallback workspace for logging since actor user doesn't exist/isn't active
       const fallbackWorkspace = await prisma.workspace.findFirst();
       if (fallbackWorkspace) {
         await this.auditService.log({
           workspaceId: fallbackWorkspace.id,
-          action: 'auth.login_failed',
-          entityType: 'USER',
+          action: "auth.login_failed",
+          entityType: "USER",
           entityId: user?.id || fallbackWorkspace.id,
           before: { email },
           ipAddress,
           userAgent,
-          severity: 'SECURITY_ALERT',
+          severity: "SECURITY_ALERT",
         });
       }
-      throw new UnauthorizedException('Credenciais inválidas');
+      throw new UnauthorizedException("Credenciais inválidas");
     }
 
     // Compare password hashes
@@ -42,15 +43,15 @@ export class AuthService {
     if (!isPasswordValid) {
       await this.auditService.log({
         workspaceId: user.workspaceId,
-        action: 'auth.login_failed',
-        entityType: 'USER',
+        action: "auth.login_failed",
+        entityType: "USER",
         entityId: user.id,
         before: { email },
         ipAddress,
         userAgent,
-        severity: 'SECURITY_ALERT',
+        severity: "SECURITY_ALERT",
       });
-      throw new UnauthorizedException('Credenciais inválidas');
+      throw new UnauthorizedException("Credenciais inválidas");
     }
 
     // Generate JWT token
@@ -63,15 +64,15 @@ export class AuthService {
     };
 
     const accessToken = jwt.sign(payload, this.jwtSecret, {
-      expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any,
+      expiresIn: (process.env.JWT_EXPIRES_IN || "15m") as any,
     });
 
     // Log successful login
     await this.auditService.log({
       workspaceId: user.workspaceId,
       actorUserId: user.id,
-      action: 'auth.login_success',
-      entityType: 'USER',
+      action: "auth.login_success",
+      entityType: "USER",
       entityId: user.id,
       after: { name: user.name, email: user.email, role: user.role },
       ipAddress,
@@ -99,12 +100,12 @@ export class AuthService {
   async validateToken(token: string) {
     try {
       const decoded = jwt.verify(token, this.jwtSecret) as any;
-      
+
       const user = await prisma.user.findUnique({
         where: { id: decoded.sub },
       });
 
-      if (!user || user.status !== 'ACTIVE') {
+      if (!user || user.status !== "ACTIVE") {
         return null;
       }
 

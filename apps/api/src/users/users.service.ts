@@ -1,8 +1,12 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { prisma } from '@peanut/db';
-import * as bcrypt from 'bcryptjs';
-import { AuditService } from '../audit/audit.service';
-import { UserInput } from '@peanut/validators';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import { prisma } from "@peanut/db";
+import * as bcrypt from "bcryptjs";
+import { AuditService } from "../audit/audit.service";
+import { UserInput } from "@peanut/validators";
 
 @Injectable()
 export class UsersService {
@@ -15,7 +19,7 @@ export class UsersService {
         deletedAt: null,
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
 
@@ -32,14 +36,20 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
+      throw new NotFoundException("Usuário não encontrado");
     }
 
     const { passwordHash, ...result } = user;
     return result;
   }
 
-  async create(input: UserInput, workspaceId: string, actorUserId: string, ipAddress?: string, userAgent?: string) {
+  async create(
+    input: UserInput,
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const { name, email, password, role, status } = input;
 
     const existing = await prisma.user.findUnique({
@@ -47,10 +57,10 @@ export class UsersService {
     });
 
     if (existing) {
-      throw new BadRequestException('E-mail já cadastrado');
+      throw new BadRequestException("E-mail já cadastrado");
     }
 
-    const defaultPassword = password || 'ChangeMe123!';
+    const defaultPassword = password || "ChangeMe123!";
     const passwordHash = bcrypt.hashSync(defaultPassword, 10);
 
     const newUser = await prisma.user.create({
@@ -60,7 +70,7 @@ export class UsersService {
         email,
         passwordHash,
         role,
-        status: status || 'ACTIVE',
+        status: status || "ACTIVE",
       },
     });
 
@@ -68,8 +78,8 @@ export class UsersService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'user.created',
-      entityType: 'USER',
+      action: "user.created",
+      entityType: "USER",
       entityId: newUser.id,
       after: sanitizedUser,
       ipAddress,
@@ -79,13 +89,20 @@ export class UsersService {
     return sanitizedUser;
   }
 
-  async update(id: string, input: Partial<UserInput>, workspaceId: string, actorUserId: string, ipAddress?: string, userAgent?: string) {
+  async update(
+    id: string,
+    input: Partial<UserInput>,
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const user = await prisma.user.findFirst({
       where: { id, workspaceId, deletedAt: null },
     });
 
     if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
+      throw new NotFoundException("Usuário não encontrado");
     }
 
     const { passwordHash: _, ...before } = user;
@@ -110,8 +127,8 @@ export class UsersService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'user.updated',
-      entityType: 'USER',
+      action: "user.updated",
+      entityType: "USER",
       entityId: id,
       before,
       after,
@@ -122,27 +139,36 @@ export class UsersService {
     return after;
   }
 
-  async updateStatus(id: string, status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED', workspaceId: string, actorUserId: string, ipAddress?: string, userAgent?: string) {
+  async updateStatus(
+    id: string,
+    status: "ACTIVE" | "INACTIVE" | "SUSPENDED",
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const user = await prisma.user.findFirst({
       where: { id, workspaceId, deletedAt: null },
     });
 
     if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
+      throw new NotFoundException("Usuário não encontrado");
     }
 
-    if (status !== 'ACTIVE' && user.role === 'OWNER') {
+    if (status !== "ACTIVE" && user.role === "OWNER") {
       const activeOwnersCount = await prisma.user.count({
         where: {
           workspaceId,
-          role: 'OWNER',
-          status: 'ACTIVE',
+          role: "OWNER",
+          status: "ACTIVE",
           deletedAt: null,
         },
       });
 
       if (activeOwnersCount <= 1) {
-        throw new BadRequestException('Não é permitido desativar o único OWNER ativo do workspace');
+        throw new BadRequestException(
+          "Não é permitido desativar o único OWNER ativo do workspace",
+        );
       }
     }
 
@@ -158,8 +184,8 @@ export class UsersService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'user.status_changed',
-      entityType: 'USER',
+      action: "user.status_changed",
+      entityType: "USER",
       entityId: id,
       before,
       after,

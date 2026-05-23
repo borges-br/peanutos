@@ -3,8 +3,8 @@
 Peanut OS is a professional, high-performance web platform designed for the operational, technical, and commercial management of IT Service Providers. Initially conceptualized as a robust system for **Borges TI**, it is designed from the ground up with a white-label architecture to support custom branding, and a logical database model that prepares the schema for future multi-tenant operations.
 
 > [!WARNING]
-> **Project Status**: **Phase 1 Complete (Authentication, RBAC & Client Management)**. 
-> This is a professional developer portfolio project under active development. All Phase 1 modules (Stateless JWT authentication, Tenant-scoped access, Clients CRUD, and inline Contacts management) are fully functional, verified, and build-green!
+> **Project Status**: **Phase 2 Complete (Client Inventory & Asset Management)**. 
+> This is a professional developer portfolio project under active development. All Phase 2 modules (Hardware & Software Inventory, Client End Users Registry, AES-256-GCM symmetric envelope cryptography, Life-cycle histories, internal technical notes, and click-to-reveal credentials overlay) are fully functional, verified, and build-green!
 
 ---
 
@@ -62,16 +62,24 @@ peanutos/
 - [x] Stateless JWT token-based Session Authentication.
 - [x] Unified Role-Based Access Controls (RBAC) with guards supporting `READ_ONLY`, `FINANCIAL`, `TECHNICIAN`, `ADMIN`, and `OWNER` roles.
 - [x] Scoped logical tenancy (`workspaceId`) on all database queries.
-- [x] Safe workspace User CRUD with deactivation blocks on final active `OWNER` accounts.
+- [x] Safe workspace User CRUD with deactivation safeguards for `OWNER` accounts.
 - [x] Customers CRUD with multi-field search, pagination, and status badge filters.
 - [x] Client Contacts CRUD with validation checks and single-primary contact toggling limits.
 - [x] Beautiful dark glassmorphic Next.js pages: `/login`, `/dashboard`, `/dashboard/clients`, `/dashboard/clients/new`, `/dashboard/clients/[id]` detail tabs.
 
+#### Client Inventory & Asset Management (Phase 2)
+- [x] Hardware & Software Inventory: Notebooks, Servers, Routers, Printers, Firewalls, VMs, Cloud Services, Software Licenses, and VPNs.
+- [x] Registry of Client Users: isolations, status toggles, and equipment assignments.
+- [x] Secure symmetric envelope cryptography (`AES-256-GCM`) via `@peanut/utils` and environment variables validations.
+- [x] Internal technical comments board rejecting plain text passwords.
+- [x] Full visual history logs for hardware life-cycles (creation, specs edits, assignments, credential reveals).
+- [x] Audited click-to-reveal credentials overlay for technical operators, leaving no credentials in local storage/session or logs.
+- [x] Sleek, responsive Next.js technical sheets: `/dashboard/inventory`, `/dashboard/clients/[id]/users`, `/dashboard/clients/[id]/inventory`, and detailed `/dashboard/clients/[id]/assets/[assetId]` spec views.
+
 ### Planned Modules (Next Phases)
-- [ ] **Phase 2**: Technical Asset Inventory management (Notebooks, Servers, VPNs, assignments to client users) and application-level secure cryptographic envelope (AES-256-GCM).
-- [ ] **Phase 3**: Ticketing & SLA Engine (SLA timer state machines, technical comments).
-- [ ] **Phase 4**: Financial Quotes, Invoices, and Playwright Worker PDF Render Engine.
-- [ ] **Phase 5**: IT Contracts, SLAs, and recurring subscription fees.
+- [ ] **Phase 3**: Helpdesk, Ticketing & SLA priority calculation engines (SLA deadline timer calculation, background breach monitors, visual ticket comments feed).
+- [ ] **Phase 4**: Advanced IT Contracts, SLAs policies, and recurring subscription fee schedules.
+- [ ] **Phase 5**: Playwright Worker PDF Render Engine for closed tickets and invoices.
 - [ ] **Phase 6**: Outbox Event dispatcher and secure HMAC signed webhooks to n8n.
 
 ---
@@ -102,24 +110,31 @@ Once seeded, the database contains the following mock administrator credentials:
    cp .env.example .env
    ```
 
-3. **Install all monorepo dependencies**:
+3. **Generate your local 32-byte encryption key**:
+   Generate a secure, random key using:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   ```
+   Copy the generated base64 string and paste it into the `APP_ENCRYPTION_KEY="..."` variable in your newly created local `.env` file.
+
+4. **Install all monorepo dependencies**:
    ```bash
    pnpm install
    ```
 
-4. **Spin up local databases and storage**:
+5. **Spin up local databases and storage**:
    ```bash
    docker-compose -f infra/docker/docker-compose.yml up -d
    ```
 
-5. **Initialize your database schema and seed mock data**:
+6. **Initialize your database schema and seed mock data**:
    ```bash
    pnpm db:generate
    pnpm db:migrate
    pnpm db:seed
    ```
 
-6. **Launch all workspaces in hot-reload development mode**:
+7. **Launch all workspaces in hot-reload development mode**:
    ```bash
    pnpm dev
    ```
