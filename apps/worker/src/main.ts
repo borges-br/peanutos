@@ -2,7 +2,7 @@
 // PEANUT OS - BACKGROUND WORKER ENTRYPOINT
 // ==============================================================================
 import * as dotenv from 'dotenv';
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, Queue } from 'bullmq';
 import { prisma } from '@peanut/db';
 
 // Load environment variables from root or local
@@ -19,6 +19,48 @@ const connection = {
   port: redisPort,
   password: redisPassword,
 };
+
+const billingScheduleQueue = new Queue('billing-schedule', { connection });
+
+async function writeBillingAudit(params: {
+  workspaceId: string;
+  action: 'billing.event_created' | 'billing.event_skipped';
+  entityId: string;
+  before?: unknown;
+  after?: unknown;
+}) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: params.workspaceId,
+        actorUserId: null,
+        action: params.action,
+        entityType: 'BILLING_SCHEDULE_EVENT',
+        entityId: params.entityId,
+        beforeJson: params.before ? JSON.stringify(params.before) : null,
+        afterJson: params.after ? JSON.stringify(params.after) : null,
+        severity: params.action === 'billing.event_skipped' ? 'WARN' : 'INFO',
+      },
+    });
+  } catch (err) {
+    console.warn('[Billing Scheduler Worker] Failed to write billing audit log:', err);
+  }
+}
+
+billingScheduleQueue
+  .add(
+    'billing-schedule.monthly-sweep',
+    {},
+    {
+      jobId: 'billing-schedule.monthly-sweep',
+      repeat: { pattern: process.env.BILLING_SCHEDULE_CRON || '0 2 * * *' },
+      removeOnComplete: 10,
+      removeOnFail: 50,
+    },
+  )
+  .catch((err: Error) => {
+    console.warn('[Billing Scheduler Queue] Redis is offline (safe bypass):', err.message);
+  });
 
 /**
  * PDF GENERATION JOB WORKER STUB
@@ -120,6 +162,94 @@ const slaMonitorWorker = new Worker(
   { connection }
 );
 
+/**
+ * BILLING SCHEDULER JOB WORKER
+ * ============================================================================
+ * Periodically sweeps active contracts to generate BillingScheduleEvents
+ * for the current calendar month.
+ * ============================================================================
+ */
+const billingSchedulerWorker = new Worker(
+  'billing-schedule',
+  async (_job: Job) => {
+    console.log(`[Billing Scheduler Worker] Sweeping active contracts...`);
+    try {
+      const activeContracts = await prisma.contract.findMany({
+        where: {
+          status: 'ACTIVE',
+          type: {
+            in: ['RECURRING_SUPPORT', 'HYBRID'],
+          },
+          monthlyAmountCents: { gt: 0 },
+        },
+      });
+
+      const now = new Date();
+      const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      const periodKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      let processedCount = 0;
+      let skippedCount = 0;
+
+      for (const contract of activeContracts) {
+        // Double-billing safeguard check
+        const existingEvent = await prisma.billingScheduleEvent.findFirst({
+          where: {
+            contractId: contract.id,
+            periodKey,
+          },
+        });
+
+        if (existingEvent) {
+          await writeBillingAudit({
+            workspaceId: contract.workspaceId,
+            action: 'billing.event_skipped',
+            entityId: existingEvent.id,
+            before: { contractId: contract.id, periodKey, reason: 'duplicate_period' },
+          });
+          skippedCount++;
+          continue;
+        }
+
+        // Generate billing schedule event scheduled for the billing day of the current month
+        const billingDay = Math.min(contract.billingDay, currentMonthEnd.getDate());
+        const billingDate = new Date(now.getFullYear(), now.getMonth(), billingDay);
+        const monthLabel = now.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+
+        const event = await prisma.billingScheduleEvent.create({
+          data: {
+            workspaceId: contract.workspaceId,
+            contractId: contract.id,
+            clientId: contract.clientId,
+            scheduledFor: billingDate,
+            status: 'PENDING',
+            periodKey,
+            amountCents: contract.monthlyAmountCents,
+            currency: contract.currency,
+            description: `Recorrência contratual - Competência ${monthLabel}`,
+          },
+        });
+
+        await writeBillingAudit({
+          workspaceId: contract.workspaceId,
+          action: 'billing.event_created',
+          entityId: event.id,
+          after: event,
+        });
+
+        processedCount++;
+      }
+
+      console.log(`[Billing Scheduler Worker] Finished sweep. Created: ${processedCount}, Skipped: ${skippedCount}`);
+      return { processedCount, skippedCount };
+    } catch (err) {
+      console.error('[Billing Scheduler Worker] Error processing recurring billing sweep:', err);
+      throw err;
+    }
+  },
+  { connection }
+);
+
 // --- ERROR & FAILURE EVENTS LOGGING (Graceful fallbacks when Redis is offline) ---
 
 pdfWorker.on('failed', (job, err) => {
@@ -143,4 +273,11 @@ slaMonitorWorker.on('error', (err) => {
   console.warn('[SLA Monitor Worker] Redis is offline (safe bypass):', err.message);
 });
 
-console.log('✅ Workers are listening to queues [pdf-generation, webhook-dispatch, sla-monitor] on Redis.');
+billingSchedulerWorker.on('failed', (job, err) => {
+  console.error(`[Billing Scheduler Worker] Job ${job?.id} failed:`, err);
+});
+billingSchedulerWorker.on('error', (err) => {
+  console.warn('[Billing Scheduler Worker] Redis is offline (safe bypass):', err.message);
+});
+
+console.log('✅ Workers are listening to queues [pdf-generation, webhook-dispatch, sla-monitor, billing-schedule] on Redis.');

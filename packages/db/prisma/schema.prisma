@@ -62,6 +62,7 @@ enum AssetType {
 enum AssetStatus {
   OPERATIONAL
   MAINTENANCE
+  IN_MAINTENANCE
   OUT_OF_STANDARD
   STOCK
   IN_STOCK
@@ -108,6 +109,48 @@ enum DocumentType {
   REPORT
 }
 
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  CANCELLED
+  TERMINATED
+}
+
+enum ContractType {
+  RECURRING_SUPPORT
+  PROJECT
+  ON_DEMAND
+  HYBRID
+}
+
+enum RenewalMode {
+  NONE
+  MONTHLY
+  ANNUAL
+  MANUAL
+}
+
+enum ContractLineItemType {
+  SERVICE
+  LICENSE
+  STORAGE
+  SUPPORT
+  MONITORING
+  BACKUP
+  OTHER
+}
+
+enum BillingScheduleStatus {
+  PENDING
+  DRAFT_READY
+  SKIPPED
+  CANCELLED
+  GENERATED_FUTURE_INVOICE
+}
+
+
 // ------------------------------------------------------------------------------
 // MODELS
 // ------------------------------------------------------------------------------
@@ -131,6 +174,9 @@ model Workspace {
   quotes              Quote[]
   invoices            Invoice[]
   contracts           Contract[]
+  contractLineItems   ContractLineItem[]
+  contractHistories   ContractHistory[]
+  billingScheduleEvents BillingScheduleEvent[]
   fileObjects         FileObject[]
   generatedDocuments  GeneratedDocument[]
   outboxEvents        OutboxEvent[]
@@ -165,6 +211,7 @@ model User {
   assetHistories AssetHistory[]
   ticketHistories TicketHistory[]
   ticketTimeEntries TicketTimeEntry[]
+  contractHistories ContractHistory[]
 
   @@index([workspaceId])
   @@map("users")
@@ -194,8 +241,9 @@ model Client {
   assetNotes     AssetNote[]
   tickets        Ticket[]
   quotes         Quote[]
-  invoices       Invoice[]
-  contracts      Contract[]
+  invoices              Invoice[]
+  contracts             Contract[]
+  billingScheduleEvents BillingScheduleEvent[]
 
   @@unique([workspaceId, document])
   @@index([workspaceId])
@@ -471,31 +519,108 @@ model Contract {
   clientId               String    @db.Uuid
   number                 String    @unique @db.VarChar(50)
   title                  String    @db.VarChar(150)
-  version                Int       @default(1)
-  status                 String    @default("ACTIVE") @db.VarChar(20) // ACTIVE, SUSPENDED, TERMINATED, DRAFT
+  description            String?   @db.Text
+  status                 ContractStatus @default(DRAFT)
+  type                   ContractType   @default(RECURRING_SUPPORT)
   startDate              DateTime
   endDate                DateTime?
-  monthlyValue           Decimal   @db.Decimal(12, 2)
-  billingDay             Int       @default(5)
-  scope                  String?   @db.Text
-  includedServices       String?   @db.Text
-  excludedServices       String?   @db.Text
-  slaPolicyId            String?   @db.Uuid
-  onsiteSupportAllowance Int       @default(0)
+  renewalMode            RenewalMode    @default(MONTHLY)
+  billingDay             Int            @default(5)
+  monthlyAmountCents     Int            @default(0)
+  currency               String         @default("BRL") @db.VarChar(3)
+  slaPolicyId            String?        @db.Uuid
   maxUsers               Int?
   maxAssets              Int?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  includedRemoteTickets  Int?
+  includedOnsiteVisits   Int?
+  includedRemoteHours    Int?
+  includedOnsiteHours    Int?
+  notes                  String?        @db.Text
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 
   // Relationships
   workspace              Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   client                 Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  slaPolicy              SlaPolicy? @relation(fields: [slaPolicyId], references: [id], onDelete: SetNull)
   tickets                Ticket[]
   invoices               Invoice[]
+  lineItems              ContractLineItem[]
+  history                ContractHistory[]
+  billingScheduleEvents  BillingScheduleEvent[]
 
   @@index([workspaceId])
   @@map("contracts")
 }
+
+model ContractLineItem {
+  id              String               @id @default(uuid()) @db.Uuid
+  workspaceId     String               @db.Uuid
+  contractId      String               @db.Uuid
+  description     String               @db.VarChar(255)
+  itemType        ContractLineItemType
+  quantity        Decimal              @db.Decimal(10, 2)
+  unitPriceCents  Int
+  totalPriceCents Int
+  recurring       Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  // Relationships
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contract        Contract             @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@index([workspaceId])
+  @@map("contract_line_items")
+}
+
+model ContractHistory {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  contractId  String   @db.Uuid
+  actorUserId String?  @db.Uuid
+  event       String   @db.VarChar(100)
+  description String   @db.Text
+  before      String?  @db.Text
+  after       String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  // Relationships
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contract    Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  actorUser   User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([contractId])
+  @@index([workspaceId])
+  @@map("contract_history")
+}
+
+model BillingScheduleEvent {
+  id           String                @id @default(uuid()) @db.Uuid
+  workspaceId  String                @db.Uuid
+  contractId   String                @db.Uuid
+  clientId     String                @db.Uuid
+  scheduledFor DateTime
+  status       BillingScheduleStatus
+  periodKey    String                @db.VarChar(7)
+  amountCents  Int
+  currency     String                @db.VarChar(3)
+  description  String?               @db.Text
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  // Relationships
+  workspace    Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contract     Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  client       Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@index([workspaceId])
+  @@unique([contractId, periodKey])
+  @@map("billing_schedule_events")
+}
+
 
 model FileObject {
   id               String   @id @default(uuid()) @db.Uuid
@@ -704,9 +829,9 @@ model SlaPolicy {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   tickets   Ticket[]
+  contracts Contract[]
 
   @@unique([workspaceId, priority])
   @@index([workspaceId])
   @@map("sla_policies")
 }
-

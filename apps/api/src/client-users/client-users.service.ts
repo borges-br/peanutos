@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
+import { ContractsQuotaService } from "../contracts/contracts-quota.service";
 import {
   ClientUserCreateInput,
   ClientUserUpdateInput,
@@ -12,7 +13,10 @@ import {
 
 @Injectable()
 export class ClientUsersService {
-  constructor(private readonly auditService: AuditService) {}
+  constructor(
+    private readonly auditService: AuditService,
+    private readonly contractsQuotaService: ContractsQuotaService,
+  ) {}
 
   private async validateClientBelongsToWorkspace(
     clientId: string,
@@ -127,6 +131,17 @@ export class ClientUsersService {
       }
     }
 
+    // Verify quota
+    if (input.status === "ACTIVE" || !input.status) {
+      await this.contractsQuotaService.validateUserQuota(
+        workspaceId,
+        clientId,
+        actorUserId,
+        ipAddress,
+        userAgent,
+      );
+    }
+
     const newUser = await prisma.clientUser.create({
       data: {
         workspaceId,
@@ -197,6 +212,17 @@ export class ClientUsersService {
     if (input.status !== undefined) data.status = input.status;
     if (input.notes !== undefined) data.notes = input.notes || null;
 
+    // Verify quota if reactivating
+    if (input.status === "ACTIVE" && user.status !== "ACTIVE") {
+      await this.contractsQuotaService.validateUserQuota(
+        workspaceId,
+        clientId,
+        actorUserId,
+        ipAddress,
+        userAgent,
+      );
+    }
+
     const updatedUser = await prisma.clientUser.update({
       where: { id },
       data,
@@ -237,6 +263,17 @@ export class ClientUsersService {
     }
 
     const before = { ...user };
+
+    // Verify quota if reactivating
+    if (status === "ACTIVE" && user.status !== "ACTIVE") {
+      await this.contractsQuotaService.validateUserQuota(
+        workspaceId,
+        clientId,
+        actorUserId,
+        ipAddress,
+        userAgent,
+      );
+    }
 
     const updatedUser = await prisma.clientUser.update({
       where: { id },

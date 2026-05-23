@@ -3,8 +3,8 @@
 Peanut OS is a professional, high-performance web platform designed for the operational, technical, and commercial management of IT Service Providers. Initially conceptualized as a robust system for **Borges TI**, it is designed from the ground up with a white-label architecture to support custom branding, and a logical database model that prepares the schema for future multi-tenant operations.
 
 > [!NOTE]
-> **Project Status**: **Phase 3 Complete (Helpdesk, Ticketing & SLA Foundation)**. 
-> This is a professional developer portfolio project under active development. All Phase 3 modules (Helpdesk tickets board, incident cascading selectors, visual detail panel, client-specific tickets tab, centralized state transitions, automatic SLA calculations, comments visibility filters, password blocking safeguards, technical time entries log, and background SLA BullMQ worker sweeper) are fully functional, verified, and build-green!
+> **Project Status**: **Phase 4 Complete in code (Contracts & Recurring Billing Foundation)**.
+> Contracts, line items, contract history, quota enforcement, contract-aware SLA selection, financial MRR endpoints, recurring billing schedule events, BullMQ billing scheduler foundation, and the contracts/financial dashboard screens are implemented and build-green. The Phase 4 Prisma schema validates, but the local Prisma migration could not be generated/applied because the schema engine failed against the local PostgreSQL connection; see `docs/ai-handoff/08-database-notes.md`.
 
 ---
 
@@ -88,8 +88,8 @@ peanutos/
 - [x] Client tickets view `/dashboard/clients/[id]/tickets` scoping list under the client detail tab.
 
 ### Planned Modules (Next Phases)
-- [ ] **Phase 4**: Advanced IT Contracts, quota limitations validations, billing days schedules, monthly MRR financials dashboard, and background billing schedulers.
-- [ ] **Phase 5**: Playwright Worker PDF Render Engine for closed tickets and invoices.
+- [x] **Phase 4**: Contracts, quota validations, billing schedule foundation, monthly MRR financials dashboard, and background billing scheduler worker.
+- [ ] **Phase 5**: Quotes, invoices, and PDF foundation.
 - [ ] **Phase 6**: Outbox Event dispatcher and secure HMAC signed webhooks to n8n.
 
 ---

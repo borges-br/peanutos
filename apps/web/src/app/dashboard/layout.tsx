@@ -35,11 +35,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Clientes', path: '/dashboard/clients' },
     { name: 'Inventário', path: '/dashboard/inventory' },
     { name: 'Chamados', path: '/dashboard/tickets' },
+    { name: 'Contratos', path: '/dashboard/contracts' },
   ];
 
-  // Only OWNER or ADMIN can manage users
-  if (user.role === 'OWNER' || user.role === 'ADMIN') {
-    // We could add users menu item, let's add it for modularity
+  if (user && ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role)) {
+    menuItems.push({ name: 'Financeiro', path: '/dashboard/financials' });
   }
 
   return (
@@ -93,6 +93,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {pathname?.startsWith('/dashboard/clients') && 'Gestão de Clientes'}
             {pathname?.startsWith('/dashboard/inventory') && 'Inventário de Ativos'}
             {pathname?.startsWith('/dashboard/tickets') && 'Gestão de Chamados'}
+            {pathname?.startsWith('/dashboard/contracts') && 'Gestão de Contratos'}
+            {pathname?.startsWith('/dashboard/financials') && 'Painel Financeiro'}
           </div>
           <div style={styles.badge}>{user.role} Account</div>
         </header>

@@ -46,6 +46,7 @@ export const assetSchema = z.object({
   status: z.enum([
     'OPERATIONAL',
     'MAINTENANCE',
+    'IN_MAINTENANCE',
     'OUT_OF_STANDARD',
     'STOCK',
     'RETIRED',
@@ -221,6 +222,7 @@ const assetTypes = [
 const assetStatuses = [
   'OPERATIONAL',
   'MAINTENANCE',
+  'IN_MAINTENANCE',
   'OUT_OF_STANDARD',
   'STOCK',
   'IN_STOCK',
@@ -289,4 +291,86 @@ export const sensitiveDataSchema = z.object({
 
 export type SensitiveDataInput = z.infer<typeof sensitiveDataSchema>;
 
+// --- CONTRACTS VALIDATORS ---
+
+const contractStatusEnum = z.enum(['DRAFT', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'CANCELLED', 'TERMINATED']);
+const contractTypeEnum = z.enum(['RECURRING_SUPPORT', 'PROJECT', 'ON_DEMAND', 'HYBRID']);
+const renewalModeEnum = z.enum(['NONE', 'MONTHLY', 'ANNUAL', 'MANUAL']);
+const contractLineItemTypeEnum = z.enum(['SERVICE', 'LICENSE', 'STORAGE', 'SUPPORT', 'MONITORING', 'BACKUP', 'OTHER']);
+const billingScheduleStatusEnum = z.enum(['PENDING', 'DRAFT_READY', 'SKIPPED', 'CANCELLED', 'GENERATED_FUTURE_INVOICE']);
+
+const contractBaseSchema = z.object({
+  title: z.string().min(3, { message: 'O título do contrato deve ter pelo menos 3 caracteres' }),
+  clientId: z.string().uuid({ message: 'ID do cliente inválido' }),
+  number: z.string().optional().or(z.literal('')),
+  status: contractStatusEnum.default('DRAFT'),
+  type: contractTypeEnum,
+  startDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de início inválida' }),
+  endDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de término inválida' }).optional().nullable().or(z.literal('')),
+  renewalMode: renewalModeEnum.default('MONTHLY'),
+  billingDay: z.number().int().min(1).max(31, { message: 'Dia de vencimento deve estar entre 1 e 31' }).default(5),
+  monthlyAmountCents: z.number().int().min(0, { message: 'Valor mensal deve ser maior ou igual a zero' }).default(0),
+  currency: z.string().length(3, { message: 'A moeda deve ter exatamente 3 caracteres (ex: BRL)' }).default('BRL'),
+  slaPolicyId: z.string().uuid({ message: 'ID de SLA inválido' }).optional().nullable(),
+  maxUsers: z.number().int().min(0).optional().nullable(),
+  maxAssets: z.number().int().min(0).optional().nullable(),
+  includedRemoteTickets: z.number().int().min(0).optional().nullable(),
+  includedOnsiteVisits: z.number().int().min(0).optional().nullable(),
+  includedRemoteHours: z.number().int().min(0).optional().nullable(),
+  includedOnsiteHours: z.number().int().min(0).optional().nullable(),
+  description: z.string().optional().nullable().or(z.literal('')),
+  notes: z.string().optional().nullable().or(z.literal('')),
+});
+
+export const contractCreateSchema = contractBaseSchema.refine((data) => {
+  if (data.startDate && data.endDate) {
+    return new Date(data.endDate) >= new Date(data.startDate);
+  }
+  return true;
+}, {
+  message: 'A data de término não pode ser anterior à data de início',
+  path: ['endDate'],
+});
+
+export type ContractCreateInput = z.infer<typeof contractCreateSchema>;
+
+export const contractUpdateSchema = contractBaseSchema.partial().refine((data) => {
+  if (data.startDate && data.endDate) {
+    return new Date(data.endDate) >= new Date(data.startDate);
+  }
+  return true;
+}, {
+  message: 'A data de término não pode ser anterior à data de início',
+  path: ['endDate'],
+});
+
+export type ContractUpdateInput = z.infer<typeof contractUpdateSchema>;
+
+export const contractStatusUpdateSchema = z.object({
+  status: contractStatusEnum,
+});
+
+export type ContractStatusUpdateInput = z.infer<typeof contractStatusUpdateSchema>;
+
+export const contractLineItemCreateSchema = z.object({
+  description: z.string().min(2, { message: 'A descrição do item deve ter pelo menos 2 caracteres' }),
+  itemType: contractLineItemTypeEnum,
+  quantity: z.number().positive({ message: 'A quantidade deve ser um número positivo' }),
+  unitPriceCents: z.number().int().min(0, { message: 'O valor unitário deve ser maior ou igual a zero' }),
+  recurring: z.boolean().default(true),
+});
+
+export type ContractLineItemCreateInput = z.infer<typeof contractLineItemCreateSchema>;
+
+export const contractLineItemUpdateSchema = contractLineItemCreateSchema.partial();
+
+export type ContractLineItemUpdateInput = z.infer<typeof contractLineItemUpdateSchema>;
+
+export const billingScheduleQuerySchema = z.object({
+  status: billingScheduleStatusEnum.optional(),
+  contractId: z.string().uuid().optional(),
+  clientId: z.string().uuid().optional(),
+});
+
+export type BillingScheduleQueryInput = z.infer<typeof billingScheduleQuerySchema>;
 

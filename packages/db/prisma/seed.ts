@@ -387,6 +387,102 @@ async function main() {
     },
   });
 
+  // ==============================================================================
+  // PHASE 4 — CONTRACTS & RECURRING BILLING SEED
+  // ==============================================================================
+  console.log('- Seeding Phase 4 Contract, Line Items, and Billing Schedule Events...');
+  const contract = await prisma.contract.create({
+    data: {
+      workspaceId: workspace.id,
+      clientId: client.id,
+      number: 'CTR-ACME-2026-001',
+      title: 'Contrato Mensal de Suporte e Monitoramento - Acme Tech',
+      description: 'Suporte técnico integral de TI, licenciamento e backup corporativo com limites de quota.',
+      status: 'ACTIVE',
+      type: 'RECURRING_SUPPORT',
+      startDate: new Date(2026, 0, 1), // Jan 1, 2026
+      endDate: new Date(2026, 11, 31), // Dec 31, 2026
+      renewalMode: 'MONTHLY',
+      billingDay: 10,
+      monthlyAmountCents: 150000, // R$ 1.500,00
+      currency: 'BRL',
+      maxUsers: 20,
+      maxAssets: 50,
+      includedRemoteTickets: 100,
+      includedOnsiteVisits: 5,
+      includedRemoteHours: 50,
+      includedOnsiteHours: 10,
+      slaPolicyId: slaPolicies['MEDIUM'],
+      notes: 'Faturamento recorrente via PIX com cobrança no dia 10 de cada mês.',
+    },
+  });
+
+  // Seed Contract Line Items
+  await prisma.contractLineItem.createMany({
+    data: [
+      {
+        id: crypto.randomUUID(),
+        workspaceId: workspace.id,
+        contractId: contract.id,
+        description: 'Suporte técnico recorrente',
+        itemType: 'SUPPORT',
+        quantity: 1.0,
+        unitPriceCents: 100000, // R$ 1.000,00
+        totalPriceCents: 100000,
+        recurring: true,
+      },
+      {
+        id: crypto.randomUUID(),
+        workspaceId: workspace.id,
+        contractId: contract.id,
+        description: 'Monitoramento básico',
+        itemType: 'MONITORING',
+        quantity: 1.0,
+        unitPriceCents: 30000, // R$ 300,00
+        totalPriceCents: 30000, // R$ 300,00
+        recurring: true,
+      },
+      {
+        id: crypto.randomUUID(),
+        workspaceId: workspace.id,
+        contractId: contract.id,
+        description: 'Backup cloud fictício',
+        itemType: 'BACKUP',
+        quantity: 1.0,
+        unitPriceCents: 20000, // R$ 200,00
+        totalPriceCents: 20000,
+        recurring: true,
+      },
+    ],
+  });
+
+  // Seed Billing Schedule Event (PENDING event for next cycle)
+  await prisma.billingScheduleEvent.create({
+    data: {
+      workspaceId: workspace.id,
+      contractId: contract.id,
+      clientId: client.id,
+      scheduledFor: new Date(2026, 5, 10), // June 10, 2026
+      status: 'PENDING',
+      periodKey: '2026-06',
+      amountCents: 150000,
+      currency: 'BRL',
+      description: 'Recorrência contratual mensal de suporte - Competência Junho/2026',
+    },
+  });
+
+  // Seed Contract History
+  await prisma.contractHistory.create({
+    data: {
+      workspaceId: workspace.id,
+      contractId: contract.id,
+      actorUserId: adminUser.id,
+      event: 'CONTRACT_CREATED',
+      description: 'Contrato inicial homologado e ativado no status ACTIVE com limite de 20 usuários e 50 ativos.',
+      after: JSON.stringify({ status: 'ACTIVE', monthlyAmountCents: 150000, maxUsers: 20, maxAssets: 50 }),
+    },
+  });
+
   console.log('✅ Database seed completed successfully!');
 }
 

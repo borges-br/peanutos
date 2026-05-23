@@ -22,21 +22,64 @@ const DEFAULT_SLA_MINUTES: Record<
 export class SlaService {
   /**
    * Calculates dynamic SLA deadlines (response, start, resolution) for a ticket.
-   * If a custom SlaPolicy is active in the workspace, uses it. Fallback is the approved standard policy times.
+   * If the client has an active contract linking to an SlaPolicy, that policy overrides the standard setup.
+   * Otherwise, falls back to the workspace's default priority SLA policy.
    */
   async calculateSla(
     workspaceId: string,
     priority: TicketPriority,
     openedAt: Date = new Date(),
-  ): Promise<SlaDueDates & { slaPolicyId: string | null }> {
+    clientId?: string,
+  ): Promise<
+    SlaDueDates & { slaPolicyId: string | null; contractId: string | null }
+  > {
     try {
-      const policy = await prisma.slaPolicy.findFirst({
-        where: {
-          workspaceId,
-          priority,
-          active: true,
-        },
-      });
+      let policy: {
+        id: string;
+        firstResponseMinutes: number;
+        startMinutes: number;
+        resolutionMinutes: number;
+      } | null = null;
+      let contractId: string | null = null;
+
+      // 1. Resolve contract-specific SLA policy if clientId is provided
+      if (clientId) {
+        const activeContract = await prisma.contract.findFirst({
+          where: {
+            workspaceId,
+            clientId,
+            status: "ACTIVE",
+            type: {
+              in: ["RECURRING_SUPPORT", "HYBRID"],
+            },
+            startDate: { lte: openedAt },
+            OR: [{ endDate: null }, { endDate: { gte: openedAt } }],
+            slaPolicyId: { not: null },
+          },
+        });
+
+        if (activeContract && activeContract.slaPolicyId) {
+          contractId = activeContract.id;
+          policy = await prisma.slaPolicy.findFirst({
+            where: {
+              id: activeContract.slaPolicyId,
+              workspaceId,
+              active: true,
+            },
+          });
+        }
+      }
+
+      // 2. Fall back to standard priority SLA policy
+      if (!policy) {
+        policy = await prisma.slaPolicy.findFirst({
+          where: {
+            workspaceId,
+            priority,
+            active: true,
+          },
+        });
+      }
 
       const minutes = policy
         ? {
@@ -54,11 +97,12 @@ export class SlaService {
 
       return {
         slaPolicyId: policy?.id || null,
+        contractId,
         slaDueFirstResponseAt: addMinutes(openedAt, minutes.response),
         slaDueStartAt: addMinutes(openedAt, minutes.start),
         slaDueResolutionAt: addMinutes(openedAt, minutes.resolution),
       };
-    } catch (error) {
+    } catch {
       // Graceful fallback if database read fails
       const minutes = DEFAULT_SLA_MINUTES[priority];
       const addMinutes = (date: Date, mins: number) => {
@@ -69,6 +113,7 @@ export class SlaService {
 
       return {
         slaPolicyId: null,
+        contractId: null,
         slaDueFirstResponseAt: addMinutes(openedAt, minutes.response),
         slaDueStartAt: addMinutes(openedAt, minutes.start),
         slaDueResolutionAt: addMinutes(openedAt, minutes.resolution),

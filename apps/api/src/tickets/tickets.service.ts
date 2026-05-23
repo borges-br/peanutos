@@ -30,6 +30,13 @@ export class TicketsService {
     private readonly auditService: AuditService,
   ) {}
 
+  async listSlaPolicies(workspaceId: string) {
+    return prisma.slaPolicy.findMany({
+      where: { workspaceId, active: true },
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+    });
+  }
+
   /**
    * Helper to generate a human-readable incrementing ticket number safely.
    */
@@ -247,6 +254,7 @@ export class TicketsService {
       workspaceId,
       data.priority,
       openedAt,
+      data.clientId,
     );
 
     // 4. Create Ticket inside Transaction to guarantee history creation
@@ -258,7 +266,7 @@ export class TicketsService {
           contactId: data.contactId || null,
           clientUserId: data.clientUserId || null,
           assetId: data.assetId || null,
-          contractId: null, // Contracts to be handled in Phase 4
+          contractId: sla.contractId,
           slaPolicyId: sla.slaPolicyId,
           number: ticketNumber,
           title: data.title,
@@ -383,6 +391,7 @@ export class TicketsService {
           workspaceId,
           data.priority,
           original.openedAt,
+          original.clientId,
         );
         updateData.slaPolicyId = sla.slaPolicyId;
         updateData.slaDueFirstResponseAt = sla.slaDueFirstResponseAt;

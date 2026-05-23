@@ -52,6 +52,11 @@ export class TicketsController {
     });
   }
 
+  @Get("tickets/sla-policies")
+  async listSlaPolicies(@CurrentUser() user: any) {
+    return this.ticketsService.listSlaPolicies(user.workspaceId);
+  }
+
   @Get("tickets/:ticketId")
   async getById(@Param("ticketId") ticketId: string, @CurrentUser() user: any) {
     return this.ticketsService.getById(ticketId, user.workspaceId);

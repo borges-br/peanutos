@@ -7,10 +7,22 @@ import { prisma, AssetType, AssetStatus } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { AssetCreateInput, AssetUpdateInput } from "@peanut/validators";
 import { encryptSensitiveData, decryptSensitiveData } from "@peanut/utils";
+import { ContractsQuotaService } from "../contracts/contracts-quota.service";
+
+const QUOTA_COUNTED_ASSET_STATUSES = [
+  "OPERATIONAL",
+  "IN_MAINTENANCE",
+  "OUT_OF_STANDARD",
+  "IN_STOCK",
+  "PENDING_REVIEW",
+] as const;
 
 @Injectable()
 export class InventoryService {
-  constructor(private readonly auditService: AuditService) {}
+  constructor(
+    private readonly auditService: AuditService,
+    private readonly contractsQuotaService: ContractsQuotaService,
+  ) {}
 
   private async validateClient(clientId: string, workspaceId: string) {
     const client = await prisma.client.findFirst({
@@ -20,6 +32,12 @@ export class InventoryService {
       throw new NotFoundException("Cliente não encontrado neste workspace");
     }
     return client;
+  }
+
+  private isQuotaCountedStatus(status: string): boolean {
+    return QUOTA_COUNTED_ASSET_STATUSES.includes(
+      status as (typeof QUOTA_COUNTED_ASSET_STATUSES)[number],
+    );
   }
 
   private async logAssetHistory(params: {
@@ -203,6 +221,18 @@ export class InventoryService {
       );
     }
 
+    // Verify asset quota
+    const isNewActive = this.isQuotaCountedStatus(input.status);
+    if (isNewActive) {
+      await this.contractsQuotaService.validateAssetQuota(
+        workspaceId,
+        clientId,
+        actorUserId,
+        ipAddress,
+        userAgent,
+      );
+    }
+
     const newAsset = await prisma.asset.create({
       data: {
         workspaceId,
@@ -313,6 +343,21 @@ export class InventoryService {
       isSensitiveUpdated = true;
     }
 
+    // Verify quota if reactivating asset
+    if (input.status !== undefined) {
+      const isCurrentlyActive = this.isQuotaCountedStatus(before.status);
+      const isNextActive = this.isQuotaCountedStatus(input.status);
+      if (isNextActive && !isCurrentlyActive) {
+        await this.contractsQuotaService.validateAssetQuota(
+          workspaceId,
+          clientId,
+          actorUserId,
+          ipAddress,
+          userAgent,
+        );
+      }
+    }
+
     const updatedAsset = await prisma.asset.update({
       where: { id },
       data,
@@ -370,6 +415,19 @@ export class InventoryService {
     }
 
     const before = { ...asset };
+
+    // Verify quota if reactivating status
+    const isCurrentlyActive = this.isQuotaCountedStatus(before.status);
+    const isNextActive = this.isQuotaCountedStatus(status);
+    if (isNextActive && !isCurrentlyActive) {
+      await this.contractsQuotaService.validateAssetQuota(
+        workspaceId,
+        clientId,
+        actorUserId,
+        ipAddress,
+        userAgent,
+      );
+    }
 
     const updatedAsset = await prisma.asset.update({
       where: { id },

@@ -34,6 +34,7 @@ export type AssetType =
 export type AssetStatus =
   | 'OPERATIONAL'
   | 'MAINTENANCE'
+  | 'IN_MAINTENANCE'
   | 'OUT_OF_STANDARD'
   | 'STOCK'
   | 'IN_STOCK'
@@ -75,6 +76,80 @@ export type TicketHistoryEvent =
   | 'SLA_BREACHED';
 
 export type DocumentType = 'QUOTE' | 'INVOICE' | 'TICKET_CLOSURE' | 'CONTRACT' | 'REPORT';
+
+export type ContractStatus = 'DRAFT' | 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'CANCELLED' | 'TERMINATED';
+export type ContractType = 'RECURRING_SUPPORT' | 'PROJECT' | 'ON_DEMAND' | 'HYBRID';
+export type RenewalMode = 'NONE' | 'MONTHLY' | 'ANNUAL' | 'MANUAL';
+export type ContractLineItemType = 'SERVICE' | 'LICENSE' | 'STORAGE' | 'SUPPORT' | 'MONITORING' | 'BACKUP' | 'OTHER';
+export type BillingScheduleStatus = 'PENDING' | 'DRAFT_READY' | 'SKIPPED' | 'CANCELLED' | 'GENERATED_FUTURE_INVOICE';
+
+export interface Contract {
+  id: string;
+  workspaceId: string;
+  clientId: string;
+  number: string;
+  title: string;
+  description?: string | null;
+  status: ContractStatus;
+  type: ContractType;
+  startDate: Date;
+  endDate?: Date | null;
+  renewalMode: RenewalMode;
+  billingDay: number;
+  monthlyAmountCents: number;
+  currency: string;
+  slaPolicyId?: string | null;
+  maxUsers?: number | null;
+  maxAssets?: number | null;
+  includedRemoteTickets?: number | null;
+  includedOnsiteVisits?: number | null;
+  includedRemoteHours?: number | null;
+  includedOnsiteHours?: number | null;
+  notes?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ContractLineItem {
+  id: string;
+  workspaceId: string;
+  contractId: string;
+  description: string;
+  itemType: ContractLineItemType;
+  quantity: number | string;
+  unitPriceCents: number;
+  totalPriceCents: number;
+  recurring: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ContractHistory {
+  id: string;
+  workspaceId: string;
+  contractId: string;
+  actorUserId?: string | null;
+  event: string;
+  description: string;
+  before?: string | null;
+  after?: string | null;
+  createdAt: Date;
+}
+
+export interface BillingScheduleEvent {
+  id: string;
+  workspaceId: string;
+  contractId: string;
+  clientId: string;
+  scheduledFor: Date;
+  status: BillingScheduleStatus;
+  periodKey: string;
+  amountCents: number;
+  currency: string;
+  description?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 // Basic Entities Structure
 export interface Workspace {
