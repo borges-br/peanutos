@@ -2,11 +2,14 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Button } from '@peanut/ui';
+import { useI18n } from '../../i18n/useI18n';
+import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
 
 export default function LoginPage() {
-  const brandName = process.env.NEXT_PUBLIC_BRAND_NAME || 'Peanut OS';
   const { login } = useAuth();
+  const { t } = useI18n();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -30,173 +33,79 @@ export default function LoginPage() {
   };
 
   return (
-    <main style={styles.container}>
-      <div style={styles.ambientLight1} />
-      <div style={styles.ambientLight2} />
+    <main className="min-h-screen bg-[#08090D] flex flex-col justify-center items-center p-md relative overflow-hidden select-none">
+      {/* Subtle background ambient light */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-[radial-gradient(circle,rgba(157,183,255,0.05)_0%,rgba(0,0,0,0)_70%)] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[45%] h-[45%] rounded-full bg-[radial-gradient(circle,rgba(157,183,255,0.05)_0%,rgba(0,0,0,0)_70%)] pointer-events-none" />
 
-      <section style={styles.card}>
-        <div style={styles.header}>
-          <div style={styles.logo}>{brandName}</div>
-          <p style={styles.subtitle}>Insira suas credenciais para acessar o painel</p>
+      {/* Main Login Card Container */}
+      <section className="w-full max-w-[440px] bg-surface border border-outline-variant/30 rounded-xl p-lg md:p-xl shadow-2xl shadow-black/80 z-10 animate-in fade-in duration-300">
+        
+        {/* Header Branding */}
+        <div className="text-center mb-xl">
+          <div className="flex justify-center items-center gap-xs mb-sm">
+            <div className="w-6 h-6 bg-primary-container flex items-center justify-center rounded">
+              <span className="material-symbols-outlined text-[14px] text-on-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>
+                terminal
+              </span>
+            </div>
+            <span className="font-headline-md text-base font-bold text-primary tracking-tight">Peanut OS</span>
+          </div>
+          
+          <h2 className="font-display-lg text-xl text-on-surface font-semibold mt-2">
+            {t.auth.loginTitle}
+          </h2>
+          <p className="text-[13px] text-on-surface-variant/80 mt-1">
+            {t.auth.loginSubtitle}
+          </p>
         </div>
 
-        {error && <div style={styles.errorAlert}>{error}</div>}
-
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.inputGroup}>
-            <label htmlFor="email" style={styles.label}>E-mail</label>
-            <input
-              id="email"
-              type="email"
-              placeholder="exemplo@domain.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={styles.input}
-              required
-              disabled={loading}
-            />
+        {/* Error alert banner */}
+        {error && (
+          <div className="mb-md bg-red-500/10 border border-red-500/20 text-red-400 p-md rounded-lg text-body-sm text-center animate-in fade-in duration-200">
+            {error}
           </div>
+        )}
 
-          <div style={styles.inputGroup}>
-            <label htmlFor="password" style={styles.label}>Senha</label>
-            <input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <Button 
-            type="submit" 
-            variant="primary" 
-            style={styles.submitBtn} 
+        {/* Form elements */}
+        <form onSubmit={handleSubmit} className="flex flex-col gap-md">
+          <Input
+            id="email"
+            type="email"
+            label={t.auth.email}
+            placeholder="exemplo@domain.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
             disabled={loading}
+          />
+
+          <Input
+            id="password"
+            type="password"
+            label={t.auth.password}
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            disabled={loading}
+          />
+
+          <Button
+            type="submit"
+            variant="primary"
+            className="w-full mt-2 py-2"
+            loading={loading}
           >
-            {loading ? 'Entrando...' : 'Entrar na plataforma'}
+            {loading ? t.auth.signingIn : t.auth.signIn}
           </Button>
         </form>
       </section>
 
-      <footer style={styles.footer}>
-        &copy; {new Date().getFullYear()} {brandName} &bull; Painel de Homologação.
+      {/* Simplified Localized Footer */}
+      <footer className="mt-xl text-[11px] text-on-surface-variant/40 z-10 pointer-events-none text-center">
+        {t.auth.copyright}
       </footer>
     </main>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: '100vh',
-    padding: '24px',
-    backgroundColor: '#0b0f19',
-    color: '#f9fafb',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  ambientLight1: {
-    position: 'absolute',
-    top: '-10%',
-    left: '-10%',
-    width: '40%',
-    height: '40%',
-    borderRadius: '50%',
-    background: 'radial-gradient(circle, rgba(26,86,219,0.15) 0%, rgba(0,0,0,0) 70%)',
-    zIndex: 1,
-  },
-  ambientLight2: {
-    position: 'absolute',
-    bottom: '-10%',
-    right: '-10%',
-    width: '45%',
-    height: '45%',
-    borderRadius: '50%',
-    background: 'radial-gradient(circle, rgba(59,130,246,0.15) 0%, rgba(0,0,0,0) 70%)',
-    zIndex: 1,
-  },
-  card: {
-    width: '100%',
-    maxWidth: '440px',
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '16px',
-    padding: '40px',
-    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.5)',
-    zIndex: 2,
-  },
-  header: {
-    textAlign: 'center',
-    marginBottom: '32px',
-  },
-  logo: {
-    fontSize: '28px',
-    fontWeight: 'bold',
-    letterSpacing: '-0.5px',
-    background: 'linear-gradient(to right, #3b82f6, #1a56db)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    marginBottom: '8px',
-  },
-  subtitle: {
-    fontSize: '14px',
-    color: '#9ca3af',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  label: {
-    fontSize: '12px',
-    fontWeight: 500,
-    color: '#d1d5db',
-  },
-  input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '12px 16px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    transition: 'all 0.2s',
-  },
-  submitBtn: {
-    width: '100%',
-    padding: '12px',
-    fontSize: '15px',
-    fontWeight: 600,
-    borderRadius: '8px',
-    marginTop: '10px',
-  },
-  errorAlert: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    color: '#fca5a5',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    fontSize: '13px',
-    marginBottom: '20px',
-    textAlign: 'center',
-  },
-  footer: {
-    marginTop: '40px',
-    fontSize: '12px',
-    color: '#4b5563',
-    zIndex: 2,
-  },
-};

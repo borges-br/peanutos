@@ -2,13 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
-import { Button } from '@peanut/ui';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, usePathname } from 'next/navigation';
 import { clientContactSchema } from '@peanut/validators';
+import { useI18n } from '../../../../i18n/useI18n';
+import Button from '../../../../components/ui/Button';
+import Badge from '../../../../components/ui/Badge';
+import Input from '../../../../components/ui/Input';
+import Card from '../../../../components/ui/Card';
 
 export default function ClientDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const pathname = usePathname();
+  const { t } = useI18n();
   const clientId = params.id as string;
 
   const [client, setClient] = useState<any>(null);
@@ -38,7 +44,7 @@ export default function ClientDetailPage() {
       setClient(clientData);
       setContacts(clientData.contacts || []);
     } catch (err: any) {
-      setError(err.message || 'Falha ao carregar dados do cliente.');
+      setError(err.message || t.states.errorTitle);
     } finally {
       setLoading(false);
     }
@@ -87,22 +93,18 @@ export default function ClientDetailPage() {
 
     try {
       if (editingContactId) {
-        // Update contact
         await apiRequest(`/clients/${clientId}/contacts/${editingContactId}`, {
           method: 'PATCH',
           body: JSON.stringify(validation.data),
         });
       } else {
-        // Create contact
         await apiRequest(`/clients/${clientId}/contacts`, {
           method: 'POST',
           body: JSON.stringify(validation.data),
         });
       }
 
-      // Reset Form
       resetContactForm();
-      // Reload Data
       const freshContacts = await apiRequest(`/clients/${clientId}/contacts`);
       setContacts(freshContacts);
     } catch (err: any) {
@@ -154,13 +156,20 @@ export default function ClientDetailPage() {
   };
 
   if (loading) {
-    return <div style={styles.loading}>Carregando dados do cliente...</div>;
+    return (
+      <div className="flex flex-col justify-center items-center min-h-[200px] gap-sm text-on-surface-variant font-body-sm">
+        <div className="w-8 h-8 rounded-full border-3 border-primary/10 border-t-primary animate-spin" />
+        <p>{t.common.loading}</p>
+      </div>
+    );
   }
 
   if (error || !client) {
     return (
-      <div style={styles.errorContainer}>
-        <div style={styles.errorAlert}>{error || 'Cliente não encontrado'}</div>
+      <div className="flex flex-col items-center justify-center p-xl text-center gap-md">
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-md rounded-lg text-body-sm">
+          {error || 'Cliente não encontrado'}
+        </div>
         <Button variant="primary" onClick={() => router.push('/dashboard/clients')}>
           Voltar para Lista
         </Button>
@@ -168,534 +177,345 @@ export default function ClientDetailPage() {
     );
   }
 
+  const clientBadgeVariant =
+    client.status === 'ACTIVE'
+      ? 'success'
+      : client.status === 'PROSPECT'
+      ? 'warning'
+      : 'neutral';
+  
+  const clientStatusLabel =
+    t.enums.clientStatus[client.status as keyof typeof t.enums.clientStatus] || client.status;
+
+  // Dossie Tabs Navigation list
+  const tabItems = [
+    { label: t.clients.tabs.summary, path: `/dashboard/clients/${clientId}`, active: pathname === `/dashboard/clients/${clientId}` },
+    { label: t.clients.tabs.users, path: `/dashboard/clients/${clientId}/users`, active: pathname === `/dashboard/clients/${clientId}/users` },
+    { label: t.clients.tabs.inventory, path: `/dashboard/clients/${clientId}/inventory`, active: pathname === `/dashboard/clients/${clientId}/inventory` },
+    { label: t.clients.tabs.tickets, path: `/dashboard/clients/${clientId}/tickets`, active: pathname === `/dashboard/clients/${clientId}/tickets` },
+    { label: t.clients.tabs.contracts, path: `/dashboard/clients/${clientId}/contracts`, active: pathname === `/dashboard/clients/${clientId}/contracts` },
+    { label: t.clients.tabs.history, path: '#', active: false, planned: true },
+    { label: "Documentos", path: '#', active: false, planned: true },
+  ];
+
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <Button variant="outline" onClick={() => router.push('/dashboard/clients')} style={styles.backBtn}>
-          &larr; Voltar
-        </Button>
-        <div style={styles.titleArea}>
-          <h1 style={styles.title}>{client.tradeName}</h1>
-          <span style={styles.legalName}>{client.legalName}</span>
-        </div>
-        
-        {/* Status Actions */}
-        <div style={styles.statusActions}>
-          <select
-            value={client.status}
-            onChange={(e) => handleStatusChange(e.target.value)}
-            style={styles.statusSelect}
+    <div className="flex flex-col gap-lg select-none select-text">
+      
+      {/* Dossie Breadcrumbs & Header */}
+      <header className="flex flex-col gap-sm border-b border-outline-variant/30 pb-lg">
+        <div className="flex items-center gap-md">
+          <Button
+            variant="outline"
+            onClick={() => router.push('/dashboard/clients')}
+            className="py-1 px-3"
           >
-            <option value="ACTIVE">Ativo</option>
-            <option value="INACTIVE">Inativo</option>
-            <option value="PROSPECT">Prospecto</option>
-          </select>
+            <span className="material-symbols-outlined text-[16px] mr-1">arrow_back</span>
+            {t.common.back}
+          </Button>
+          <div className="flex flex-col flex-1">
+            <div className="flex items-center gap-md">
+              <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
+                {client.tradeName}
+              </h2>
+              <Badge variant={clientBadgeVariant}>{clientStatusLabel}</Badge>
+            </div>
+            <span className="text-[12px] text-on-surface-variant font-mono">{client.legalName}</span>
+          </div>
+
+          <div className="relative">
+            <select
+              value={client.status}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              className="bg-surface-container border border-outline-variant rounded-lg px-4 py-1.5 text-body-sm text-on-surface outline-none cursor-pointer appearance-none pr-8 focus:border-primary"
+            >
+              <option value="ACTIVE">{t.enums.clientStatus.ACTIVE}</option>
+              <option value="INACTIVE">{t.enums.clientStatus.INACTIVE}</option>
+              <option value="PROSPECT">{t.enums.clientStatus.PROSPECT}</option>
+            </select>
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant/60">
+              <span className="material-symbols-outlined text-[16px]">expand_more</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Dossie Tabs Row */}
+        <div className="flex flex-wrap gap-xs border-b border-outline-variant/20 pt-md -mb-4">
+          {tabItems.map((tab, index) => {
+            if (tab.planned) {
+              return (
+                <div
+                  key={index}
+                  className="px-md py-sm border-b-2 border-transparent text-[13px] text-on-surface-variant/35 cursor-not-allowed select-none flex items-center gap-1.5"
+                  title="Módulo planejado"
+                >
+                  <span className="material-symbols-outlined text-[14px]">lock</span>
+                  <span>{tab.label}</span>
+                </div>
+              );
+            }
+            return (
+              <button
+                key={index}
+                onClick={() => router.push(tab.path)}
+                className={`px-md py-sm border-b-2 text-[13px] transition-all duration-150 ${
+                  tab.active
+                    ? 'border-primary text-primary font-semibold'
+                    : 'border-transparent text-on-surface-variant hover:text-on-surface hover:border-outline-variant/40'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </header>
 
-      {/* Main Grid */}
-      <div style={styles.layoutGrid}>
-        {/* Left Column: Details & Contacts */}
-        <div style={styles.leftCol}>
-          {/* Company Details */}
-          <section style={styles.card}>
-            <h2 style={styles.cardTitle}>Dados Cadastrais</h2>
-            <div style={styles.detailsList}>
-              <div style={styles.detailItem}>
-                <span style={styles.detailLabel}>Documento (CNPJ/CPF)</span>
-                <span style={styles.detailValue}>{client.document}</span>
+      {/* Main Grid Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter mt-sm">
+        
+        {/* Left Column: Basic Details & Contacts */}
+        <div className="lg:col-span-8 flex flex-col gap-lg">
+          {/* Cadastral Details Card */}
+          <Card title="Dados Cadastrais">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-md text-[13px] text-on-surface">
+              <div className="flex flex-col gap-xs">
+                <span className="text-[10px] uppercase font-label-caps text-on-surface-variant opacity-60 tracking-wider">
+                  Documento (CNPJ/CPF)
+                </span>
+                <span className="font-mono font-medium text-on-surface">{client.document || '--'}</span>
               </div>
-              <div style={styles.detailItem}>
-                <span style={styles.detailLabel}>E-mail Comercial</span>
-                <span style={styles.detailValue}>{client.email}</span>
+              <div className="flex flex-col gap-xs">
+                <span className="text-[10px] uppercase font-label-caps text-on-surface-variant opacity-60 tracking-wider">
+                  E-mail Comercial
+                </span>
+                <span className="font-medium text-on-surface truncate">{client.email || '--'}</span>
               </div>
-              <div style={styles.detailItem}>
-                <span style={styles.detailLabel}>Telefone Comercial</span>
-                <span style={styles.detailValue}>{client.phone}</span>
+              <div className="flex flex-col gap-xs">
+                <span className="text-[10px] uppercase font-label-caps text-on-surface-variant opacity-60 tracking-wider">
+                  Telefone Comercial
+                </span>
+                <span className="font-mono font-medium text-on-surface">{client.phone || '--'}</span>
               </div>
               {client.website && (
-                <div style={styles.detailItem}>
-                  <span style={styles.detailLabel}>Website</span>
-                  <a href={client.website} target="_blank" rel="noreferrer" style={styles.detailLink}>
+                <div className="flex flex-col gap-xs md:col-span-3 border-t border-outline-variant/20 pt-sm mt-xs">
+                  <span className="text-[10px] uppercase font-label-caps text-on-surface-variant opacity-60 tracking-wider">
+                    Website Oficial
+                  </span>
+                  <a
+                    href={client.website}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline font-medium break-all"
+                  >
                     {client.website}
                   </a>
                 </div>
               )}
             </div>
+
             {client.notes && (
-              <div style={styles.notesSection}>
-                <h3 style={styles.notesTitle}>Observações</h3>
-                <p style={styles.notesText}>{client.notes}</p>
+              <div className="border-t border-outline-variant/30 pt-md mt-md flex flex-col gap-1">
+                <h4 className="text-body-sm font-semibold text-on-surface">Observações Internas</h4>
+                <p className="text-[13px] text-on-surface-variant/80 leading-relaxed font-body-sm whitespace-pre-line">
+                  {client.notes}
+                </p>
               </div>
             )}
-          </section>
+          </Card>
 
-          {/* Contacts CRUD */}
-          <section style={styles.card}>
-            <div style={styles.cardHeader}>
-              <h2 style={styles.cardTitle}>Contatos</h2>
-              {!showContactForm && (
-                <Button variant="secondary" onClick={() => setShowContactForm(true)}>
+          {/* Contact Manager Card */}
+          <Card
+            title="Contatos e Pontos Focais"
+            headerAction={
+              !showContactForm && (
+                <Button variant="secondary" onClick={() => setShowContactForm(true)} className="py-1">
                   + Novo Contato
                 </Button>
-              )}
-            </div>
-
+              )
+            }
+          >
             {showContactForm && (
-              <form onSubmit={handleContactSubmit} style={styles.contactForm}>
-                <h3 style={styles.formTitle}>
+              <form onSubmit={handleContactSubmit} className="mb-lg p-md bg-surface-container-low border border-outline-variant/60 rounded-xl flex flex-col gap-md animate-in fade-in duration-200">
+                <h4 className="font-semibold text-body-sm text-on-surface border-b border-outline-variant/30 pb-xs">
                   {editingContactId ? 'Editar Contato' : 'Cadastrar Novo Contato'}
-                </h3>
-                {contactError && <div style={styles.formError}>{contactError}</div>}
+                </h4>
+                
+                {contactError && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-sm rounded text-[12px]">
+                    {contactError}
+                  </div>
+                )}
 
-                <div style={styles.formGrid}>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Nome Completo *</label>
-                    <input
-                      type="text"
-                      value={contactName}
-                      onChange={(e) => setContactName(e.target.value)}
-                      style={styles.input}
-                      required
-                      disabled={contactSaving}
-                    />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>E-mail *</label>
-                    <input
-                      type="email"
-                      value={contactEmail}
-                      onChange={(e) => setContactEmail(e.target.value)}
-                      style={styles.input}
-                      required
-                      disabled={contactSaving}
-                    />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Telefone Fixo</label>
-                    <input
-                      type="text"
-                      value={contactPhone}
-                      onChange={(e) => setContactPhone(e.target.value)}
-                      style={styles.input}
-                      disabled={contactSaving}
-                    />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>WhatsApp / Celular</label>
-                    <input
-                      type="text"
-                      value={contactMobile}
-                      onChange={(e) => setContactMobile(e.target.value)}
-                      style={styles.input}
-                      disabled={contactSaving}
-                    />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Cargo</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Diretor de TI"
-                      value={contactRole}
-                      onChange={(e) => setContactRole(e.target.value)}
-                      style={styles.input}
-                      disabled={contactSaving}
-                    />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Departamento</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Tecnologia"
-                      value={contactDept}
-                      onChange={(e) => setContactDept(e.target.value)}
-                      style={styles.input}
-                      disabled={contactSaving}
-                    />
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                  <Input
+                    label="Nome Completo *"
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    required
+                    disabled={contactSaving}
+                  />
+
+                  <Input
+                    label="E-mail *"
+                    type="email"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    required
+                    disabled={contactSaving}
+                  />
+
+                  <Input
+                    label="Telefone Fixo"
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    disabled={contactSaving}
+                  />
+
+                  <Input
+                    label="WhatsApp / Celular"
+                    value={contactMobile}
+                    onChange={(e) => setContactMobile(e.target.value)}
+                    disabled={contactSaving}
+                  />
+
+                  <Input
+                    label="Cargo"
+                    placeholder="Ex: Diretor de TI"
+                    value={contactRole}
+                    onChange={(e) => setContactRole(e.target.value)}
+                    disabled={contactSaving}
+                  />
+
+                  <Input
+                    label="Departamento"
+                    placeholder="Ex: Tecnologia"
+                    value={contactDept}
+                    onChange={(e) => setContactDept(e.target.value)}
+                    disabled={contactSaving}
+                  />
                 </div>
 
-                <div style={styles.checkboxGroup}>
+                <div className="flex items-center gap-sm mt-xs">
                   <input
                     type="checkbox"
                     id="isPrimary"
                     checked={contactPrimary}
                     onChange={(e) => setContactPrimary(e.target.checked)}
                     disabled={contactSaving}
+                    className="w-4 h-4 rounded border-outline-variant bg-surface text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer"
                   />
-                  <label htmlFor="isPrimary" style={styles.checkboxLabel}>
+                  <label htmlFor="isPrimary" className="text-[12px] text-on-surface-variant cursor-pointer select-none">
                     Este é o contato principal (SLA & Notificações de chamados)
                   </label>
                 </div>
 
-                <div style={styles.formActions}>
-                  <Button type="button" variant="outline" onClick={resetContactForm} disabled={contactSaving}>
-                    Cancelar
+                <div className="flex justify-end gap-sm border-t border-outline-variant/30 pt-md mt-xs">
+                  <Button type="button" variant="outline" onClick={resetContactForm} disabled={contactSaving} className="py-1 px-4 text-xs">
+                    {t.common.cancel}
                   </Button>
-                  <Button type="submit" variant="primary" disabled={contactSaving}>
-                    {contactSaving ? 'Salvando...' : 'Salvar Contato'}
+                  <Button type="submit" variant="primary" loading={contactSaving} className="py-1 px-4 text-xs">
+                    {editingContactId ? t.common.save : 'Adicionar'}
                   </Button>
                 </div>
               </form>
             )}
 
             {contacts.length === 0 ? (
-              <div style={styles.emptyContacts}>Nenhum contato cadastrado para este cliente.</div>
+              <p className="text-[13px] text-on-surface-variant/60 italic text-center py-lg">
+                Nenhum contato cadastrado para este cliente.
+              </p>
             ) : (
-              <div style={styles.contactsList}>
+              <div className="flex flex-col gap-sm">
                 {contacts.map((contact) => (
-                  <div key={contact.id} style={styles.contactItem}>
-                    <div style={styles.contactHeader}>
-                      <div style={styles.contactMeta}>
-                        <span style={styles.contactName}>{contact.name}</span>
-                        {contact.isPrimary && <span style={styles.primaryBadge}>Principal</span>}
+                  <div
+                    key={contact.id}
+                    className="p-md bg-surface-container-low border border-outline-variant/30 rounded-xl flex flex-col md:flex-row md:justify-between md:items-center gap-md hover:bg-surface-container transition-colors duration-150 group"
+                  >
+                    <div className="flex flex-col gap-xs">
+                      <div className="flex items-center gap-sm">
+                        <span className="font-semibold text-on-surface text-body-sm">{contact.name}</span>
+                        {contact.isPrimary && <Badge variant="success">Principal</Badge>}
                       </div>
-                      <div style={styles.contactActions}>
-                        <span onClick={() => handleEditContact(contact)} style={styles.actionLink}>
-                          Editar
-                        </span>
-                        <span onClick={() => handleDeleteContact(contact.id)} style={styles.deleteLink}>
-                          Excluir
-                        </span>
+                      <div className="text-[12px] text-on-surface-variant/80 flex flex-wrap gap-xs">
+                        {contact.role && <span>{contact.role} &bull; </span>}
+                        {contact.department && <span>{contact.department} &bull; </span>}
+                        <span className="font-mono">{contact.email}</span>
+                        {(contact.phone || contact.mobile) && (
+                          <span className="font-mono"> &bull; Tel: {contact.phone || contact.mobile}</span>
+                        )}
                       </div>
                     </div>
 
-                    <div style={styles.contactSub}>
-                      {contact.role && <span>{contact.role} &bull; </span>}
-                      {contact.department && <span>{contact.department} &bull; </span>}
-                      <span>{contact.email}</span>
-                      {(contact.phone || contact.mobile) && (
-                        <span> &bull; Tel: {contact.phone || contact.mobile}</span>
-                      )}
+                    <div className="flex gap-md text-[12px] self-end md:self-center opacity-80 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleEditContact(contact)}
+                        className="text-primary hover:underline font-medium"
+                      >
+                        {t.common.edit}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteContact(contact.id)}
+                        className="text-error hover:underline font-medium"
+                      >
+                        Excluir
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </section>
+          </Card>
         </div>
 
-        {/* Right Column: Active Navigation Cards */}
-        <div style={styles.rightCol}>
-          <section style={{ ...styles.card, padding: '24px', gap: '8px' }}>
-            <h2 style={{ fontSize: '15px', fontWeight: 600, color: '#3b82f6' }}>Inventário Técnico</h2>
-            <p style={{ fontSize: '12px', color: '#9ca3af', lineHeight: 1.4 }}>Dispositivos, servidores, licenças e computadores cadastrados.</p>
-            <Button variant="outline" onClick={() => router.push(`/dashboard/clients/${clientId}/inventory`)} style={{ alignSelf: 'flex-start', marginTop: '8px', fontSize: '12px', padding: '6px 12px' }}>
+        {/* Right Column: Tab Shortcuts & Phase 2 Modules */}
+        <div className="lg:col-span-4 flex flex-col gap-lg">
+          {/* Technical Inventory Shortcut */}
+          <section className="bg-surface border border-outline-variant rounded-xl p-lg flex flex-col gap-sm shadow-xl shadow-black/25">
+            <h4 className="font-semibold text-sm text-primary tracking-tight">Inventário Técnico</h4>
+            <p className="text-[12px] text-on-surface-variant/80 leading-relaxed font-body-sm">
+              Dispositivos, servidores, licenças e computadores cadastrados e vinculados.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/dashboard/clients/${clientId}/inventory`)}
+              className="py-1 px-4 self-start mt-xs"
+            >
               Ver Inventário
             </Button>
           </section>
 
-          <section style={{ ...styles.card, padding: '24px', gap: '8px' }}>
-            <h2 style={{ fontSize: '15px', fontWeight: 600, color: '#3b82f6' }}>Chamados & SLAs</h2>
-            <p style={{ fontSize: '12px', color: '#9ca3af', lineHeight: 1.4 }}>Histórico de suporte técnico e chamados de helpdesk em aberto.</p>
-            <Button variant="outline" onClick={() => router.push(`/dashboard/clients/${clientId}/tickets`)} style={{ alignSelf: 'flex-start', marginTop: '8px', fontSize: '12px', padding: '6px 12px' }}>
+          {/* Tickets Shortcut */}
+          <section className="bg-surface border border-outline-variant rounded-xl p-lg flex flex-col gap-sm shadow-xl shadow-black/25">
+            <h4 className="font-semibold text-sm text-primary tracking-tight">Chamados & SLAs</h4>
+            <p className="text-[12px] text-on-surface-variant/80 leading-relaxed font-body-sm">
+              Histórico de suporte técnico e chamados de helpdesk em aberto.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/dashboard/clients/${clientId}/tickets`)}
+              className="py-1 px-4 self-start mt-xs"
+            >
               Ver Chamados
             </Button>
           </section>
 
-          <section style={styles.cardPlaceholder}>
-            <h2 style={styles.placeholderTitle}>Faturas & SLAs (Fase 2)</h2>
-            <p style={styles.placeholderText}>Contratos ativos, orçamentos emitidos e SLAs acordados.</p>
-            <div style={styles.placeholderBadge}>Em Breve</div>
+          {/* Planned Contracts / Finance Box */}
+          <section className="bg-surface-container-lowest border border-outline-variant/40 border-dashed rounded-xl p-lg flex flex-col gap-sm relative">
+            <div className="flex items-center gap-sm">
+              <span className="material-symbols-outlined text-[16px] text-on-surface-variant/60">lock</span>
+              <h4 className="font-semibold text-sm text-on-surface-variant opacity-70">Contratos & SLAs</h4>
+            </div>
+            <p className="text-[12px] text-on-surface-variant/50 leading-relaxed font-body-sm">
+              Contratos ativos, termos de SLA, orçamentos e recorrência comercial.
+            </p>
+            <span className="absolute top-lg right-lg text-[9px] bg-secondary-container/20 text-on-secondary-container px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">
+              {t.common.planned}
+            </span>
           </section>
         </div>
+
       </div>
+
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '32px',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '20px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingBottom: '24px',
-  },
-  backBtn: {
-    padding: '8px 16px',
-    fontSize: '13px',
-  },
-  titleArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    flexGrow: 1,
-  },
-  title: {
-    fontSize: '28px',
-    fontWeight: 800,
-    letterSpacing: '-0.5px',
-  },
-  legalName: {
-    fontSize: '13px',
-    color: '#9ca3af',
-  },
-  statusActions: {
-    display: 'flex',
-    gap: '12px',
-  },
-  statusSelect: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '8px 16px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  layoutGrid: {
-    display: 'grid',
-    gridTemplateColumns: '7fr 5fr',
-    gap: '32px',
-  },
-  leftCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '32px',
-  },
-  rightCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  card: {
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
-    padding: '32px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  cardTitle: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: '#f9fafb',
-  },
-  detailsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '14px',
-  },
-  detailItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  detailLabel: {
-    fontSize: '11px',
-    fontWeight: 500,
-    color: '#9ca3af',
-    textTransform: 'uppercase',
-  },
-  detailValue: {
-    fontSize: '14px',
-    color: '#f9fafb',
-  },
-  detailLink: {
-    fontSize: '14px',
-    color: '#3b82f6',
-    textDecoration: 'none',
-  },
-  notesSection: {
-    marginTop: '12px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingTop: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  notesTitle: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#d1d5db',
-  },
-  notesText: {
-    fontSize: '13px',
-    color: '#9ca3af',
-    lineHeight: 1.5,
-  },
-  emptyContacts: {
-    color: '#9ca3af',
-    fontSize: '14px',
-    textAlign: 'center',
-    padding: '24px 0',
-  },
-  contactsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  contactItem: {
-    padding: '16px',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
-    borderRadius: '8px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  contactHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  contactMeta: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  contactName: {
-    fontWeight: 600,
-    fontSize: '14px',
-  },
-  primaryBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    border: '1px solid rgba(16, 185, 129, 0.2)',
-    color: '#34d399',
-    fontSize: '11px',
-    padding: '2px 8px',
-    borderRadius: '4px',
-    fontWeight: 500,
-  },
-  contactActions: {
-    display: 'flex',
-    gap: '12px',
-    fontSize: '13px',
-  },
-  actionLink: {
-    color: '#3b82f6',
-    cursor: 'pointer',
-  },
-  deleteLink: {
-    color: '#f87171',
-    cursor: 'pointer',
-  },
-  contactSub: {
-    fontSize: '12px',
-    color: '#9ca3af',
-    lineHeight: 1.4,
-  },
-  cardPlaceholder: {
-    backgroundColor: 'rgba(17, 24, 39, 0.4)',
-    border: '1px dashed rgba(255, 255, 255, 0.1)',
-    borderRadius: '12px',
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    position: 'relative',
-  },
-  placeholderTitle: {
-    fontSize: '15px',
-    fontWeight: 600,
-    color: '#9ca3af',
-  },
-  placeholderText: {
-    fontSize: '12px',
-    color: '#6b7280',
-    lineHeight: 1.4,
-  },
-  placeholderBadge: {
-    position: 'absolute',
-    top: '24px',
-    right: '24px',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    padding: '2px 8px',
-    borderRadius: '4px',
-    fontSize: '11px',
-    color: '#9ca3af',
-  },
-  loading: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: '200px',
-    color: '#9ca3af',
-  },
-  errorContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '16px',
-    padding: '40px 24px',
-  },
-  contactForm: {
-    padding: '20px',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.06)',
-    borderRadius: '8px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-    marginBottom: '16px',
-  },
-  formTitle: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#f9fafb',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingBottom: '8px',
-  },
-  formGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '12px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  formLabel: {
-    fontSize: '11px',
-    color: '#d1d5db',
-  },
-  input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '6px',
-    padding: '8px 12px',
-    fontSize: '13px',
-    color: '#f9fafb',
-    outline: 'none',
-  },
-  checkboxGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  checkboxLabel: {
-    fontSize: '12px',
-    color: '#9ca3af',
-    cursor: 'pointer',
-  },
-  formActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '8px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingTop: '12px',
-  },
-  formError: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    color: '#fca5a5',
-    padding: '10px 14px',
-    borderRadius: '6px',
-    fontSize: '12px',
-  },
-};

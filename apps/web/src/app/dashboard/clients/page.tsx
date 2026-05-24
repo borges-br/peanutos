@@ -2,11 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
-import { Button } from '@peanut/ui';
 import { useRouter } from 'next/navigation';
+import { useI18n } from '../../../i18n/useI18n';
+import Button from '../../../components/ui/Button';
+import Badge from '../../../components/ui/Badge';
+import Input from '../../../components/ui/Input';
+import Select from '../../../components/ui/Select';
+import DataTable from '../../../components/ui/DataTable';
+import EmptyState from '../../../components/ui/EmptyState';
+import ErrorState from '../../../components/ui/ErrorState';
 
 export default function ClientsPage() {
   const router = useRouter();
+  const { t } = useI18n();
+
   const [clients, setClients] = useState<any[]>([]);
   const [meta, setMeta] = useState<any>({ page: 1, totalPages: 1, total: 0 });
   const [search, setSearch] = useState('');
@@ -25,7 +34,7 @@ export default function ClientsPage() {
       setClients(response.data);
       setMeta(response.meta);
     } catch (err: any) {
-      setError(err.message || 'Falha ao buscar dados dos clientes.');
+      setError(err.message || t.states.errorTitle);
     } finally {
       setLoading(false);
     }
@@ -41,341 +50,225 @@ export default function ClientsPage() {
     fetchClients();
   };
 
+  const handleClearFilters = () => {
+    setSearch('');
+    setStatus('');
+    setPage(1);
+  };
+
+  // DataTable column definitions
+  const columns = [
+    {
+      header: `${t.clients.tradeName} / ${t.clients.legalName}`,
+      render: (client: any) => (
+        <div className="flex flex-col py-0.5">
+          <span className="font-semibold text-on-surface">{client.tradeName}</span>
+          <span className="text-[11px] text-on-surface-variant/70 mt-0.5">{client.legalName}</span>
+        </div>
+      ),
+    },
+    {
+      header: t.clients.document,
+      render: (client: any) => (
+        <span className="font-mono text-technical-data text-on-surface-variant">
+          {client.document || '--'}
+        </span>
+      ),
+    },
+    {
+      header: t.clients.emailPhone,
+      render: (client: any) => (
+        <div className="flex flex-col py-0.5">
+          <span className="text-on-surface">{client.email || '--'}</span>
+          <span className="text-[11px] text-on-surface-variant/70 mt-0.5 font-mono">{client.phone || '--'}</span>
+        </div>
+      ),
+    },
+    {
+      header: t.common.status,
+      render: (client: any) => {
+        const badgeVariant =
+          client.status === 'ACTIVE'
+            ? 'success'
+            : client.status === 'PROSPECT'
+            ? 'warning'
+            : 'neutral';
+        const label =
+          t.enums.clientStatus[client.status as keyof typeof t.enums.clientStatus] || client.status;
+        return <Badge variant={badgeVariant}>{label}</Badge>;
+      },
+    },
+    {
+      header: t.common.actions,
+      className: "text-right",
+      render: (client: any) => (
+        <Button
+          variant="outline"
+          onClick={() => router.push(`/dashboard/clients/${client.id}`)}
+          className="py-1 px-3"
+        >
+          {t.common.details}
+        </Button>
+      ),
+    },
+  ];
+
+  // Mobile stacked cards renderer
+  const renderMobileCard = (client: any) => {
+    const badgeVariant =
+      client.status === 'ACTIVE'
+        ? 'success'
+        : client.status === 'PROSPECT'
+        ? 'warning'
+        : 'neutral';
+    const label =
+      t.enums.clientStatus[client.status as keyof typeof t.enums.clientStatus] || client.status;
+
+    return (
+      <div className="flex flex-col gap-sm">
+        <div className="flex justify-between items-start">
+          <div className="flex flex-col">
+            <span className="font-bold text-on-surface">{client.tradeName}</span>
+            <span className="text-[11px] text-on-surface-variant/70">{client.legalName}</span>
+          </div>
+          <Badge variant={badgeVariant}>{label}</Badge>
+        </div>
+        <div className="h-[1px] bg-outline-variant/30 my-xs"></div>
+        <div className="grid grid-cols-2 gap-xs text-[12px]">
+          <div className="flex flex-col">
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Documento</span>
+            <span className="font-mono mt-0.5">{client.document || '--'}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Contato</span>
+            <span className="truncate mt-0.5">{client.email || '--'}</span>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => router.push(`/dashboard/clients/${client.id}`)}
+          className="w-full mt-sm justify-center py-2"
+        >
+          {t.common.details}
+        </Button>
+      </div>
+    );
+  };
+
+  const statusOptions = [
+    { value: '', label: 'Todos os status' },
+    { value: 'ACTIVE', label: t.enums.clientStatus.ACTIVE },
+    { value: 'INACTIVE', label: t.enums.clientStatus.INACTIVE },
+    { value: 'PROSPECT', label: t.enums.clientStatus.PROSPECT },
+  ];
+
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <div style={styles.headerTitleArea}>
-          <h1 style={styles.title}>Clientes</h1>
-          <p style={styles.subtitle}>Gerencie e acompanhe todos os parceiros e clientes.</p>
+    <div className="flex flex-col gap-lg select-none">
+      {/* Page Header */}
+      <header className="flex justify-between items-center w-full">
+        <div className="flex flex-col gap-xs">
+          <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
+            {t.clients.title}
+          </h2>
+          <p className="text-[14px] text-on-surface-variant">
+            {t.clients.subtitle}
+          </p>
         </div>
         <Button variant="primary" onClick={() => router.push('/dashboard/clients/new')}>
-          + Novo Cliente
+          <span className="material-symbols-outlined text-[16px] mr-1.5">person_add</span>
+          {t.navigation.newClient}
         </Button>
       </header>
 
-      {/* Filters & Search */}
-      <div style={styles.filtersBar}>
-        <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
-          <input
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col md:flex-row gap-md justify-between items-stretch md:items-center bg-surface border border-outline-variant p-md rounded-xl shadow-lg">
+        <form onSubmit={handleSearchSubmit} className="flex gap-sm flex-1 max-w-xl">
+          <Input
             type="text"
-            placeholder="Buscar por razão social, nome fantasia, CNPJ/CPF ou e-mail..."
+            placeholder={t.common.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={styles.searchInput}
+            className="flex-1"
           />
-          <Button type="submit" variant="secondary" style={styles.searchBtn}>
+          <Button type="submit" variant="secondary" className="px-5">
             Buscar
           </Button>
         </form>
 
-        <select
-          value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPage(1);
-          }}
-          style={styles.filterSelect}
-        >
-          <option value="">Todos os status</option>
-          <option value="ACTIVE">Ativo</option>
-          <option value="INACTIVE">Inativo</option>
-          <option value="PROSPECT">Prospecto</option>
-        </select>
+        <div className="flex gap-sm items-center">
+          <Select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+            options={statusOptions}
+            className="min-w-[160px]"
+          />
+          {(search || status) && (
+            <Button variant="ghost" onClick={handleClearFilters} className="text-error/80 hover:text-error">
+              {t.common.clearFilters}
+            </Button>
+          )}
+        </div>
       </div>
 
-      {error && <div style={styles.errorAlert}>{error}</div>}
+      {error && <ErrorState onRetry={fetchClients} />}
 
-      {/* Table */}
-      {loading ? (
-        <div style={styles.loadingArea}>
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} style={styles.skeletonRow} />
-          ))}
-        </div>
-      ) : clients.length === 0 ? (
-        <div style={styles.emptyState}>
-          <p style={styles.emptyText}>Nenhum cliente cadastrado ou encontrado.</p>
-          <Button variant="outline" onClick={() => router.push('/dashboard/clients/new')}>
-            Cadastrar primeiro cliente
-          </Button>
-        </div>
-      ) : (
-        <div style={styles.tableWrapper}>
-          <table style={styles.table}>
-            <thead>
-              <tr style={styles.thRow}>
-                <th style={styles.th}>Nome Fantasia / Razão Social</th>
-                <th style={styles.th}>Documento</th>
-                <th style={styles.th}>E-mail / Telefone</th>
-                <th style={styles.th}>Status</th>
-                <th style={styles.th}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((client) => (
-                <tr key={client.id} style={styles.tr}>
-                  <td style={styles.td}>
-                    <div style={styles.clientNames}>
-                      <span style={styles.tradeName}>{client.tradeName}</span>
-                      <span style={styles.legalName}>{client.legalName}</span>
-                    </div>
-                  </td>
-                  <td style={styles.td}>{client.document}</td>
-                  <td style={styles.td}>
-                    <div style={styles.clientContact}>
-                      <span>{client.email}</span>
-                      <span style={styles.phone}>{client.phone}</span>
-                    </div>
-                  </td>
-                  <td style={styles.td}>
-                    <span
-                      style={{
-                        ...styles.statusBadge,
-                        backgroundColor:
-                          client.status === 'ACTIVE'
-                            ? 'rgba(16, 185, 129, 0.1)'
-                            : client.status === 'PROSPECT'
-                            ? 'rgba(245, 158, 11, 0.1)'
-                            : 'rgba(239, 68, 68, 0.1)',
-                        color:
-                          client.status === 'ACTIVE'
-                            ? '#34d399'
-                            : client.status === 'PROSPECT'
-                            ? '#fbbf24'
-                            : '#f87171',
-                        borderColor:
-                          client.status === 'ACTIVE'
-                            ? 'rgba(16, 185, 129, 0.2)'
-                            : client.status === 'PROSPECT'
-                            ? 'rgba(245, 158, 11, 0.2)'
-                            : 'rgba(239, 68, 68, 0.2)',
-                      }}
-                    >
-                      {client.status === 'ACTIVE'
-                        ? 'Ativo'
-                        : client.status === 'PROSPECT'
-                        ? 'Prospecto'
-                        : 'Inativo'}
-                    </span>
-                  </td>
-                  <td style={styles.td}>
-                    <Button variant="outline" onClick={() => router.push(`/dashboard/clients/${client.id}`)}>
-                      Ver Detalhes
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Data Section */}
+      {!error && (
+        loading ? (
+          <div className="flex flex-col gap-sm">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-10 bg-surface-container-low border border-outline-variant/30 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : clients.length === 0 ? (
+          <EmptyState
+            title={t.states.emptyTitle}
+            description={t.states.emptyDescription}
+            action={
+              <Button variant="primary" onClick={() => router.push('/dashboard/clients/new')}>
+                {t.navigation.newClient}
+              </Button>
+            }
+          />
+        ) : (
+          <div className="flex flex-col gap-md">
+            <DataTable
+              columns={columns}
+              data={clients}
+              mobileRender={renderMobileCard}
+              rowKey={(client) => client.id}
+            />
 
-          {/* Pagination */}
-          <div style={styles.pagination}>
-            <span style={styles.pageInfo}>
-              Mostrando {clients.length} de {meta.total} clientes (Pág. {meta.page} de {meta.totalPages})
-            </span>
-            <div style={styles.paginationBtns}>
-              <Button
-                variant="outline"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                style={styles.pageBtn}
-              >
-                Anterior
-              </Button>
-              <Button
-                variant="outline"
-                disabled={page >= meta.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                style={styles.pageBtn}
-              >
-                Próximo
-              </Button>
+            {/* Pagination Controls */}
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-md border-t border-outline-variant/30 pt-md px-md">
+              <span className="text-[13px] text-on-surface-variant font-mono">
+                Mostrando {clients.length} de {meta.total} clientes (Pág. {meta.page} de {meta.totalPages})
+              </span>
+              <div className="flex gap-sm">
+                <Button
+                  variant="outline"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  className="py-1 px-4 text-xs"
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={page >= meta.totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="py-1 px-4 text-xs"
+                >
+                  Próximo
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        )
       )}
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitleArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  title: {
-    fontSize: '28px',
-    fontWeight: 800,
-    letterSpacing: '-0.5px',
-  },
-  subtitle: {
-    fontSize: '14px',
-    color: '#9ca3af',
-  },
-  filtersBar: {
-    display: 'flex',
-    gap: '16px',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: 'rgba(17, 24, 39, 0.5)',
-    padding: '16px',
-    borderRadius: '12px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-  },
-  searchForm: {
-    display: 'flex',
-    gap: '8px',
-    flexGrow: 1,
-    maxWidth: '600px',
-  },
-  searchInput: {
-    flexGrow: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '8px 12px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-  },
-  searchBtn: {
-    padding: '8px 16px',
-    fontSize: '14px',
-  },
-  filterSelect: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '8px 16px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  tableWrapper: {
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
-    overflow: 'hidden',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    textAlign: 'left',
-  },
-  thRow: {
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-  },
-  th: {
-    padding: '16px 24px',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#d1d5db',
-  },
-  tr: {
-    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
-    transition: 'all 0.2s',
-  },
-  td: {
-    padding: '16px 24px',
-    fontSize: '14px',
-    verticalAlign: 'middle',
-  },
-  clientNames: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  tradeName: {
-    fontWeight: 600,
-    color: '#f9fafb',
-  },
-  legalName: {
-    fontSize: '12px',
-    color: '#9ca3af',
-    marginTop: '2px',
-  },
-  clientContact: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  phone: {
-    fontSize: '12px',
-    color: '#9ca3af',
-    marginTop: '2px',
-  },
-  statusBadge: {
-    padding: '4px 10px',
-    borderRadius: '6px',
-    fontSize: '12px',
-    fontWeight: 500,
-    border: '1px solid',
-    display: 'inline-block',
-  },
-  pagination: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '16px 24px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-  },
-  pageInfo: {
-    fontSize: '13px',
-    color: '#9ca3af',
-  },
-  paginationBtns: {
-    display: 'flex',
-    gap: '8px',
-  },
-  pageBtn: {
-    padding: '6px 12px',
-    fontSize: '12px',
-  },
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '80px 24px',
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    borderRadius: '12px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    gap: '16px',
-  },
-  emptyText: {
-    color: '#9ca3af',
-    fontSize: '15px',
-  },
-  errorAlert: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    color: '#fca5a5',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    fontSize: '13px',
-  },
-  loadingArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  skeletonRow: {
-    height: '60px',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
-    borderRadius: '12px',
-    animation: 'pulse 1.5s infinite ease-in-out',
-  },
-};

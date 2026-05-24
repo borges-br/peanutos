@@ -46,3 +46,9 @@ Thumbs.db
 
 # Local docker files and persistent volumes
 /infra/docker/volumes/
+
+# Referencias visuais
+/reference/
+
+# Prompts para IA
+/prompts/

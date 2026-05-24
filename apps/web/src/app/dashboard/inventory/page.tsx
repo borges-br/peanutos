@@ -2,11 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
-import { Button } from '@peanut/ui';
 import { useRouter } from 'next/navigation';
+import { useI18n } from '../../../i18n/useI18n';
+import Button from '../../../components/ui/Button';
+import Badge from '../../../components/ui/Badge';
+import Input from '../../../components/ui/Input';
+import Select from '../../../components/ui/Select';
+import DataTable from '../../../components/ui/DataTable';
+import EmptyState from '../../../components/ui/EmptyState';
+import ErrorState from '../../../components/ui/ErrorState';
 
 export default function InventoryPage() {
   const router = useRouter();
+  const { t } = useI18n();
+
   const [assets, setAssets] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [meta, setMeta] = useState<any>({ page: 1, totalPages: 1, total: 0 });
@@ -45,7 +54,7 @@ export default function InventoryPage() {
       setAssets(response.data || []);
       setMeta(response.meta || { page: 1, totalPages: 1, total: 0 });
     } catch (err: any) {
-      setError(err.message || 'Falha ao buscar dados do inventário.');
+      setError(err.message || t.states.errorTitle);
     } finally {
       setLoading(false);
     }
@@ -65,455 +74,298 @@ export default function InventoryPage() {
     fetchAssets();
   };
 
-  const assetTypes = [
-    { value: 'WORKSTATION', label: 'Estação de Trabalho' },
-    { value: 'NOTEBOOK', label: 'Notebook' },
-    { value: 'SERVER', label: 'Servidor' },
-    { value: 'PRINTER', label: 'Impressora' },
-    { value: 'ROUTER', label: 'Roteador' },
-    { value: 'SWITCH', label: 'Switch' },
-    { value: 'ACCESS_POINT', label: 'Access Point' },
-    { value: 'FIREWALL', label: 'Firewall' },
-    { value: 'CAMERA', label: 'Câmera IP' },
-    { value: 'NVR', label: 'NVR / DVR' },
-    { value: 'UPS', label: 'Nobreak (UPS)' },
-    { value: 'RACK', label: 'Rack' },
-    { value: 'NAS', label: 'Storage NAS' },
-    { value: 'MOBILE_DEVICE', label: 'Dispositivo Móvel' },
-    { value: 'VIRTUAL_MACHINE', label: 'Máquina Virtual' },
-    { value: 'CLOUD_SERVICE', label: 'Serviço em Nuvem' },
-    { value: 'LICENSE', label: 'Licença Geral' },
-    { value: 'SOFTWARE_LICENSE', label: 'Licença de Software' },
-    { value: 'VPN', label: 'Túnel VPN' },
-    { value: 'STORAGE', label: 'Armazenamento' },
-    { value: 'OTHER', label: 'Outro' },
+  const handleClearFilters = () => {
+    setSearch('');
+    setClientId('');
+    setType('');
+    setStatus('');
+    setPage(1);
+  };
+
+  // Convert raw status & type values to localized labels
+  const getLocalizedType = (val: string) => {
+    return t.enums.assetType[val as keyof typeof t.enums.assetType] || val;
+  };
+
+  const getLocalizedStatus = (val: string) => {
+    return t.enums.assetStatus[val as keyof typeof t.enums.assetStatus] || val;
+  };
+
+  const getStatusVariant = (val: string) => {
+    switch (val) {
+      case 'OPERATIONAL': return 'success';
+      case 'MAINTENANCE': return 'warning';
+      case 'OUT_OF_STANDARD': return 'error';
+      case 'STOCK': return 'info';
+      case 'LOST': return 'purple';
+      default: return 'neutral';
+    }
+  };
+
+  // DataTable column definitions
+  const columns = [
+    {
+      header: `${t.inventory.title} / ${t.inventory.hostname}`,
+      render: (asset: any) => (
+        <div className="flex flex-col py-0.5">
+          <span className="font-semibold text-on-surface">{asset.name}</span>
+          {asset.hostname && (
+            <span className="text-[11px] text-primary font-mono mt-0.5">
+              {asset.hostname}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      header: t.inventory.client,
+      render: (asset: any) => (
+        <span className="font-medium text-on-surface">
+          {asset.client?.tradeName || 'N/A'}
+        </span>
+      ),
+    },
+    {
+      header: t.inventory.type,
+      render: (asset: any) => (
+        <Badge variant="neutral">
+          {getLocalizedType(asset.type)}
+        </Badge>
+      ),
+    },
+    {
+      header: t.common.status,
+      render: (asset: any) => (
+        <Badge variant={getStatusVariant(asset.status)}>
+          {getLocalizedStatus(asset.status)}
+        </Badge>
+      ),
+    },
+    {
+      header: t.inventory.assignedUser,
+      render: (asset: any) => (
+        <span className={asset.assignedClientUser ? 'text-on-surface font-medium' : 'text-on-surface-variant/50 italic text-[12px]'}>
+          {asset.assignedClientUser?.fullName || 'Não atribuído'}
+        </span>
+      ),
+    },
+    {
+      header: t.inventory.serialAssetTag,
+      render: (asset: any) => (
+        <div className="flex flex-col py-0.5">
+          <span className="font-mono text-technical-data text-on-surface">
+            {asset.serialNumber || '--'}
+          </span>
+          {asset.assetTag && (
+            <span className="text-[10px] bg-surface-container-highest text-on-surface-variant px-1.5 py-0.2 rounded w-fit mt-0.5 font-mono">
+              {asset.assetTag}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      header: t.inventory.location,
+      render: (asset: any) => (
+        <span className="text-on-surface-variant font-body-sm">
+          {asset.location || '--'}
+        </span>
+      ),
+    },
+    {
+      header: t.common.actions,
+      className: "text-right",
+      render: (asset: any) => (
+        <Button
+          variant="outline"
+          onClick={() => router.push(`/dashboard/clients/${asset.clientId}/assets/${asset.id}`)}
+          className="py-1 px-3"
+        >
+          Visualizar
+        </Button>
+      ),
+    },
   ];
 
-  const assetStatuses = [
-    { value: 'OPERATIONAL', label: 'Operacional', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
-    { value: 'MAINTENANCE', label: 'Em Manutenção', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
-    { value: 'OUT_OF_STANDARD', label: 'Fora de Padrão', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },
-    { value: 'STOCK', label: 'Em Estoque', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
-    { value: 'IN_STOCK', label: 'Em Estoque (Novo)', color: '#60a5fa', bg: 'rgba(96, 165, 250, 0.1)' },
-    { value: 'RETIRED', label: 'Aposentado', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)' },
-    { value: 'SCRAPPED', label: 'Sucateado', color: '#dc2626', bg: 'rgba(220, 38, 38, 0.1)' },
-    { value: 'LOST', label: 'Extraviado', color: '#7c3aed', bg: 'rgba(124, 58, 237, 0.1)' },
-    { value: 'PENDING_VALIDATION', label: 'Pendente Homologação', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
-    { value: 'PENDING_REVIEW', label: 'Em Revisão', color: '#fb7185', bg: 'rgba(251, 113, 133, 0.1)' },
+  // Mobile stacked cards renderer
+  const renderMobileCard = (asset: any) => {
+    return (
+      <div className="flex flex-col gap-sm">
+        <div className="flex justify-between items-start">
+          <div className="flex flex-col">
+            <span className="font-bold text-on-surface">{asset.name}</span>
+            {asset.hostname && <span className="text-[11px] text-primary font-mono">{asset.hostname}</span>}
+          </div>
+          <Badge variant={getStatusVariant(asset.status)}>
+            {getLocalizedStatus(asset.status)}
+          </Badge>
+        </div>
+        <div className="h-[1px] bg-outline-variant/30 my-xs"></div>
+        <div className="grid grid-cols-2 gap-xs text-[12px]">
+          <div className="flex flex-col">
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Cliente</span>
+            <span className="mt-0.5 font-medium">{asset.client?.tradeName || 'N/A'}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Tipo</span>
+            <span className="mt-0.5 truncate">{getLocalizedType(asset.type)}</span>
+          </div>
+          <div className="flex flex-col mt-xs">
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Usuário</span>
+            <span className="truncate mt-0.5 italic text-on-surface-variant/80">
+              {asset.assignedClientUser?.fullName || 'Não atribuído'}
+            </span>
+          </div>
+          <div className="flex flex-col mt-xs">
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Serial</span>
+            <span className="font-mono mt-0.5">{asset.serialNumber || '--'}</span>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => router.push(`/dashboard/clients/${asset.clientId}/assets/${asset.id}`)}
+          className="w-full mt-sm justify-center py-2"
+        >
+          Visualizar
+        </Button>
+      </div>
+    );
+  };
+
+  const clientOptions = [
+    { value: '', label: 'Todos os Clientes' },
+    ...clients.map(c => ({ value: c.id, label: c.tradeName })),
+  ];
+
+  const typeOptions = [
+    { value: '', label: 'Todos os Tipos' },
+    ...Object.entries(t.enums.assetType).map(([key, label]) => ({ value: key, label })),
+  ];
+
+  const statusOptions = [
+    { value: '', label: 'Todos os Status' },
+    ...Object.entries(t.enums.assetStatus).map(([key, label]) => ({ value: key, label })),
   ];
 
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <div style={styles.headerTitleArea}>
-          <h1 style={styles.title}>Inventário Geral</h1>
-          <p style={styles.subtitle}>Gerenciamento centralizado de hardware, licenças e ativos lógicos.</p>
-        </div>
+    <div className="flex flex-col gap-lg select-none">
+      {/* Page Header */}
+      <header className="flex flex-col gap-xs mb-md">
+        <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
+          {t.navigation.technicalInventory}
+        </h2>
+        <p className="text-[14px] text-on-surface-variant">
+          {t.inventory.subtitle}
+        </p>
       </header>
 
-      {/* Filters & Search */}
-      <div style={styles.filtersBar}>
-        <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
-          <input
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col gap-md bg-surface border border-outline-variant p-md rounded-xl shadow-lg">
+        <form onSubmit={handleSearchSubmit} className="flex gap-sm w-full">
+          <Input
             type="text"
-            placeholder="Buscar por nome, host, série, patrimônio ou local..."
+            placeholder={t.common.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={styles.searchInput}
+            className="flex-1"
           />
-          <Button type="submit" variant="secondary" style={styles.searchBtn}>
+          <Button type="submit" variant="secondary" className="px-6">
             Buscar
           </Button>
         </form>
 
-        <div style={styles.selectsRow}>
-          <select
-            value={clientId}
-            onChange={(e) => {
-              setClientId(e.target.value);
-              setPage(1);
-            }}
-            style={styles.filterSelect}
-          >
-            <option value="">Todos os Clientes</option>
-            {clients.map(c => (
-              <option key={c.id} value={c.id}>{c.tradeName}</option>
-            ))}
-          </select>
+        <div className="flex flex-wrap gap-md items-center justify-between w-full">
+          <div className="flex flex-wrap gap-sm items-center flex-1">
+            <Select
+              value={clientId}
+              onChange={(e) => {
+                setClientId(e.target.value);
+                setPage(1);
+              }}
+              options={clientOptions}
+              className="min-w-[160px]"
+            />
 
-          <select
-            value={type}
-            onChange={(e) => {
-              setType(e.target.value);
-              setPage(1);
-            }}
-            style={styles.filterSelect}
-          >
-            <option value="">Todos os Tipos</option>
-            {assetTypes.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
+            <Select
+              value={type}
+              onChange={(e) => {
+                setType(e.target.value);
+                setPage(1);
+              }}
+              options={typeOptions}
+              className="min-w-[160px]"
+            />
 
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPage(1);
-            }}
-            style={styles.filterSelect}
-          >
-            <option value="">Todos os Status</option>
-            {assetStatuses.map(s => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
+            <Select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+              options={statusOptions}
+              className="min-w-[160px]"
+            />
+          </div>
+
+          {(search || clientId || type || status) && (
+            <Button variant="ghost" onClick={handleClearFilters} className="text-error/80 hover:text-error py-1 px-3">
+              {t.common.clearFilters}
+            </Button>
+          )}
         </div>
       </div>
 
-      {error && <div style={styles.errorAlert}>{error}</div>}
+      {error && <ErrorState onRetry={fetchAssets} />}
 
-      {/* Table */}
-      {loading ? (
-        <div style={styles.loadingArea}>
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} style={styles.skeletonRow} />
-          ))}
-        </div>
-      ) : assets.length === 0 ? (
-        <div style={styles.emptyState}>
-          <p style={styles.emptyText}>Nenhum equipamento cadastrado ou encontrado.</p>
-          <p style={{ fontSize: '13px', color: '#6b7280' }}>
-            Para cadastrar novos ativos, acesse a página de um cliente e vá para a aba Inventário.
-          </p>
-        </div>
-      ) : (
-        <div style={styles.tableWrapper}>
-          <table style={styles.table}>
-            <thead>
-              <tr style={styles.thRow}>
-                <th style={styles.th}>Ativo / Hostname</th>
-                <th style={styles.th}>Cliente</th>
-                <th style={styles.th}>Tipo</th>
-                <th style={styles.th}>Status</th>
-                <th style={styles.th}>Usuário Vinculado</th>
-                <th style={styles.th}>Nº Série / Tag</th>
-                <th style={styles.th}>Localização</th>
-                <th style={styles.th}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map((asset) => {
-                const typeObj = assetTypes.find(t => t.value === asset.type);
-                const statusObj = assetStatuses.find(s => s.value === asset.status);
+      {/* Data Section */}
+      {!error && (
+        loading ? (
+          <div className="flex flex-col gap-sm">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-10 bg-surface-container-low border border-outline-variant/30 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : assets.length === 0 ? (
+          <EmptyState
+            title={t.states.emptyTitle}
+            description="Nenhum equipamento cadastrado ou encontrado. Para cadastrar novos ativos, acesse o dossiê de um cliente e vá para a aba de Inventário."
+          />
+        ) : (
+          <div className="flex flex-col gap-md">
+            <DataTable
+              columns={columns}
+              data={assets}
+              mobileRender={renderMobileCard}
+              rowKey={(asset) => asset.id}
+            />
 
-                return (
-                  <tr key={asset.id} style={styles.tr}>
-                    <td style={styles.td}>
-                      <div style={styles.assetNameArea}>
-                        <span style={styles.assetName}>{asset.name}</span>
-                        {asset.hostname && <span style={styles.assetHost}>{asset.hostname}</span>}
-                      </div>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={{ fontWeight: 500 }}>{asset.client?.tradeName || 'N/A'}</span>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={styles.typeBadge}>{typeObj?.label || asset.type}</span>
-                    </td>
-                    <td style={styles.td}>
-                      <span
-                        style={{
-                          ...styles.statusBadge,
-                          backgroundColor: statusObj?.bg || 'rgba(255, 255, 255, 0.05)',
-                          color: statusObj?.color || '#f9fafb',
-                          borderColor: statusObj?.bg || 'transparent',
-                        }}
-                      >
-                        {statusObj?.label || asset.status}
-                      </span>
-                    </td>
-                    <td style={styles.td}>
-                      {asset.assignedClientUser ? (
-                        <span style={styles.assignedUser}>{asset.assignedClientUser.fullName}</span>
-                      ) : (
-                        <span style={styles.unassignedUser}>Não atribuído</span>
-                      )}
-                    </td>
-                    <td style={styles.td}>
-                      <div style={styles.serialTagArea}>
-                        {asset.serialNumber ? (
-                          <span style={styles.serial}>{asset.serialNumber}</span>
-                        ) : (
-                          <span style={styles.emptyTextField}>Sem serial</span>
-                        )}
-                        {asset.assetTag && <span style={styles.tag}>{asset.assetTag}</span>}
-                      </div>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={{ color: '#9ca3af' }}>{asset.location || '-'}</span>
-                    </td>
-                    <td style={styles.td}>
-                      <Button
-                        variant="outline"
-                        onClick={() => router.push(`/dashboard/clients/${asset.clientId}/assets/${asset.id}`)}
-                      >
-                        Visualizar
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {/* Pagination */}
-          <div style={styles.pagination}>
-            <span style={styles.pageInfo}>
-              Mostrando {assets.length} de {meta.total} ativos (Pág. {meta.page} de {meta.totalPages})
-            </span>
-            <div style={styles.paginationBtns}>
-              <Button
-                variant="outline"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                style={styles.pageBtn}
-              >
-                Anterior
-              </Button>
-              <Button
-                variant="outline"
-                disabled={page >= meta.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                style={styles.pageBtn}
-              >
-                Próximo
-              </Button>
+            {/* Pagination Controls */}
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-md border-t border-outline-variant/30 pt-md px-md">
+              <span className="text-[13px] text-on-surface-variant font-mono">
+                Mostrando {assets.length} de {meta.total} ativos (Pág. {meta.page} de {meta.totalPages})
+              </span>
+              <div className="flex gap-sm">
+                <Button
+                  variant="outline"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  className="py-1 px-4 text-xs"
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={page >= meta.totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="py-1 px-4 text-xs"
+                >
+                  Próximo
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        )
       )}
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitleArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  title: {
-    fontSize: '28px',
-    fontWeight: 800,
-    letterSpacing: '-0.5px',
-  },
-  subtitle: {
-    fontSize: '14px',
-    color: '#9ca3af',
-  },
-  filtersBar: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-    backgroundColor: 'rgba(17, 24, 39, 0.5)',
-    padding: '16px',
-    borderRadius: '12px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-  },
-  searchForm: {
-    display: 'flex',
-    gap: '8px',
-    width: '100%',
-  },
-  searchInput: {
-    flexGrow: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '10px 16px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-  },
-  searchBtn: {
-    padding: '10px 24px',
-    fontSize: '14px',
-  },
-  selectsRow: {
-    display: 'flex',
-    gap: '12px',
-    width: '100%',
-    flexWrap: 'wrap',
-  },
-  filterSelect: {
-    flexGrow: 1,
-    minWidth: '150px',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '10px 16px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  tableWrapper: {
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
-    overflowX: 'auto',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    textAlign: 'left',
-    minWidth: '900px',
-  },
-  thRow: {
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-  },
-  th: {
-    padding: '16px 20px',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#d1d5db',
-  },
-  tr: {
-    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
-    transition: 'all 0.2s',
-  },
-  td: {
-    padding: '16px 20px',
-    fontSize: '14px',
-    verticalAlign: 'middle',
-  },
-  assetNameArea: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  assetName: {
-    fontWeight: 600,
-    color: '#f9fafb',
-  },
-  assetHost: {
-    fontSize: '12px',
-    color: '#3b82f6',
-    fontFamily: 'monospace',
-    marginTop: '2px',
-  },
-  typeBadge: {
-    fontSize: '12px',
-    color: '#9ca3af',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    padding: '3px 8px',
-    borderRadius: '4px',
-  },
-  statusBadge: {
-    padding: '4px 10px',
-    borderRadius: '6px',
-    fontSize: '12px',
-    fontWeight: 500,
-    border: '1px solid',
-    display: 'inline-block',
-  },
-  assignedUser: {
-    fontWeight: 500,
-    color: '#f3f4f6',
-  },
-  unassignedUser: {
-    fontSize: '12px',
-    color: '#6b7280',
-    fontStyle: 'italic',
-  },
-  serialTagArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  serial: {
-    fontFamily: 'monospace',
-    fontSize: '12px',
-    color: '#f3f4f6',
-  },
-  tag: {
-    fontSize: '11px',
-    color: '#9ca3af',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    padding: '1px 4px',
-    borderRadius: '2px',
-    width: 'fit-content',
-  },
-  emptyTextField: {
-    fontSize: '12px',
-    color: '#6b7280',
-  },
-  pagination: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '16px 24px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-  },
-  pageInfo: {
-    fontSize: '13px',
-    color: '#9ca3af',
-  },
-  paginationBtns: {
-    display: 'flex',
-    gap: '8px',
-  },
-  pageBtn: {
-    padding: '6px 12px',
-    fontSize: '12px',
-  },
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '80px 24px',
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    borderRadius: '12px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    gap: '8px',
-    textAlign: 'center',
-  },
-  emptyText: {
-    color: '#9ca3af',
-    fontSize: '16px',
-    fontWeight: 600,
-  },
-  errorAlert: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    color: '#fca5a5',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    fontSize: '13px',
-  },
-  loadingArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  skeletonRow: {
-    height: '60px',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
-    borderRadius: '12px',
-    animation: 'pulse 1.5s infinite ease-in-out',
-  },
-};

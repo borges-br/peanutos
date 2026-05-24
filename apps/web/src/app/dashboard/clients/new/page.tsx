@@ -2,12 +2,17 @@
 
 import React, { useState } from 'react';
 import { apiRequest } from '../../../../lib/api';
-import { Button } from '@peanut/ui';
 import { useRouter } from 'next/navigation';
 import { clientSchema } from '@peanut/validators';
+import { useI18n } from '../../../../i18n/useI18n';
+import Button from '../../../../components/ui/Button';
+import Input from '../../../../components/ui/Input';
+import Card from '../../../../components/ui/Card';
 
 export default function NewClientPage() {
   const router = useRouter();
+  const { t } = useI18n();
+
   const [legalName, setLegalName] = useState('');
   const [tradeName, setTradeName] = useState('');
   const [documentVal, setDocumentVal] = useState('');
@@ -54,209 +59,143 @@ export default function NewClientPage() {
   };
 
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <h1 style={styles.title}>Novo Cliente</h1>
-        <p style={styles.subtitle}>Insira as informações cadastrais básicas da empresa.</p>
+    <div className="max-w-[800px] flex flex-col gap-lg select-none select-text">
+      {/* Page Header */}
+      <header className="flex flex-col gap-xs mb-md">
+        <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
+          {t.navigation.newClient}
+        </h2>
+        <p className="text-[14px] text-on-surface-variant">
+          {t.clients.subtitle}
+        </p>
       </header>
 
-      {error && <div style={styles.errorAlert}>{error}</div>}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-md rounded-lg text-body-sm text-center animate-in fade-in duration-200">
+          {error}
+        </div>
+      )}
 
-      <form onSubmit={handleSubmit} style={styles.formCard}>
-        <div style={styles.grid}>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Razão Social *</label>
-            <input
+      {/* Main Form Container */}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-lg">
+        {/* Section 1: Identification */}
+        <Card title={t.clients.sections.identification}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+            <Input
+              id="legalName"
               type="text"
+              label="Razão Social *"
               placeholder="Razão Social completa"
               value={legalName}
               onChange={(e) => setLegalName(e.target.value)}
-              style={styles.input}
               required
               disabled={loading}
             />
-          </div>
 
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Nome Fantasia *</label>
-            <input
+            <Input
+              id="tradeName"
               type="text"
+              label="Nome Fantasia *"
               placeholder="Nome comercial do cliente"
               value={tradeName}
               onChange={(e) => setTradeName(e.target.value)}
-              style={styles.input}
               required
               disabled={loading}
             />
-          </div>
 
-          <div style={styles.formGroup}>
-            <label style={styles.label}>CNPJ ou CPF (Apenas números) *</label>
-            <input
-              type="text"
-              placeholder="12345678000199"
-              value={documentVal}
-              onChange={(e) => setDocumentVal(e.target.value)}
-              style={styles.input}
-              required
-              disabled={loading}
-            />
+            <div className="md:col-span-2">
+              <Input
+                id="document"
+                type="text"
+                label="CNPJ ou CPF (Apenas números) *"
+                placeholder="12345678000199"
+                value={documentVal}
+                onChange={(e) => setDocumentVal(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
           </div>
+        </Card>
 
-          <div style={styles.formGroup}>
-            <label style={styles.label}>E-mail Principal *</label>
-            <input
+        {/* Section 2: Contact */}
+        <Card title={t.clients.sections.contact}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+            <Input
+              id="email"
               type="email"
+              label="E-mail Principal *"
               placeholder="financeiro@empresa.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={styles.input}
               required
               disabled={loading}
             />
-          </div>
 
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Telefone de Contato *</label>
-            <input
+            <Input
+              id="phone"
               type="text"
+              label="Telefone de Contato *"
               placeholder="1155550199"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              style={styles.input}
               required
               disabled={loading}
             />
-          </div>
 
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Website (Opcional)</label>
-            <input
-              type="text"
-              placeholder="https://empresa.com"
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              style={styles.input}
+            <div className="md:col-span-2">
+              <Input
+                id="website"
+                type="text"
+                label="Website (Opcional)"
+                placeholder="https://empresa.com"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+          </div>
+        </Card>
+
+        {/* Section 3: Internals */}
+        <Card title={t.clients.sections.observations}>
+          <div className="flex flex-col gap-1.5 w-full">
+            <label htmlFor="notes" className="text-[12px] font-medium text-on-surface-variant tracking-wide">
+              Observações Internas (Opcional)
+            </label>
+            <textarea
+              id="notes"
+              rows={4}
+              placeholder="Anotações comerciais, SLAs acordados ou observações de faturamento."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-4 py-2 text-body-sm text-on-surface outline-none focus:border-primary transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed resize-none"
               disabled={loading}
             />
           </div>
-        </div>
+        </Card>
 
-        <div style={styles.formGroupFull}>
-          <label style={styles.label}>Observações Internas (Opcional)</label>
-          <textarea
-            rows={4}
-            placeholder="Anotações comerciais, SLAs acordados ou observações de faturamento."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            style={styles.textarea}
-            disabled={loading}
-          />
-        </div>
-
-        <div style={styles.actions}>
+        {/* Action buttons */}
+        <div className="flex justify-end gap-md pt-md border-t border-outline-variant/30 mt-md">
           <Button
             type="button"
             variant="outline"
             onClick={() => router.push('/dashboard/clients')}
             disabled={loading}
+            className="px-6 py-2"
           >
-            Cancelar
+            {t.common.cancel}
           </Button>
-          <Button type="submit" variant="primary" disabled={loading}>
-            {loading ? 'Salvando...' : 'Salvar Cadastro'}
+          <Button
+            type="submit"
+            variant="primary"
+            loading={loading}
+            className="px-6 py-2"
+          >
+            {t.clients.saveClient}
           </Button>
         </div>
       </form>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-    maxWidth: '800px',
-  },
-  header: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  title: {
-    fontSize: '28px',
-    fontWeight: 800,
-    letterSpacing: '-0.5px',
-  },
-  subtitle: {
-    fontSize: '14px',
-    color: '#9ca3af',
-  },
-  formCard: {
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
-    padding: '32px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '20px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  formGroupFull: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  label: {
-    fontSize: '12px',
-    fontWeight: 500,
-    color: '#d1d5db',
-  },
-  input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-  },
-  textarea: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '12px 14px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    resize: 'vertical',
-    fontFamily: 'inherit',
-  },
-  actions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '12px',
-    marginTop: '12px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingTop: '20px',
-  },
-  errorAlert: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    color: '#fca5a5',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    fontSize: '13px',
-  },
-};
