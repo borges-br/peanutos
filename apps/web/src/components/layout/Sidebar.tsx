@@ -2,6 +2,7 @@ import React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/useI18n';
+import logoImg from '../../../images/layout/logo.webp';
 
 interface SidebarProps {
   onCloseMobile?: () => void;
@@ -63,10 +64,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
       {/* Sidebar Header */}
       <div className="px-md mb-xl">
         <div className="flex items-center gap-sm">
-          <div className="w-8 h-8 bg-primary-container flex items-center justify-center rounded-lg">
-            <span className="material-symbols-outlined text-on-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>
-              terminal
-            </span>
+          <div className="w-8 h-8 flex items-center justify-center rounded-lg overflow-hidden">
+            <img src={logoImg.src} alt="Peanut OS Logo" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col">
             <span className="font-headline-md text-sm font-bold text-primary tracking-tight">Peanut OS</span>

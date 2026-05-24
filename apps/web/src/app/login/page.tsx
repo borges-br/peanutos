@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/useI18n';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import logoImg from '../../../images/layout/logo.webp';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -44,10 +45,8 @@ export default function LoginPage() {
         {/* Header Branding */}
         <div className="text-center mb-xl">
           <div className="flex justify-center items-center gap-xs mb-sm">
-            <div className="w-6 h-6 bg-primary-container flex items-center justify-center rounded">
-              <span className="material-symbols-outlined text-[14px] text-on-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>
-                terminal
-              </span>
+            <div className="w-6 h-6 flex items-center justify-center rounded overflow-hidden">
+              <img src={logoImg.src} alt="Peanut OS Logo" className="w-full h-full object-contain" />
             </div>
             <span className="font-headline-md text-base font-bold text-primary tracking-tight">Peanut OS</span>
           </div>
