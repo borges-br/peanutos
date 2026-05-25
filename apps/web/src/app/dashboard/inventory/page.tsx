@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
+import { extractArray, extractRecord } from '../../../lib/api-shape';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '../../../i18n/useI18n';
 import Button from '../../../components/ui/Button';
@@ -11,6 +12,7 @@ import Select from '../../../components/ui/Select';
 import DataTable from '../../../components/ui/DataTable';
 import EmptyState from '../../../components/ui/EmptyState';
 import ErrorState from '../../../components/ui/ErrorState';
+import ClientPageHeader from '../../../components/layout/ClientPageHeader';
 
 export default function InventoryPage() {
   const router = useRouter();
@@ -32,8 +34,8 @@ export default function InventoryPage() {
 
   const fetchClients = async () => {
     try {
-      const response = await apiRequest('/clients?limit=100');
-      setClients(response.data || []);
+      const response = await apiRequest<unknown>('/clients?limit=100');
+      setClients(extractArray(response));
     } catch (err) {
       console.error('Falha ao buscar clientes para filtros', err);
     }
@@ -48,11 +50,13 @@ export default function InventoryPage() {
       const clientParam = clientId ? `&clientId=${clientId}` : '';
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
       
-      const response = await apiRequest(
+      const response = await apiRequest<unknown>(
         `/assets?page=${page}&limit=10${typeParam}${statusParam}${clientParam}${searchParam}`
       );
-      setAssets(response.data || []);
-      setMeta(response.meta || { page: 1, totalPages: 1, total: 0 });
+      const responseRecord = extractRecord(response);
+      const assetsData = extractArray(response);
+      setAssets(assetsData);
+      setMeta(responseRecord.meta || { page: 1, totalPages: 1, total: assetsData.length });
     } catch (err: any) {
       setError(err.message || t.states.errorTitle);
     } finally {
@@ -121,7 +125,7 @@ export default function InventoryPage() {
       header: t.inventory.client,
       render: (asset: any) => (
         <span className="font-medium text-on-surface">
-          {asset.client?.tradeName || 'N/A'}
+          {asset.client?.tradeName || '--'}
         </span>
       ),
     },
@@ -145,7 +149,7 @@ export default function InventoryPage() {
       header: t.inventory.assignedUser,
       render: (asset: any) => (
         <span className={asset.assignedClientUser ? 'text-on-surface font-medium' : 'text-on-surface-variant/50 italic text-[12px]'}>
-          {asset.assignedClientUser?.fullName || 'Não atribuído'}
+          {asset.assignedClientUser?.fullName || t.common.notAssigned}
         </span>
       ),
     },
@@ -181,7 +185,7 @@ export default function InventoryPage() {
           onClick={() => router.push(`/dashboard/clients/${asset.clientId}/assets/${asset.id}`)}
           className="py-1 px-3"
         >
-          Visualizar
+          {t.common.details}
         </Button>
       ),
     },
@@ -203,21 +207,21 @@ export default function InventoryPage() {
         <div className="h-[1px] bg-outline-variant/30 my-xs"></div>
         <div className="grid grid-cols-2 gap-xs text-[12px]">
           <div className="flex flex-col">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Cliente</span>
-            <span className="mt-0.5 font-medium">{asset.client?.tradeName || 'N/A'}</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.inventory.client}</span>
+            <span className="mt-0.5 font-medium">{asset.client?.tradeName || '--'}</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Tipo</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.inventory.type}</span>
             <span className="mt-0.5 truncate">{getLocalizedType(asset.type)}</span>
           </div>
           <div className="flex flex-col mt-xs">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Usuário</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.inventory.assignedUserShort}</span>
             <span className="truncate mt-0.5 italic text-on-surface-variant/80">
-              {asset.assignedClientUser?.fullName || 'Não atribuído'}
+              {asset.assignedClientUser?.fullName || t.common.notAssigned}
             </span>
           </div>
           <div className="flex flex-col mt-xs">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Serial</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.inventory.serialShort}</span>
             <span className="font-mono mt-0.5">{asset.serialNumber || '--'}</span>
           </div>
         </div>
@@ -226,51 +230,50 @@ export default function InventoryPage() {
           onClick={() => router.push(`/dashboard/clients/${asset.clientId}/assets/${asset.id}`)}
           className="w-full mt-sm justify-center py-2"
         >
-          Visualizar
+          {t.common.details}
         </Button>
       </div>
     );
   };
 
   const clientOptions = [
-    { value: '', label: 'Todos os Clientes' },
+    { value: '', label: t.inventory.filters.allClients },
     ...clients.map(c => ({ value: c.id, label: c.tradeName })),
   ];
 
   const typeOptions = [
-    { value: '', label: 'Todos os Tipos' },
+    { value: '', label: t.inventory.filters.allTypes },
     ...Object.entries(t.enums.assetType).map(([key, label]) => ({ value: key, label })),
   ];
 
   const statusOptions = [
-    { value: '', label: 'Todos os Status' },
+    { value: '', label: t.inventory.filters.allStatuses },
     ...Object.entries(t.enums.assetStatus).map(([key, label]) => ({ value: key, label })),
   ];
 
   return (
     <div className="flex flex-col gap-lg select-none">
-      {/* Page Header */}
-      <header className="flex flex-col gap-xs mb-md">
-        <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
-          {t.navigation.technicalInventory}
-        </h2>
-        <p className="text-[14px] text-on-surface-variant">
-          {t.inventory.subtitle}
-        </p>
-      </header>
+      <ClientPageHeader
+        breadcrumbs={[
+          { label: t.navigation.home, href: '/dashboard' },
+          { label: t.navigation.technicalInventory },
+        ]}
+        title={t.navigation.technicalInventory}
+        description={t.inventory.subtitle}
+      />
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col gap-md bg-surface border border-outline-variant p-md rounded-xl shadow-lg">
         <form onSubmit={handleSearchSubmit} className="flex gap-sm w-full">
           <Input
             type="text"
-            placeholder={t.common.search}
+            placeholder={t.inventory.filters.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1"
           />
           <Button type="submit" variant="secondary" className="px-6">
-            Buscar
+            {t.common.searchAction}
           </Button>
         </form>
 
@@ -328,7 +331,7 @@ export default function InventoryPage() {
         ) : assets.length === 0 ? (
           <EmptyState
             title={t.states.emptyTitle}
-            description="Nenhum equipamento cadastrado ou encontrado. Para cadastrar novos ativos, acesse o dossiê de um cliente e vá para a aba de Inventário."
+            description={t.inventory.emptyDescription}
           />
         ) : (
           <div className="flex flex-col gap-md">
@@ -342,7 +345,11 @@ export default function InventoryPage() {
             {/* Pagination Controls */}
             <div className="flex flex-col sm:flex-row justify-between items-center gap-md border-t border-outline-variant/30 pt-md px-md">
               <span className="text-[13px] text-on-surface-variant font-mono">
-                Mostrando {assets.length} de {meta.total} ativos (Pág. {meta.page} de {meta.totalPages})
+                {t.inventory.pagination
+                  .replace('{count}', String(assets.length))
+                  .replace('{total}', String(meta.total))
+                  .replace('{page}', String(meta.page))
+                  .replace('{totalPages}', String(meta.totalPages))}
               </span>
               <div className="flex gap-sm">
                 <Button
@@ -351,7 +358,7 @@ export default function InventoryPage() {
                   onClick={() => setPage((p) => p - 1)}
                   className="py-1 px-4 text-xs"
                 >
-                  Anterior
+                  {t.common.previous}
                 </Button>
                 <Button
                   variant="outline"
@@ -359,7 +366,7 @@ export default function InventoryPage() {
                   onClick={() => setPage((p) => p + 1)}
                   className="py-1 px-4 text-xs"
                 >
-                  Próximo
+                  {t.common.next}
                 </Button>
               </div>
             </div>

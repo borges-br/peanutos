@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
+import { extractArray } from '../../../../lib/api-shape';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '../../../../i18n/useI18n';
 import Button from '../../../../components/ui/Button';
@@ -39,8 +40,8 @@ export default function NewInvoicePage() {
     async function loadClients() {
       setLoading(true);
       try {
-        const res = await apiRequest('/clients?limit=100');
-        setClients(res.data || []);
+        const res = await apiRequest<unknown>('/clients?limit=100');
+        setClients(extractArray(res));
       } catch (err: any) {
         setError('Falha ao carregar lista de clientes.');
       } finally {

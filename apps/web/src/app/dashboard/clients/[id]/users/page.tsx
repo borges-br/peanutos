@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { apiRequest } from '../../../../../lib/api';
+import { extractArray, extractRecord } from '../../../../../lib/api-shape';
 import { useI18n } from '../../../../../i18n/useI18n';
 import Button from '../../../../../components/ui/Button';
 import Badge from '../../../../../components/ui/Badge';
@@ -61,11 +62,13 @@ export default function ClientUsersPage() {
       const statusParam = status ? `&status=${status}` : '';
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
 
-      const response = await apiRequest(
+      const response = await apiRequest<unknown>(
         `/clients/${clientId}/users?page=${page}&limit=10${statusParam}${searchParam}`
       );
-      setUsers(response.data || []);
-      setMeta(response.meta || { page: 1, totalPages: 1, total: 0 });
+      const responseRecord = extractRecord(response);
+      const usersData = extractArray(response);
+      setUsers(usersData);
+      setMeta(responseRecord.meta || { page: 1, totalPages: 1, total: usersData.length });
     } catch (err: any) {
       setError(err.message || t.states.errorTitle);
     } finally {
@@ -168,6 +171,11 @@ export default function ClientUsersPage() {
 
   const handleToggleStatus = async (user: any) => {
     const nextStatus = user.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    const nextStatusLabel = clientUserStatuses.find(s => s.value === nextStatus)?.label || nextStatus;
+    if (!window.confirm(t.clientUsers.confirmStatusChange.replace('{name}', user.fullName).replace('{status}', nextStatusLabel))) {
+      return;
+    }
+
     try {
       await apiRequest(`/clients/${clientId}/users/${user.id}/status`, {
         method: 'PATCH',
@@ -175,16 +183,16 @@ export default function ClientUsersPage() {
       });
       fetchUsers();
     } catch (err: any) {
-      console.error(err.message || 'Falha ao alterar status.');
+      console.error(err.message || t.clientUsers.statusChangeError);
     }
   };
 
   const clientUserStatuses = [
-    { value: 'ACTIVE', label: 'Ativo' },
-    { value: 'INACTIVE', label: 'Inativo' },
-    { value: 'ON_LEAVE', label: 'Licença' },
-    { value: 'TERMINATED', label: 'Desligado' },
-    { value: 'PENDING_REVIEW', label: 'Pendente Revisão' },
+    { value: 'ACTIVE', label: t.clientUsers.statuses.ACTIVE },
+    { value: 'INACTIVE', label: t.clientUsers.statuses.INACTIVE },
+    { value: 'ON_LEAVE', label: t.clientUsers.statuses.ON_LEAVE },
+    { value: 'TERMINATED', label: t.clientUsers.statuses.TERMINATED },
+    { value: 'PENDING_REVIEW', label: t.clientUsers.statuses.PENDING_REVIEW },
   ];
 
   const getStatusVariant = (st: string) => {
@@ -230,15 +238,7 @@ export default function ClientUsersPage() {
       header: t.clientUsers.statusCol,
       render: (clientUser: any) => {
         const badgeLabel = clientUserStatuses.find(s => s.value === clientUser.status)?.label || clientUser.status;
-        return (
-          <span
-            onClick={() => handleToggleStatus(clientUser)}
-            className="cursor-pointer active:scale-95 transition-transform"
-            title="Clique para alternar rápido Ativo/Inativo"
-          >
-            <Badge variant={getStatusVariant(clientUser.status)}>{badgeLabel}</Badge>
-          </span>
-        );
+        return <Badge variant={getStatusVariant(clientUser.status)}>{badgeLabel}</Badge>;
       },
     },
     {
@@ -253,9 +253,18 @@ export default function ClientUsersPage() {
       header: t.clientUsers.actionsCol,
       className: 'text-right',
       render: (clientUser: any) => (
-        <Button variant="outline" onClick={() => openEditModal(clientUser)} className="py-1 px-3 text-xs">
-          {t.common.edit}
-        </Button>
+        <div className="flex flex-wrap justify-end gap-sm">
+          <Button variant="outline" onClick={() => openEditModal(clientUser)} className="py-1 px-3 text-xs">
+            {t.common.edit}
+          </Button>
+          <Button
+            variant={clientUser.status === 'ACTIVE' ? 'danger' : 'outline'}
+            onClick={() => handleToggleStatus(clientUser)}
+            className="py-1 px-3 text-xs"
+          >
+            {clientUser.status === 'ACTIVE' ? t.clientUsers.deactivate : t.clientUsers.activate}
+          </Button>
+        </div>
       ),
     },
   ];
@@ -283,15 +292,24 @@ export default function ClientUsersPage() {
             <span className="truncate mt-0.5 text-on-surface">{clientUser.department || '--'}</span>
           </div>
         </div>
-        <Button variant="outline" onClick={() => openEditModal(clientUser)} className="w-full mt-sm justify-center py-2">
-          {t.common.edit}
-        </Button>
+        <div className="flex flex-col gap-sm sm:flex-row">
+          <Button variant="outline" onClick={() => openEditModal(clientUser)} className="w-full mt-sm justify-center py-2">
+            {t.common.edit}
+          </Button>
+          <Button
+            variant={clientUser.status === 'ACTIVE' ? 'danger' : 'outline'}
+            onClick={() => handleToggleStatus(clientUser)}
+            className="w-full mt-sm justify-center py-2"
+          >
+            {clientUser.status === 'ACTIVE' ? t.clientUsers.deactivate : t.clientUsers.activate}
+          </Button>
+        </div>
       </div>
     );
   };
 
   const statusOptions = [
-    { value: '', label: 'Todos os status' },
+    { value: '', label: t.clientUsers.allStatuses },
     ...clientUserStatuses.map(s => ({ value: s.value, label: s.label })),
   ];
   const clientName = client?.tradeName || client?.legalName || t.clients.title;
@@ -320,7 +338,7 @@ export default function ClientUsersPage() {
         <form onSubmit={handleSearchSubmit} className="flex flex-col gap-sm flex-1 sm:flex-row sm:max-w-xl">
           <Input
             type="text"
-            placeholder="Buscar por nome, e-mail, departamento ou cargo..."
+            placeholder={t.clientUsers.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1"
@@ -378,7 +396,11 @@ export default function ClientUsersPage() {
 
             <div className="flex flex-col sm:flex-row justify-between items-center gap-md border-t border-outline-variant/30 pt-md px-md">
               <span className="text-[13px] text-on-surface-variant font-mono">
-                Mostrando {users.length} de {meta.total} usuários (Pág. {meta.page} de {meta.totalPages})
+                {t.clientUsers.pagination
+                  .replace('{count}', String(users.length))
+                  .replace('{total}', String(meta.total))
+                  .replace('{page}', String(meta.page))
+                  .replace('{totalPages}', String(meta.totalPages))}
               </span>
               <div className="flex gap-sm">
                 <Button

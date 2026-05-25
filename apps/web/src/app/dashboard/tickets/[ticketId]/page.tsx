@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
+import { extractArray } from '../../../../lib/api-shape';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '../../../../context/AuthContext';
 import { useI18n } from '../../../../i18n/useI18n';
@@ -51,8 +52,8 @@ export default function TicketDetailPage() {
 
   const fetchTechnicians = async () => {
     try {
-      const data = await apiRequest('/users');
-      setTechnicians(data || []);
+      const data = await apiRequest<unknown>('/users');
+      setTechnicians(extractArray(data));
     } catch (err) {
       console.warn('Erro ao carregar técnicos:', err);
     }

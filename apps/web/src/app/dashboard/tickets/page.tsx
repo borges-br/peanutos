@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
+import { extractArray, extractRecord } from '../../../lib/api-shape';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '../../../i18n/useI18n';
 import Button from '../../../components/ui/Button';
@@ -11,6 +12,7 @@ import Select from '../../../components/ui/Select';
 import DataTable from '../../../components/ui/DataTable';
 import EmptyState from '../../../components/ui/EmptyState';
 import ErrorState from '../../../components/ui/ErrorState';
+import ClientPageHeader from '../../../components/layout/ClientPageHeader';
 
 export default function TicketsPage() {
   const router = useRouter();
@@ -35,11 +37,11 @@ export default function TicketsPage() {
   useEffect(() => {
     async function fetchFilterData() {
       try {
-        const clientsRes = await apiRequest('/clients?limit=100');
-        setClients(clientsRes.data || []);
+        const clientsRes = await apiRequest<unknown>('/clients?limit=100');
+        setClients(extractArray(clientsRes));
         
-        const usersRes = await apiRequest('/users');
-        setUsers(usersRes || []);
+        const usersRes = await apiRequest<unknown>('/users');
+        setUsers(extractArray(usersRes));
       } catch (err) {
         console.warn('Erro ao carregar dados auxiliares de filtros:', err);
       }
@@ -60,12 +62,14 @@ export default function TicketsPage() {
       if (priority) qParams.append('priority', priority);
       if (assignedToId) qParams.append('assignedToId', assignedToId);
 
-      const response = await apiRequest(`/tickets?${qParams.toString()}`);
-      setTickets(response.items || []);
+      const response = await apiRequest<unknown>(`/tickets?${qParams.toString()}`);
+      const responseRecord = extractRecord(response);
+      const ticketList = extractArray(response);
+      setTickets(ticketList);
       setMeta({
-        page: response.page || 1,
-        totalPages: response.totalPages || 1,
-        total: response.total || 0,
+        page: responseRecord.page || 1,
+        totalPages: responseRecord.totalPages || 1,
+        total: responseRecord.total || ticketList.length,
       });
     } catch (err: any) {
       setError(err.message || t.states.errorTitle);
@@ -110,7 +114,7 @@ export default function TicketsPage() {
     if (completedAtStr) {
       return (
         <span className="text-[11px] text-success font-medium block">
-          {label}: Concluído
+          {label}: {t.tickets.slaDone}
         </span>
       );
     }
@@ -131,7 +135,7 @@ export default function TicketsPage() {
     if (diffMin < 0) {
       return (
         <span className="text-[11px] text-error font-semibold block">
-          {label}: Vencido
+          {label}: {t.tickets.slaDue}
         </span>
       );
     }
@@ -139,14 +143,14 @@ export default function TicketsPage() {
     if (diffMin <= 30) {
       return (
         <span className="text-[11px] text-warning font-medium block">
-          {label}: Em atenção
+          {label}: {t.tickets.slaAttention}
         </span>
       );
     }
 
     return (
       <span className="text-[11px] text-success/80 font-medium block">
-        {label}: Dentro do prazo
+        {label}: {t.tickets.slaOnTime}
       </span>
     );
   };
@@ -213,8 +217,8 @@ export default function TicketsPage() {
       header: t.tickets.sla,
       render: (ticket: any) => (
         <div className="flex flex-col gap-0.5 py-0.5">
-          {renderSlaInfo(ticket.slaDueFirstResponseAt, ticket.firstResponseAt, 'Resp')}
-          {renderSlaInfo(ticket.slaDueResolutionAt, ticket.resolvedAt, 'Resol')}
+          {renderSlaInfo(ticket.slaDueFirstResponseAt, ticket.firstResponseAt, t.tickets.slaFirstResponseShort)}
+          {renderSlaInfo(ticket.slaDueResolutionAt, ticket.resolvedAt, t.tickets.slaResolutionShort)}
         </div>
       ),
     },
@@ -277,22 +281,22 @@ export default function TicketsPage() {
         <div className="h-[1px] bg-outline-variant/30 my-xs"></div>
         <div className="grid grid-cols-2 gap-xs text-[12px]">
           <div className="flex flex-col">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Cliente</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.tickets.clientMobileLabel}</span>
             <span className="truncate mt-0.5 font-semibold text-on-surface">
               {ticket.client?.tradeName || ticket.client?.legalName || '--'}
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Responsável</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.tickets.responsibleMobileLabel}</span>
             <span className="truncate mt-0.5 text-on-surface">{ticket.assignedTo?.name || '--'}</span>
           </div>
           <div className="flex flex-col mt-1">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">SLA Primeira Resposta</span>
-            <span className="mt-0.5">{renderSlaInfo(ticket.slaDueFirstResponseAt, ticket.firstResponseAt, 'Resp')}</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.tickets.slaFirstResponse}</span>
+            <span className="mt-0.5">{renderSlaInfo(ticket.slaDueFirstResponseAt, ticket.firstResponseAt, t.tickets.slaFirstResponseShort)}</span>
           </div>
           <div className="flex flex-col mt-1">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">SLA Resolução</span>
-            <span className="mt-0.5">{renderSlaInfo(ticket.slaDueResolutionAt, ticket.resolvedAt, 'Resol')}</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.tickets.slaResolution}</span>
+            <span className="mt-0.5">{renderSlaInfo(ticket.slaDueResolutionAt, ticket.resolvedAt, t.tickets.slaResolutionShort)}</span>
           </div>
         </div>
         <Button
@@ -339,34 +343,33 @@ export default function TicketsPage() {
 
   return (
     <div className="flex flex-col gap-lg select-none">
-      {/* Page Header */}
-      <header className="flex justify-between items-center w-full">
-        <div className="flex flex-col gap-xs">
-          <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
-            {t.tickets.title}
-          </h2>
-          <p className="text-[14px] text-on-surface-variant">
-            {t.tickets.subtitle}
-          </p>
-        </div>
-        <Button variant="primary" onClick={() => router.push('/dashboard/tickets/new')}>
-          <span className="material-symbols-outlined text-[16px] mr-1.5">add_circle</span>
-          {t.tickets.createBtn}
-        </Button>
-      </header>
+      <ClientPageHeader
+        breadcrumbs={[
+          { label: t.navigation.home, href: '/dashboard' },
+          { label: t.navigation.tickets },
+        ]}
+        title={t.tickets.title}
+        description={t.tickets.subtitle}
+        primaryActions={
+          <Button variant="primary" onClick={() => router.push('/dashboard/tickets/new')}>
+            <span className="material-symbols-outlined text-[16px] mr-1.5">add_circle</span>
+            {t.tickets.createBtn}
+          </Button>
+        }
+      />
 
       {/* Advanced Filters */}
       <div className="flex flex-col gap-md bg-surface border border-outline-variant p-md rounded-xl shadow-lg">
         <form onSubmit={handleSearchSubmit} className="flex gap-sm w-full">
           <Input
             type="text"
-            placeholder="Buscar por número, título, descrição..."
+            placeholder={t.tickets.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1"
           />
           <Button type="submit" variant="secondary" className="px-5">
-            Buscar
+            {t.common.searchAction}
           </Button>
         </form>
 
@@ -434,7 +437,11 @@ export default function TicketsPage() {
             {/* Pagination Controls */}
             <div className="flex flex-col sm:flex-row justify-between items-center gap-md border-t border-outline-variant/30 pt-md px-md">
               <span className="text-[13px] text-on-surface-variant font-mono">
-                Mostrando {tickets.length} de {meta.total} chamados (Pág. {meta.page} de {meta.totalPages})
+                {t.tickets.pagination
+                  .replace('{count}', String(tickets.length))
+                  .replace('{total}', String(meta.total))
+                  .replace('{page}', String(meta.page))
+                  .replace('{totalPages}', String(meta.totalPages))}
               </span>
               <div className="flex gap-sm">
                 <Button
@@ -443,7 +450,7 @@ export default function TicketsPage() {
                   onClick={() => setPage((p) => p - 1)}
                   className="py-1 px-4 text-xs"
                 >
-                  Anterior
+                  {t.common.previous}
                 </Button>
                 <Button
                   variant="outline"
@@ -451,7 +458,7 @@ export default function TicketsPage() {
                   onClick={() => setPage((p) => p + 1)}
                   className="py-1 px-4 text-xs"
                 >
-                  Próximo
+                  {t.common.next}
                 </Button>
               </div>
             </div>

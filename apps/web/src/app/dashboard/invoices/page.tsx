@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
+import { extractArray, extractRecord } from '../../../lib/api-shape';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '../../../i18n/useI18n';
 import { useAuth } from '../../../context/AuthContext';
@@ -34,9 +35,11 @@ export default function InvoicesPage() {
     try {
       const statusParam = status ? `&status=${status}` : '';
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-      const response = await apiRequest(`/invoices?page=${page}&limit=10${statusParam}${searchParam}`);
-      setInvoices(response.data || []);
-      setMeta(response.meta || { page: 1, totalPages: 1, total: 0 });
+      const response = await apiRequest<unknown>(`/invoices?page=${page}&limit=10${statusParam}${searchParam}`);
+      const responseRecord = extractRecord(response);
+      const invoicesData = extractArray(response);
+      setInvoices(invoicesData);
+      setMeta(responseRecord.meta || { page: 1, totalPages: 1, total: invoicesData.length });
     } catch (err: any) {
       setError(err.message || t.states.errorTitle);
     } finally {

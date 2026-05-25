@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiRequest } from '../../../../../lib/api';
+import { extractArray, extractRecord } from '../../../../../lib/api-shape';
 import { useI18n } from '../../../../../i18n/useI18n';
 import Button from '../../../../../components/ui/Button';
 import Badge from '../../../../../components/ui/Badge';
@@ -106,8 +107,8 @@ export default function ClientInventoryPage() {
 
   const fetchClientUsers = async () => {
     try {
-      const response = await apiRequest(`/clients/${clientId}/users?limit=100`);
-      setClientUsers(response.data || []);
+      const response = await apiRequest<unknown>(`/clients/${clientId}/users?limit=100`);
+      setClientUsers(extractArray(response));
     } catch (err) {
       console.error('Falha ao buscar usuários para dropdown', err);
     }
@@ -121,11 +122,13 @@ export default function ClientInventoryPage() {
       const statusParam = status ? `&status=${status}` : '';
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
 
-      const response = await apiRequest(
+      const response = await apiRequest<unknown>(
         `/clients/${clientId}/assets?page=${page}&limit=10${typeParam}${statusParam}${searchParam}`
       );
-      setAssets(response.data || []);
-      setMeta(response.meta || { page: 1, totalPages: 1, total: 0 });
+      const responseRecord = extractRecord(response);
+      const assetsData = extractArray(response);
+      setAssets(assetsData);
+      setMeta(responseRecord.meta || { page: 1, totalPages: 1, total: assetsData.length });
     } catch (err: any) {
       setError(err.message || 'Falha ao buscar ativos do cliente.');
     } finally {

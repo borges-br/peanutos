@@ -2,12 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
+import { extractArray } from '../../../../lib/api-shape';
 import { useRouter } from 'next/navigation';
 import { ticketCreateSchema } from '@peanut/validators';
 import { useI18n } from '../../../../i18n/useI18n';
 import Button from '../../../../components/ui/Button';
 import Input from '../../../../components/ui/Input';
 import Select from '../../../../components/ui/Select';
+import ClientPageHeader from '../../../../components/layout/ClientPageHeader';
 
 export default function NewTicketPage() {
   const router = useRouter();
@@ -38,22 +40,23 @@ export default function NewTicketPage() {
   const [loading, setLoading] = useState(false);
   const [fetchingCascades, setFetchingCascades] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cascadeError, setCascadeError] = useState<string | null>(null);
 
   // Load initial clients and internal technicians
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const clientsRes = await apiRequest('/clients?limit=100');
-        setClients(clientsRes.data || []);
+        const clientsRes = await apiRequest<unknown>('/clients?limit=100');
+        setClients(extractArray(clientsRes));
         
-        const usersRes = await apiRequest('/users');
-        setUsers(usersRes || []);
+        const usersRes = await apiRequest<unknown>('/users');
+        setUsers(extractArray(usersRes));
       } catch (err: any) {
-        setError('Erro ao carregar dados iniciais do formulário.');
+        setError(t.tickets.form.loadInitialError);
       }
     }
     loadInitialData();
-  }, []);
+  }, [t.tickets.form.loadInitialError]);
 
   // Fetch cascading data whenever Client changes
   useEffect(() => {
@@ -64,28 +67,34 @@ export default function NewTicketPage() {
       setContactId('');
       setClientUserId('');
       setAssetId('');
+      setCascadeError(null);
       return;
     }
 
     async function loadCascadingData() {
       setFetchingCascades(true);
+      setCascadeError(null);
       try {
         const [contactsRes, usersRes, assetsRes] = await Promise.all([
-          apiRequest(`/clients/${clientId}/contacts`),
-          apiRequest(`/clients/${clientId}/users`),
-          apiRequest(`/clients/${clientId}/assets?limit=100`),
+          apiRequest<unknown>(`/clients/${clientId}/contacts`),
+          apiRequest<unknown>(`/clients/${clientId}/users`),
+          apiRequest<unknown>(`/clients/${clientId}/assets?limit=100`),
         ]);
 
-        setContacts(contactsRes || []);
-        setClientUsers(usersRes || []);
-        setAssets(assetsRes.data || []);
+        const contactsData = extractArray<any>(contactsRes);
+        const clientUsersData = extractArray<any>(usersRes);
+        const assetsData = extractArray<any>(assetsRes);
+
+        setContacts(contactsData);
+        setClientUsers(clientUsersData);
+        setAssets(assetsData);
         
         // Auto-select primary contact if available
-        const primary = (contactsRes || []).find((c: any) => c.isPrimary);
+        const primary = contactsData.find((c: any) => c.isPrimary);
         if (primary) {
           setContactId(primary.id);
-        } else if (contactsRes && contactsRes.length > 0) {
-          setContactId(contactsRes[0].id);
+        } else if (contactsData.length > 0) {
+          setContactId(contactsData[0].id);
         } else {
           setContactId('');
         }
@@ -95,18 +104,29 @@ export default function NewTicketPage() {
         setAssetId('');
       } catch (err: any) {
         console.error('Erro ao buscar dados do cliente selecionado:', err);
+        setCascadeError(t.tickets.form.loadClientError);
+        setContacts([]);
+        setClientUsers([]);
+        setAssets([]);
+        setContactId('');
+        setClientUserId('');
+        setAssetId('');
       } finally {
         setFetchingCascades(false);
       }
     }
 
     loadCascadingData();
-  }, [clientId]);
+  }, [clientId, t.tickets.form.loadClientError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+
+    if (!clientId) {
+      setError(t.tickets.form.clientRequired);
+      return;
+    }
 
     const payload = {
       title,
@@ -127,9 +147,10 @@ export default function NewTicketPage() {
     if (!validation.success) {
       const messages = validation.error.errors.map((err) => err.message).join(', ');
       setError(messages);
-      setLoading(false);
       return;
     }
+
+    setLoading(true);
 
     try {
       const response = await apiRequest('/tickets', {
@@ -139,7 +160,7 @@ export default function NewTicketPage() {
 
       router.push(`/dashboard/tickets/${response.id}`);
     } catch (err: any) {
-      setError(err.message || 'Falha ao salvar chamado técnico.');
+      setError(err.message || t.tickets.form.saveError);
     } finally {
       setLoading(false);
     }
@@ -154,35 +175,99 @@ export default function NewTicketPage() {
   ];
 
   const channelOptions = [
-    { value: 'EMAIL', label: 'E-mail' },
-    { value: 'WHATSAPP', label: 'WhatsApp' },
-    { value: 'PHONE', label: 'Telefone' },
-    { value: 'PORTAL', label: 'Portal do Cliente' },
-    { value: 'MANUAL', label: 'Abertura Manual' },
-    { value: 'OTHER', label: 'Outros' }
+    { value: 'EMAIL', label: t.tickets.channels.EMAIL },
+    { value: 'WHATSAPP', label: t.tickets.channels.WHATSAPP },
+    { value: 'PHONE', label: t.tickets.channels.PHONE },
+    { value: 'PORTAL', label: t.tickets.channels.PORTAL },
+    { value: 'MANUAL', label: t.tickets.channels.MANUAL },
+    { value: 'OTHER', label: t.tickets.channels.OTHER }
+  ];
+
+  const clientOptions = [
+    { value: '', label: t.tickets.form.selectClient },
+    ...clients.map(c => ({ value: c.id, label: c.tradeName || c.legalName }))
+  ];
+
+  const contactOptions = [
+    {
+      value: '',
+      label: !clientId
+        ? t.tickets.form.selectClientFirst
+        : fetchingCascades
+        ? t.tickets.form.loadingContacts
+        : contacts.length === 0
+        ? t.tickets.form.noContacts
+        : t.tickets.form.selectContact,
+    },
+    ...contacts.map(c => ({ value: c.id, label: `${c.name} (${c.email || '--'})` }))
+  ];
+
+  const clientUserOptions = [
+    {
+      value: '',
+      label: !clientId
+        ? t.tickets.form.selectClientFirst
+        : fetchingCascades
+        ? t.tickets.form.loadingUsers
+        : clientUsers.length === 0
+        ? t.tickets.form.noUsers
+        : t.tickets.form.selectUser,
+    },
+    ...clientUsers.map(u => ({ value: u.id, label: `${u.fullName} (${u.department || t.tickets.form.noDepartment})` }))
+  ];
+
+  const assetOptions = [
+    {
+      value: '',
+      label: !clientId
+        ? t.tickets.form.selectClientFirst
+        : fetchingCascades
+        ? t.tickets.form.loadingAssets
+        : assets.length === 0
+        ? t.tickets.form.noAssets
+        : t.tickets.assetNone,
+    },
+    ...assets.map(a => ({ value: a.id, label: `${a.name} (${t.enums.assetType[a.type as keyof typeof t.enums.assetType] || a.type} - S/N: ${a.serialNumber || '--'})` }))
+  ];
+
+  const technicianOptions = [
+    { value: '', label: t.tickets.form.noAssignedTech },
+    ...users.map(u => ({ value: u.id, label: u.name }))
   ];
 
   return (
     <div className="flex flex-col gap-lg max-w-4xl mx-auto select-none">
-      {/* Page Header */}
-      <header className="flex justify-between items-center w-full">
-        <div className="flex flex-col gap-xs">
-          <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
-            {t.tickets.newTicket}
-          </h2>
-          <p className="text-[14px] text-on-surface-variant">
-            {t.tickets.newTicketSubtitle}
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => router.push('/dashboard/tickets')}>
-          <span className="material-symbols-outlined text-[16px] mr-1.5">arrow_back</span>
-          {t.common.back}
-        </Button>
-      </header>
+      <ClientPageHeader
+        breadcrumbs={[
+          { label: t.navigation.home, href: '/dashboard' },
+          { label: t.navigation.tickets, href: '/dashboard/tickets' },
+          { label: t.tickets.newTicket },
+        ]}
+        title={t.tickets.newTicket}
+        description={t.tickets.newTicketSubtitle}
+        secondaryActions={
+          <Button variant="outline" onClick={() => router.push('/dashboard/tickets')}>
+            <span className="material-symbols-outlined text-[16px] mr-1.5">arrow_back</span>
+            {t.common.back}
+          </Button>
+        }
+      />
 
       {error && (
         <div className="bg-error-container/10 border border-error-container/20 text-error p-md rounded-xl text-xs font-semibold">
           {error}
+        </div>
+      )}
+
+      {cascadeError && (
+        <div className="bg-error-container/10 border border-error-container/20 text-error p-md rounded-xl text-xs font-semibold">
+          {cascadeError}
+        </div>
+      )}
+
+      {fetchingCascades && (
+        <div className="bg-surface-container-low border border-outline-variant/40 text-on-surface-variant p-md rounded-xl text-xs font-semibold">
+          {t.tickets.form.loadingClientData}
         </div>
       )}
 
@@ -191,7 +276,7 @@ export default function NewTicketPage() {
         {/* Section 1: Client Info */}
         <div className="flex flex-col gap-md">
           <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
-            1. {t.contracts.clientIdentification}
+            1. {t.tickets.form.clientSection}
           </h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
@@ -201,10 +286,7 @@ export default function NewTicketPage() {
                 required
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
-                options={[
-                  { value: '', label: 'Selecione o cliente...' },
-                  ...clients.map(c => ({ value: c.id, label: c.tradeName || c.legalName }))
-                ]}
+                options={clientOptions}
               />
             </div>
 
@@ -214,10 +296,7 @@ export default function NewTicketPage() {
                 disabled={fetchingCascades || !clientId}
                 value={contactId}
                 onChange={(e) => setContactId(e.target.value)}
-                options={[
-                  { value: '', label: 'Selecione o contato...' },
-                  ...contacts.map(c => ({ value: c.id, label: `${c.name} (${c.email})` }))
-                ]}
+                options={contactOptions}
               />
             </div>
 
@@ -227,10 +306,7 @@ export default function NewTicketPage() {
                 disabled={fetchingCascades || !clientId}
                 value={clientUserId}
                 onChange={(e) => setClientUserId(e.target.value)}
-                options={[
-                  { value: '', label: 'Selecione o usuário final...' },
-                  ...clientUsers.map(u => ({ value: u.id, label: `${u.fullName} (${u.department || 'Sem setor'})` }))
-                ]}
+                options={clientUserOptions}
               />
             </div>
 
@@ -240,10 +316,7 @@ export default function NewTicketPage() {
                 disabled={fetchingCascades || !clientId}
                 value={assetId}
                 onChange={(e) => setAssetId(e.target.value)}
-                options={[
-                  { value: '', label: 'Nenhum ativo (Sem ativo vinculado)' },
-                  ...assets.map(a => ({ value: a.id, label: `${a.name} (${t.enums.assetType[a.type as keyof typeof t.enums.assetType] || a.type} - S/N: ${a.serialNumber || 'N/A'})` }))
-                ]}
+                options={assetOptions}
               />
             </div>
           </div>
@@ -252,11 +325,11 @@ export default function NewTicketPage() {
         {/* Section 2: Ticket Details */}
         <div className="flex flex-col gap-md">
           <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
-            2. {t.tickets.description}
+            2. {t.tickets.form.detailsSection}
           </h3>
 
           <div className="flex flex-col gap-xs">
-            <label className="text-[13px] font-semibold text-on-surface-variant">Título do Chamado *</label>
+            <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.form.titleLabel}</label>
             <Input
               type="text"
               required
@@ -267,7 +340,7 @@ export default function NewTicketPage() {
           </div>
 
           <div className="flex flex-col gap-xs">
-            <label className="text-[13px] font-semibold text-on-surface-variant">Descrição Detalhada do Problema *</label>
+            <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.form.descriptionLabel}</label>
             <textarea
               required
               rows={6}
@@ -314,19 +387,16 @@ export default function NewTicketPage() {
         {/* Section 3: Responsibility */}
         <div className="flex flex-col gap-md">
           <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
-            3. {t.tickets.techLabel}
+            3. {t.tickets.form.responsibilitySection}
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
             <div className="flex flex-col gap-xs">
-              <label className="text-[13px] font-semibold text-on-surface-variant">Atribuído a</label>
+              <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.form.assignedTo}</label>
               <Select
                 value={assignedToId}
                 onChange={(e) => setAssignedToId(e.target.value)}
-                options={[
-                  { value: '', label: 'Não atribuído (Aguardando triagem)' },
-                  ...users.map(u => ({ value: u.id, label: u.name }))
-                ]}
+                options={technicianOptions}
               />
             </div>
           </div>

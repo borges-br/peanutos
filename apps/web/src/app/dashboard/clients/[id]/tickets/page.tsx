@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiRequest } from '../../../../../lib/api';
+import { extractArray, extractRecord } from '../../../../../lib/api-shape';
 import { useI18n } from '../../../../../i18n/useI18n';
 import Button from '../../../../../components/ui/Button';
 import Badge from '../../../../../components/ui/Badge';
@@ -57,12 +58,14 @@ export default function ClientTicketsPage() {
       if (status) qParams.append('status', status);
       if (priority) qParams.append('priority', priority);
 
-      const response = await apiRequest(`/clients/${clientId}/tickets?${qParams.toString()}`);
-      setTickets(response.items || []);
+      const response = await apiRequest<unknown>(`/clients/${clientId}/tickets?${qParams.toString()}`);
+      const responseRecord = extractRecord(response);
+      const ticketsData = extractArray(response);
+      setTickets(ticketsData);
       setMeta({
-        page: response.page || 1,
-        totalPages: response.totalPages || 1,
-        total: response.total || 0,
+        page: responseRecord.page || 1,
+        totalPages: responseRecord.totalPages || 1,
+        total: responseRecord.total || ticketsData.length,
       });
     } catch (err: any) {
       setError(err.message || 'Erro ao carregar chamados do cliente.');
@@ -238,7 +241,7 @@ export default function ClientTicketsPage() {
         <form onSubmit={handleSearchSubmit} className="flex flex-1 flex-col gap-sm sm:flex-row md:max-w-xl">
           <Input
             type="text"
-            placeholder="Buscar por número, título, descrição..."
+            placeholder={t.tickets.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1"
@@ -304,7 +307,11 @@ export default function ClientTicketsPage() {
 
             <div className="flex flex-col items-center justify-between gap-md border-t border-outline-variant/30 px-md pt-md sm:flex-row">
               <span className="text-[13px] text-on-surface-variant font-mono">
-                Mostrando {tickets.length} de {meta.total} chamados (Pág. {meta.page} de {meta.totalPages})
+                {t.tickets.pagination
+                  .replace('{count}', String(tickets.length))
+                  .replace('{total}', String(meta.total))
+                  .replace('{page}', String(meta.page))
+                  .replace('{totalPages}', String(meta.totalPages))}
               </span>
               <div className="flex gap-sm">
                 <Button

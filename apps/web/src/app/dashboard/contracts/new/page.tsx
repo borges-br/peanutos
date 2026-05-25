@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
+import { extractArray } from '../../../../lib/api-shape';
 import { useRouter } from 'next/navigation';
 import { contractCreateSchema } from '@peanut/validators';
 import { useI18n } from '../../../../i18n/useI18n';
@@ -39,8 +40,8 @@ export default function NewContractPage() {
   useEffect(() => {
     async function loadClients() {
       try {
-        const response = await apiRequest('/clients?limit=100');
-        setClients(response.data || []);
+        const response = await apiRequest<unknown>('/clients?limit=100');
+        setClients(extractArray(response));
       } catch (err) {
         console.error('Falha ao carregar lista de clientes:', err);
       }

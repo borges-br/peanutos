@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
+import { extractArray, extractRecord } from '../../../lib/api-shape';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../context/AuthContext';
 import { useI18n } from '../../../i18n/useI18n';
@@ -46,12 +47,13 @@ export default function ContractsPage() {
       if (clientId) qParams.append('clientId', clientId);
       if (search) qParams.append('search', search);
 
-      const response = await apiRequest(`/contracts?${qParams.toString()}`);
-      setContracts(response.data || []);
-      setMeta(response.meta || { page: 1, totalPages: 1, total: 0 });
+      const response = await apiRequest<unknown>(`/contracts?${qParams.toString()}`);
+      const responseRecord = extractRecord(response);
+      const dataList = extractArray<any>(response);
+      setContracts(dataList);
+      setMeta(responseRecord.meta || { page: 1, totalPages: 1, total: dataList.length });
 
       // Fetch quota details for each unique client in the list
-      const dataList = response.data || [];
       const clientIds = Array.from(new Set(dataList.map((c: any) => c.clientId))) as string[];
       const quotaMap: Record<string, any> = {};
       
@@ -80,8 +82,8 @@ export default function ContractsPage() {
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const response = await apiRequest('/clients?limit=100');
-        setClients(response.data || []);
+        const response = await apiRequest<unknown>('/clients?limit=100');
+        setClients(extractArray(response));
       } catch {
         setClients([]);
       }
