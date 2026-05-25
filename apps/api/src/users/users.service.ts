@@ -338,9 +338,7 @@ export class UsersService {
     const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
     if (!user) throw new NotFoundException("Usuário não encontrado");
 
-    if (user.avatarFileObjectId) {
-      await this.storage.deleteFileObject(user.avatarFileObjectId, workspaceId);
-    }
+    // NOTE: Old FileObject is intentionally kept (orphan cleanup deferred to future routine)
 
     const { fileObjectId } = await this.storage.uploadImage({
       workspaceId,
@@ -377,8 +375,8 @@ export class UsersService {
     const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
     if (!user) throw new NotFoundException("Usuário não encontrado");
 
+    // Unlink avatar without deleting the FileObject (orphan cleanup deferred)
     if (user.avatarFileObjectId) {
-      await this.storage.deleteFileObject(user.avatarFileObjectId, workspaceId);
       await prisma.user.update({ where: { id: userId }, data: { avatarFileObjectId: null } });
     }
 
@@ -406,9 +404,7 @@ export class UsersService {
     const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
     if (!user) throw new NotFoundException("Usuário não encontrado");
 
-    if (user.signatureImageFileObjectId) {
-      await this.storage.deleteFileObject(user.signatureImageFileObjectId, workspaceId);
-    }
+    // NOTE: Old FileObject is intentionally kept (orphan cleanup deferred to future routine)
 
     const { fileObjectId } = await this.storage.uploadImage({
       workspaceId,
@@ -445,8 +441,8 @@ export class UsersService {
     const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
     if (!user) throw new NotFoundException("Usuário não encontrado");
 
+    // Unlink signature without deleting the FileObject (orphan cleanup deferred)
     if (user.signatureImageFileObjectId) {
-      await this.storage.deleteFileObject(user.signatureImageFileObjectId, workspaceId);
       await prisma.user.update({ where: { id: userId }, data: { signatureImageFileObjectId: null } });
     }
 

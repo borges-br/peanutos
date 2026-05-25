@@ -96,15 +96,7 @@ export class SettingsService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    // Remove old logo if exists
-    const ws = await prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { logoFileObjectId: true },
-    });
-
-    if (ws?.logoFileObjectId) {
-      await this.storage.deleteFileObject(ws.logoFileObjectId, workspaceId);
-    }
+    // NOTE: Old FileObject is intentionally kept (orphan cleanup deferred to future routine)
 
     const { fileObjectId } = await this.storage.uploadImage({
       workspaceId,
@@ -146,8 +138,8 @@ export class SettingsService {
       select: { logoFileObjectId: true },
     });
 
+    // Unlink logo without deleting the FileObject (orphan cleanup deferred)
     if (ws?.logoFileObjectId) {
-      await this.storage.deleteFileObject(ws.logoFileObjectId, workspaceId);
       await prisma.workspace.update({
         where: { id: workspaceId },
         data: { logoFileObjectId: null },
