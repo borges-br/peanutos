@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -14,7 +15,11 @@ import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { userSchema } from "@peanut/validators";
+import {
+  createWorkspaceUserSchema,
+  updateWorkspaceUserRoleSchema,
+  updateWorkspaceUserStatusSchema,
+} from "@peanut/validators";
 
 @UseGuards(AuthGuard, RolesGuard)
 @Controller("users")
@@ -36,48 +41,50 @@ export class UsersController {
   @Roles("OWNER", "ADMIN")
   @Post()
   async create(@Body() body: any, @CurrentUser() user: any, @Req() req: any) {
-    const validationResult = userSchema.safeParse(body);
-    if (!validationResult.success) {
-      const messages = validationResult.error.errors
-        .map((e) => e.message)
-        .join(", ");
+    const result = createWorkspaceUserSchema.safeParse(body);
+    if (!result.success) {
+      const messages = result.error.errors.map((e) => e.message).join(", ");
       throw new BadRequestException(messages);
     }
 
-    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ipAddress =
+      req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
 
     return this.usersService.create(
-      validationResult.data,
+      result.data,
       user.workspaceId,
       user.id,
+      user.role,
       ipAddress,
       userAgent,
     );
   }
 
   @Roles("OWNER", "ADMIN")
-  @Patch(":id")
-  async update(
+  @Patch(":id/role")
+  async updateRole(
     @Param("id") id: string,
     @Body() body: any,
     @CurrentUser() user: any,
     @Req() req: any,
   ) {
-    const data: any = {};
-    if (body.name) data.name = body.name;
-    if (body.role) data.role = body.role;
-    if (body.password) data.password = body.password;
-    if (body.status) data.status = body.status;
+    const result = updateWorkspaceUserRoleSchema.safeParse(body);
+    if (!result.success) {
+      const messages = result.error.errors.map((e) => e.message).join(", ");
+      throw new BadRequestException(messages);
+    }
 
-    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ipAddress =
+      req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
 
-    return this.usersService.update(
+    return this.usersService.updateRole(
       id,
-      data,
+      result.data,
       user.workspaceId,
       user.id,
+      user.role,
       ipAddress,
       userAgent,
     );
@@ -87,25 +94,47 @@ export class UsersController {
   @Patch(":id/status")
   async updateStatus(
     @Param("id") id: string,
-    @Body() body: { status: "ACTIVE" | "INACTIVE" | "SUSPENDED" },
+    @Body() body: any,
     @CurrentUser() user: any,
     @Req() req: any,
   ) {
-    if (
-      !body.status ||
-      !["ACTIVE", "INACTIVE", "SUSPENDED"].includes(body.status)
-    ) {
-      throw new BadRequestException("Status inválido");
+    const result = updateWorkspaceUserStatusSchema.safeParse(body);
+    if (!result.success) {
+      const messages = result.error.errors.map((e) => e.message).join(", ");
+      throw new BadRequestException(messages);
     }
 
-    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ipAddress =
+      req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
 
     return this.usersService.updateStatus(
       id,
-      body.status,
+      result.data.status,
       user.workspaceId,
       user.id,
+      user.role,
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  @Roles("OWNER", "ADMIN")
+  @Delete(":id")
+  async deleteUser(
+    @Param("id") id: string,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const ipAddress =
+      req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+
+    return this.usersService.deleteUser(
+      id,
+      user.workspaceId,
+      user.id,
+      user.role,
       ipAddress,
       userAgent,
     );

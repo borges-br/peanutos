@@ -101,13 +101,30 @@ peanutos/
 - pnpm >= 9.1.1
 - Docker Desktop (for local DB dependencies)
 
-### Local Developer Credentials (Seed)
-Once seeded, the database contains the following mock administrator credentials:
-- **Username / E-mail**: `admin@example.com`
-- **Password**: `ChangeMe123!`
+### First Access — Bootstrap Setup
+
+When the database has no users, the application automatically presents the setup wizard at **`/setup`**.
+
+1. Access `http://localhost:3000` — you will be redirected to `/setup`.
+2. Fill in the workspace name, administrator name, e-mail and password.
+3. After submission you will be redirected to `/login`.
+4. Log in with the credentials you just created.
+
+> [!IMPORTANT]
+> The `/setup` route and its API endpoint (`POST /api/v1/setup/admin`) are blocked as soon as the first user exists. There is no admin bypass or fallback credentials built into the application.
+
+### Optional: Dev Seed (fictive data only)
+
+For local development with demo data, run:
+
+```bash
+pnpm db:seed
+```
+
+This populates the database with fictional clients, assets, tickets, and a dev-only administrator (`admin@example.com`). The seeded password is intentionally weak and is **strictly for local development**.
 
 > [!WARNING]
-> **CRITICAL SECURITY NOTE**: The credentials above are strictly fictive developer parameters for local homologation and development. **NEVER** use these credentials in a live or production environment!
+> **CRITICAL SECURITY NOTE**: Seed data is strictly for local homologation. **NEVER** run `pnpm db:seed` in a live or production environment. The seed credentials must never be used as production access.
 
 ### Quick Start
 1. **Clone the repository and go to the root**:

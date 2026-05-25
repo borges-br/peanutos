@@ -2,12 +2,17 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { prisma } from "@peanut/db";
 import * as bcrypt from "bcryptjs";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
-import { UserInput } from "@peanut/validators";
+import { UserRole } from "@peanut/types";
+import {
+  CreateWorkspaceUserInput,
+  UpdateWorkspaceUserRoleInput,
+} from "@peanut/validators";
 
 @Injectable()
 export class UsersService {
@@ -18,67 +23,56 @@ export class UsersService {
 
   async list(workspaceId: string) {
     const users = await prisma.user.findMany({
-      where: {
-        workspaceId,
-        deletedAt: null,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
+      where: { workspaceId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
     });
-
     return users.map(({ passwordHash, ...user }) => user);
   }
 
   async getById(id: string, workspaceId: string) {
     const user = await prisma.user.findFirst({
-      where: {
-        id,
-        workspaceId,
-        deletedAt: null,
-      },
+      where: { id, workspaceId, deletedAt: null },
     });
-
-    if (!user) {
-      throw new NotFoundException("Usuário não encontrado");
-    }
-
+    if (!user) throw new NotFoundException("Usuário não encontrado");
     const { passwordHash, ...result } = user;
     return result;
   }
 
   async create(
-    input: UserInput,
+    input: CreateWorkspaceUserInput,
     workspaceId: string,
     actorUserId: string,
+    _actorRole: UserRole,
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const { name, email, password, role, status } = input;
+    // Role is already restricted by createWorkspaceUserSchema (no OWNER allowed)
+    // Further RBAC is enforced at controller level via @Roles decorator
 
-    const existing = await prisma.user.findUnique({
-      where: { email },
+    const normalizedEmail = input.email.toLowerCase().trim();
+
+    const existing = await prisma.user.findFirst({
+      where: { email: normalizedEmail, workspaceId, deletedAt: null },
     });
-
     if (existing) {
-      throw new BadRequestException("E-mail já cadastrado");
+      throw new BadRequestException("E-mail já cadastrado neste workspace");
     }
 
-    const defaultPassword = password || "ChangeMe123!";
-    const passwordHash = bcrypt.hashSync(defaultPassword, 10);
+    const passwordHash = bcrypt.hashSync(input.password, 12);
 
     const newUser = await prisma.user.create({
       data: {
         workspaceId,
-        name,
-        email,
+        name: input.name,
+        email: normalizedEmail,
         passwordHash,
-        role,
-        status: status || "ACTIVE",
+        role: input.role,
+        status: "ACTIVE",
       },
     });
 
     const { passwordHash: _, ...sanitizedUser } = newUser;
+
     await this.auditService.log({
       workspaceId,
       actorUserId,
@@ -100,45 +94,53 @@ export class UsersService {
     return sanitizedUser;
   }
 
-  async update(
+  async updateRole(
     id: string,
-    input: Partial<UserInput>,
+    input: UpdateWorkspaceUserRoleInput,
     workspaceId: string,
     actorUserId: string,
+    actorRole: UserRole,
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const user = await prisma.user.findFirst({
+    const target = await prisma.user.findFirst({
       where: { id, workspaceId, deletedAt: null },
     });
+    if (!target) throw new NotFoundException("Usuário não encontrado");
 
-    if (!user) {
-      throw new NotFoundException("Usuário não encontrado");
+    // ADMIN cannot modify an OWNER
+    if (actorRole === "ADMIN" && target.role === "OWNER") {
+      throw new ForbiddenException(
+        "ADMIN não pode alterar a role de um OWNER",
+      );
     }
 
-    const { passwordHash: _, ...before } = user;
-
-    const data: any = {};
-    if (input.name) data.name = input.name;
-    if (input.role) data.role = input.role;
-    if (input.password) {
-      data.passwordHash = bcrypt.hashSync(input.password, 10);
+    // Prevent removing the last OWNER — input.role is always non-OWNER per schema
+    if (target.role === "OWNER") {
+      const ownerCount = await prisma.user.count({
+        where: { workspaceId, role: "OWNER", deletedAt: null },
+      });
+      if (ownerCount <= 1) {
+        throw new BadRequestException(
+          "Não é permitido remover a role do único OWNER do workspace",
+        );
+      }
     }
-    if (input.status) {
-      data.status = input.status;
-    }
 
-    const updatedUser = await prisma.user.update({
+    // The schema already blocks assigning OWNER via this endpoint
+    const { passwordHash: _, ...before } = target;
+
+    const updated = await prisma.user.update({
       where: { id },
-      data,
+      data: { role: input.role },
     });
 
-    const { passwordHash: __, ...after } = updatedUser;
+    const { passwordHash: __, ...after } = updated;
 
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: "user.updated",
+      action: "user.role_changed",
       entityType: "USER",
       entityId: id,
       before,
@@ -164,28 +166,27 @@ export class UsersService {
     status: "ACTIVE" | "INACTIVE" | "SUSPENDED",
     workspaceId: string,
     actorUserId: string,
+    actorRole: UserRole,
     ipAddress?: string,
     userAgent?: string,
   ) {
     const user = await prisma.user.findFirst({
       where: { id, workspaceId, deletedAt: null },
     });
+    if (!user) throw new NotFoundException("Usuário não encontrado");
 
-    if (!user) {
-      throw new NotFoundException("Usuário não encontrado");
+    // ADMIN cannot deactivate an OWNER
+    if (actorRole === "ADMIN" && user.role === "OWNER") {
+      throw new ForbiddenException(
+        "ADMIN não pode alterar o status de um OWNER",
+      );
     }
 
     if (status !== "ACTIVE" && user.role === "OWNER") {
-      const activeOwnersCount = await prisma.user.count({
-        where: {
-          workspaceId,
-          role: "OWNER",
-          status: "ACTIVE",
-          deletedAt: null,
-        },
+      const activeOwners = await prisma.user.count({
+        where: { workspaceId, role: "OWNER", status: "ACTIVE", deletedAt: null },
       });
-
-      if (activeOwnersCount <= 1) {
+      if (activeOwners <= 1) {
         throw new BadRequestException(
           "Não é permitido desativar o único OWNER ativo do workspace",
         );
@@ -194,17 +195,20 @@ export class UsersService {
 
     const { passwordHash: _, ...before } = user;
 
-    const updatedUser = await prisma.user.update({
+    const updated = await prisma.user.update({
       where: { id },
       data: { status },
     });
 
-    const { passwordHash: __, ...after } = updatedUser;
+    const { passwordHash: __, ...after } = updated;
+
+    const action =
+      status === "ACTIVE" ? "user.reactivated" : "user.deactivated";
 
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: "user.status_changed",
+      action,
       entityType: "USER",
       entityId: id,
       before,
@@ -214,5 +218,60 @@ export class UsersService {
     });
 
     return after;
+  }
+
+  async deleteUser(
+    id: string,
+    workspaceId: string,
+    actorUserId: string,
+    actorRole: UserRole,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const user = await prisma.user.findFirst({
+      where: { id, workspaceId, deletedAt: null },
+    });
+    if (!user) throw new NotFoundException("Usuário não encontrado");
+
+    // Cannot delete yourself
+    if (id === actorUserId) {
+      throw new BadRequestException("Você não pode remover sua própria conta");
+    }
+
+    // ADMIN cannot delete an OWNER
+    if (actorRole === "ADMIN" && user.role === "OWNER") {
+      throw new ForbiddenException("ADMIN não pode remover um OWNER");
+    }
+
+    if (user.role === "OWNER") {
+      const ownerCount = await prisma.user.count({
+        where: { workspaceId, role: "OWNER", deletedAt: null },
+      });
+      if (ownerCount <= 1) {
+        throw new BadRequestException(
+          "Não é permitido remover o único OWNER do workspace",
+        );
+      }
+    }
+
+    const { passwordHash: _, ...before } = user;
+
+    await prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "user.deleted",
+      entityType: "USER",
+      entityId: id,
+      before,
+      ipAddress,
+      userAgent,
+    });
+
+    return { success: true };
   }
 }

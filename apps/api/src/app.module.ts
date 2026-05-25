@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { HealthController } from "./health/health.controller";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
+import { SetupModule } from "./setup/setup.module";
 import { UsersModule } from "./users/users.module";
 import { ClientsModule } from "./clients/clients.module";
 import { ClientUsersModule } from "./client-users/client-users.module";
@@ -19,6 +20,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
     AuditModule,
     AuthModule,
     WebhooksModule,
+    SetupModule,
     UsersModule,
     ClientsModule,
     ClientUsersModule,
