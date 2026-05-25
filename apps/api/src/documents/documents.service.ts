@@ -22,6 +22,8 @@ export class DocumentsService {
   private readonly s3AccessKey = process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || "minio_admin";
   private readonly s3SecretKey = process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || "change-me-in-production";
   private readonly s3Bucket = process.env.S3_BUCKET || process.env.S3_BUCKET_NAME || "peanut-os-documents";
+  private readonly s3Region = process.env.S3_REGION || "us-east-1";
+  private readonly s3ForcePathStyle = String(process.env.S3_FORCE_PATH_STYLE ?? "true") === "true";
 
   private readonly s3Client = new S3Client({
     endpoint: this.s3Endpoint,
@@ -30,7 +32,7 @@ export class DocumentsService {
       accessKeyId: this.s3AccessKey,
       secretAccessKey: this.s3SecretKey,
     },
-    forcePathStyle: true,
+    forcePathStyle: this.s3ForcePathStyle,
   });
 
   private async ensureBucketExists() {
