@@ -1,5 +1,17 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
+function getTargetUrl(endpoint: string): string {
+  const baseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+
+  // If the endpoint already starts with /api/v1, strip it from the baseUrl to prevent double prefixing
+  if (cleanEndpoint.startsWith('/api/v1')) {
+    return `${baseUrl.replace('/api/v1', '')}${cleanEndpoint}`;
+  }
+
+  return `${baseUrl}${cleanEndpoint}`;
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
@@ -15,7 +27,9 @@ export async function apiRequest<T = any>(
     (headers as any)['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
+  const targetUrl = getTargetUrl(endpoint);
+
+  const response = await fetch(targetUrl, {
     ...options,
     headers,
   });
@@ -52,7 +66,9 @@ export async function apiBlobRequest(
     (headers as any)['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
+  const targetUrl = getTargetUrl(endpoint);
+
+  const response = await fetch(targetUrl, {
     ...options,
     headers,
   });

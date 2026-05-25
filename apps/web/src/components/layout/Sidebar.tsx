@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/useI18n';
 import logoImg from '../../../images/layout/logo.webp';
 import AvatarCropModal from '../ui/AvatarCropModal';
+import AuthenticatedImage from '../ui/AuthenticatedImage';
 
 interface SidebarProps {
   onCloseMobile?: () => void;
@@ -179,11 +180,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
             title="Alterar foto"
             aria-label="Alterar foto de perfil"
           >
-            {user?.avatarUrl ? (
-              <img src={user.avatarUrl} alt={userDisplayName} className="w-full h-full object-cover" />
-            ) : (
-              <span className="font-bold text-primary text-sm">{userInitials}</span>
-            )}
+            <AuthenticatedImage
+              src={user?.avatarUrl}
+              alt={userDisplayName}
+              className="w-full h-full object-cover"
+              fallback={<span className="font-bold text-primary text-sm">{userInitials}</span>}
+            />
           </button>
 
           {/* User info button */}

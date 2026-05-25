@@ -7,8 +7,7 @@ import Card from '../../../components/ui/Card';
 import { useAuth } from '../../../context/AuthContext';
 import { apiRequest } from '../../../lib/api';
 import Breadcrumbs from '../../../components/layout/Breadcrumbs';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+import AuthenticatedImage from '../../../components/ui/AuthenticatedImage';
 
 type TabId = 'geral' | 'empresa' | 'seguranca' | 'usuarios' | 'notificacoes' | 'integracoes' | 'modulos';
 
@@ -320,11 +319,15 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-md flex-wrap">
                   {logoUrl ? (
                     <div className="relative w-24 h-16 border border-outline-variant rounded-lg bg-white/5 flex items-center justify-center overflow-hidden">
-                      <img
-                        src={`${API_URL}${logoUrl}`}
+                      <AuthenticatedImage
+                        src={logoUrl}
                         alt="Logo"
                         className="max-w-full max-h-full object-contain"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        fallback={
+                          <div className="w-24 h-16 border border-dashed border-outline-variant rounded-lg bg-surface-container/20 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-on-surface-variant text-2xl">image</span>
+                          </div>
+                        }
                       />
                     </div>
                   ) : (
