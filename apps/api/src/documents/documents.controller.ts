@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Param,
   Query,
   UseGuards,
@@ -8,6 +9,7 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { DocumentsService } from "./documents.service";
 import { documentQuerySchema } from "@peanut/validators";
@@ -30,6 +32,25 @@ export class DocumentsController {
       validation.data,
       user.role,
     );
+  }
+
+  @Post("invoices/:invoiceId/generate-pdf")
+  @Roles("OWNER", "ADMIN", "FINANCIAL")
+  async generateInvoicePdf(
+    @Param("invoiceId") invoiceId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.documentsService.enqueueInvoicePdf(
+      invoiceId,
+      user.workspaceId,
+      user.id,
+    );
+  }
+
+  @Get("jobs/:jobId")
+  @Roles("OWNER", "ADMIN", "FINANCIAL")
+  async getJobStatus(@Param("jobId") jobId: string) {
+    return this.documentsService.getJobStatus(jobId);
   }
 
   @Get(":documentId")

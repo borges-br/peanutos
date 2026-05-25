@@ -20,6 +20,14 @@ export default function InvoiceA4PreviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [brandSettings, setBrandSettings] = useState<any>(null);
 
+  // PDF Generation States
+  const [existingDoc, setExistingDoc] = useState<any>(null);
+  const [generating, setGenerating] = useState(false);
+  const [genSuccess, setGenSuccess] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+
+  const hasFinancialPrivilege = user ? ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role) : false;
+
   useEffect(() => {
     async function loadBrand() {
       try {
@@ -31,8 +39,6 @@ export default function InvoiceA4PreviewPage() {
     }
     loadBrand();
   }, []);
-
-  const hasFinancialPrivilege = user ? ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role) : false;
 
   useEffect(() => {
     async function loadInvoice() {
@@ -51,6 +57,62 @@ export default function InvoiceA4PreviewPage() {
       loadInvoice();
     }
   }, [invoiceId]);
+
+  useEffect(() => {
+    async function checkExistingDoc() {
+      try {
+        const response = await apiRequest(`/documents?entityType=INVOICE&entityId=${invoiceId}&limit=1`);
+        if (response?.data && response.data.length > 0) {
+          setExistingDoc(response.data[0]);
+        }
+      } catch (err) {
+        console.error("Failed to check existing document:", err);
+      }
+    }
+    if (invoiceId && hasFinancialPrivilege) {
+      checkExistingDoc();
+    }
+  }, [invoiceId, hasFinancialPrivilege]);
+
+  const handleGeneratePdf = async () => {
+    if (!hasFinancialPrivilege || generating) return;
+    setGenerating(true);
+    setGenError(null);
+    setGenSuccess(false);
+
+    try {
+      const response = await apiRequest<any>(`/documents/invoices/${invoiceId}/generate-pdf`, {
+        method: 'POST',
+      });
+      const jobId = response.jobId;
+      
+      const pollInterval = setInterval(async () => {
+        try {
+          const jobStatus = await apiRequest<any>(`/documents/jobs/${jobId}`);
+          if (jobStatus.status === 'completed') {
+            clearInterval(pollInterval);
+            setGenerating(false);
+            setGenSuccess(true);
+            
+            // Reload existing doc
+            const updatedDocResponse = await apiRequest(`/documents?entityType=INVOICE&entityId=${invoiceId}&limit=1`);
+            if (updatedDocResponse?.data && updatedDocResponse.data.length > 0) {
+              setExistingDoc(updatedDocResponse.data[0]);
+            }
+          } else if (jobStatus.status === 'failed') {
+            clearInterval(pollInterval);
+            setGenerating(false);
+            setGenError(jobStatus.failedReason || t.invoices.pdf?.failure || 'Falha ao gerar PDF.');
+          }
+        } catch (pollErr) {
+          console.error("Failed polling job status:", pollErr);
+        }
+      }, 1500);
+    } catch (err: any) {
+      setGenerating(false);
+      setGenError(err.message || t.invoices.pdf?.failure || 'Falha ao iniciar geração de PDF.');
+    }
+  };
 
   if (loading) {
     return (
@@ -104,6 +166,29 @@ export default function InvoiceA4PreviewPage() {
     .filter((i: any) => i.type === 'MATERIAL')
     .reduce((sum: number, i: any) => sum + parseFloat(i.totalPrice || 0), 0);
 
+  // Dynamic A4PreviewShell PDF Button props
+  let pdfActionLabel = t.invoices.pdf?.generate || "Gerar PDF";
+  let onPdfAction: (() => void) | undefined = undefined;
+  let pdfActionLoading = false;
+  let pdfActionDisabled = false;
+  const showPdfAction = hasFinancialPrivilege;
+
+  if (hasFinancialPrivilege) {
+    if (generating) {
+      pdfActionLabel = t.invoices.pdf?.generating || "PDF em geração";
+      pdfActionLoading = true;
+      pdfActionDisabled = true;
+    } else if (existingDoc) {
+      pdfActionLabel = "Ver Documento Gerado";
+      onPdfAction = () => {
+        router.push(`/dashboard/documentos?search=${invoice.number}`);
+      };
+    } else {
+      pdfActionLabel = t.invoices.pdf?.generate || "Gerar PDF";
+      onPdfAction = handleGeneratePdf;
+    }
+  }
+
   return (
     <A4PreviewShell
       title={t.invoices.previewA4Title || "Preview A4 da Fatura"}
@@ -124,6 +209,11 @@ export default function InvoiceA4PreviewPage() {
       documentFooterText={brandSettings?.documentFooterText}
       signatureName={brandSettings?.signatureName}
       primaryColorHex={brandSettings?.primaryColorHex}
+      pdfActionLabel={pdfActionLabel}
+      onPdfAction={onPdfAction}
+      pdfActionDisabled={pdfActionDisabled}
+      pdfActionLoading={pdfActionLoading}
+      showPdfAction={showPdfAction}
     >
       {!hasFinancialPrivilege ? (
         <div className="my-auto">
@@ -131,6 +221,46 @@ export default function InvoiceA4PreviewPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-md text-black select-text">
+          {/* Success Banner */}
+          {genSuccess && (
+            <div className="bg-green-500/10 border border-green-500/20 text-green-800 p-md rounded-lg text-body-sm flex justify-between items-center mb-md font-sans">
+              <div className="flex items-center gap-sm">
+                <span className="material-symbols-outlined text-green-600 text-[18px]">check_circle</span>
+                <span>{t.invoices.pdf?.registered || "Documento gerado e registrado na Central de Documentos"}</span>
+              </div>
+              <button
+                onClick={() => router.push('/dashboard/documentos')}
+                className="bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-3 py-1.5 rounded transition"
+              >
+                {t.invoices.pdf?.openCentral || "Abrir Central de Documentos"}
+              </button>
+            </div>
+          )}
+
+          {/* Error Banner */}
+          {genError && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-700 p-md rounded-lg text-body-sm flex items-center gap-sm mb-md font-sans">
+              <span className="material-symbols-outlined text-red-600 text-[18px]">error</span>
+              <span>{genError}</span>
+            </div>
+          )}
+
+          {/* Existing Document Notice */}
+          {existingDoc && !genSuccess && (
+            <div className="bg-blue-500/10 border border-blue-500/20 text-blue-800 p-md rounded-lg text-body-sm flex justify-between items-center mb-md font-sans">
+              <div className="flex items-center gap-sm">
+                <span className="material-symbols-outlined text-blue-600 text-[18px]">info</span>
+                <span>Esta fatura já possui uma versão em PDF gerada na Central de Documentos.</span>
+              </div>
+              <button
+                onClick={() => router.push(`/dashboard/documentos?search=${invoice.number}`)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-1.5 rounded transition"
+              >
+                Ver na Central
+              </button>
+            </div>
+          )}
+
           <h3 className="font-bold text-xs uppercase text-black/50 border-b border-black/10 pb-1 tracking-wider mt-md">
             {t.invoices.previewSectionTitle || "Detalhamento de Serviços e Recursos Cobrados"}
           </h3>
@@ -201,4 +331,3 @@ export default function InvoiceA4PreviewPage() {
     </A4PreviewShell>
   );
 }
-

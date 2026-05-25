@@ -25,6 +25,11 @@ interface A4PreviewShellProps {
   documentFooterText?: string;
   signatureName?: string;
   primaryColorHex?: string;
+  pdfActionLabel?: string;
+  onPdfAction?: () => void;
+  pdfActionDisabled?: boolean;
+  pdfActionLoading?: boolean;
+  showPdfAction?: boolean;
 }
 
 export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
@@ -47,6 +52,11 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
   documentFooterText,
   signatureName,
   primaryColorHex,
+  pdfActionLabel,
+  onPdfAction,
+  pdfActionDisabled,
+  pdfActionLoading,
+  showPdfAction,
 }) => {
   const router = useRouter();
   const { t } = useI18n();
@@ -86,10 +96,21 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
             Imprimir — Planejado
           </Button>
 
-          <Button variant="primary" disabled title="Exportação de PDF será liberada na próxima rodada">
-            <span className="material-symbols-outlined text-[16px] mr-1.5">picture_as_pdf</span>
-            PDF — Planejado
-          </Button>
+          {showPdfAction !== false && (
+            <Button
+              variant="primary"
+              disabled={pdfActionDisabled || pdfActionLoading}
+              onClick={onPdfAction}
+              title={onPdfAction ? undefined : "Exportação de PDF será liberada na próxima rodada"}
+            >
+              {pdfActionLoading ? (
+                <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin mr-1.5" />
+              ) : (
+                <span className="material-symbols-outlined text-[16px] mr-1.5">picture_as_pdf</span>
+              )}
+              {pdfActionLabel || (onPdfAction ? "Gerar PDF" : "PDF — Planejado")}
+            </Button>
+          )}
         </div>
       </header>
 

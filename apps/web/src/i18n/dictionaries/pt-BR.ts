@@ -542,6 +542,15 @@ export const ptBR = {
     tabHistory: "Histórico",
   },
   invoices: {
+    pdf: {
+      generate: "Gerar PDF",
+      generating: "PDF em geração",
+      success: "PDF gerado com sucesso",
+      failure: "Falha ao gerar PDF",
+      openCentral: "Abrir Central de Documentos",
+      restricted: "A geração de PDF está restrita a perfis financeiros ou administrativos",
+      registered: "Documento gerado e registrado na Central de Documentos",
+    },
     title: "Faturas Comerciais",
     subtitle: "Gerencie cobranças de serviços de TI, mensalidades e faturamento técnico.",
     number: "Número / Fatura",
@@ -779,6 +788,15 @@ export const ptBR = {
     }
   },
   documents: {
+    generation: {
+      generate: "Gerar PDF",
+      generating: "PDF em geração",
+      success: "PDF gerado com sucesso",
+      failure: "Falha ao gerar PDF",
+      openCentral: "Abrir Central de Documentos",
+      restricted: "A geração de PDF está restrita a perfis financeiros ou administrativos",
+      registered: "Documento gerado e registrado na Central de Documentos",
+    },
     title: "Central de Documentos",
     subtitle: "Armazene e gerencie com segurança contratos, termos de aceite, relatórios e arquivos anexados aos seus clientes.",
     searchPlaceholder: "Buscar por nome do arquivo, tipo ou entidade...",

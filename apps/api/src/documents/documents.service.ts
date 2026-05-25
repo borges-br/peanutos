@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { DocumentQueryInput } from "@peanut/validators";
+import { Queue } from "bullmq";
 
 @Injectable()
 export class DocumentsService {
@@ -241,5 +242,107 @@ export class DocumentsService {
     });
 
     return this.sanitizeDocument(doc, role);
+  }
+
+  private readonly pdfQueue = new Queue("pdf-generation", {
+    connection: {
+      host: process.env.REDIS_HOST || "localhost",
+      port: parseInt(process.env.REDIS_PORT || "6379", 10),
+      password: process.env.REDIS_PASSWORD || "change-me-in-production",
+    },
+  });
+
+  async enqueueInvoicePdf(invoiceId: string, workspaceId: string, actorUserId: string) {
+    // 1. Validate invoice exists and belongs to the workspace
+    const invoice = await prisma.invoice.findFirst({
+      where: { id: invoiceId, workspaceId },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException("Fatura não encontrada");
+    }
+
+    // 2. Discover next version number
+    const lastDoc = await prisma.generatedDocument.findFirst({
+      where: {
+        workspaceId,
+        entityType: "INVOICE",
+        entityId: invoiceId,
+        documentType: "INVOICE",
+      },
+      orderBy: {
+        version: "desc",
+      },
+      select: {
+        version: true,
+      },
+    });
+    const nextVersion = lastDoc ? lastDoc.version + 1 : 1;
+
+    // 3. Enqueue job on BullMQ
+    try {
+      const job = await this.pdfQueue.add(
+        "generate-pdf",
+        {
+          workspaceId,
+          actorUserId,
+          entityType: "INVOICE",
+          entityId: invoiceId,
+          documentType: "INVOICE",
+          version: nextVersion,
+        },
+        {
+          removeOnComplete: 10,
+          removeOnFail: 50,
+        }
+      );
+
+      return {
+        jobId: job.id || "",
+        status: "QUEUED" as const,
+        invoiceId,
+        nextVersion,
+      };
+    } catch (err: any) {
+      console.error("[DocumentsService] Failed to enqueue PDF generation job on Redis:", err);
+      throw new BadRequestException("Serviço de enfileiramento temporariamente indisponível. Redis offline.");
+    }
+  }
+
+  async getJobStatus(jobId: string) {
+    try {
+      const job = await this.pdfQueue.getJob(jobId);
+      if (!job) {
+        return {
+          jobId,
+          status: "unknown" as const,
+        };
+      }
+
+      const state = await job.getState();
+      const failedReason = job.failedReason;
+
+      let sanitizedResult: any = undefined;
+      if (job.returnvalue) {
+        sanitizedResult = {
+          generatedDocumentId: job.returnvalue.generatedDocumentId,
+          fileObjectId: job.returnvalue.fileObjectId,
+          version: job.returnvalue.version,
+        };
+      }
+
+      return {
+        jobId,
+        status: (state === "completed" || state === "failed" || state === "waiting" || state === "active" ? state : "unknown") as any,
+        result: sanitizedResult,
+        failedReason,
+      };
+    } catch (err: any) {
+      console.error(`[DocumentsService] Failed to fetch job status for ${jobId}:`, err);
+      return {
+        jobId,
+        status: "unknown" as const,
+      };
+    }
   }
 }

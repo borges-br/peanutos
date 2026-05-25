@@ -12,8 +12,10 @@
     "@peanut/db": "workspace:*",
     "@peanut/types": "workspace:*",
     "@peanut/utils": "workspace:*",
+    "@peanut/documents": "workspace:*",
     "bullmq": "^5.8.1",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "playwright": "^1.44.0"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",

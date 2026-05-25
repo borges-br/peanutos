@@ -4,6 +4,11 @@
 import * as dotenv from 'dotenv';
 import { Worker, Job, Queue } from 'bullmq';
 import { prisma } from '@peanut/db';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as crypto from 'crypto';
+import { chromium } from 'playwright';
+import { generateInvoicePdfHtml } from '@peanut/documents';
 
 // Load environment variables from root or local
 dotenv.config();
@@ -68,14 +73,249 @@ billingScheduleQueue
  * Playwright browser context will be managed inside this worker in Phase 4.
  * ============================================================================
  */
+/**
+ * Helper to sanitize filenames
+ */
+function safeFilename(str: string): string {
+  return str.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+/**
+ * PDF GENERATION JOB WORKER
+ * ============================================================================
+ * Playwright browser context managed inside this worker.
+ * ============================================================================
+ */
 const pdfWorker = new Worker(
   'pdf-generation',
   async (job: Job) => {
-    console.log(`[PDF Worker] Processing job ${job.id} for type ${job.data.documentType}...`);
-    // Stub delay simulating PDF rendering
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    console.log(`[PDF Worker] Completed job ${job.id}`);
-    return { success: true, key: `s3://peanut-os-documents/fictive-${job.id}.pdf` };
+    const { workspaceId, actorUserId, entityType, entityId, documentType } = job.data;
+    console.log(`[PDF Worker] Processing job ${job.id} for type ${documentType} on entity ${entityId}...`);
+
+    if (entityType !== 'INVOICE') {
+      throw new Error(`[PDF Worker] Unsupported entity type: ${entityType}`);
+    }
+
+    // 1. Fetch invoice
+    const invoice = await prisma.invoice.findFirst({
+      where: { id: entityId, workspaceId },
+      include: {
+        client: true,
+        items: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new Error(`[PDF Worker] Invoice with ID ${entityId} not found in workspace ${workspaceId}`);
+    }
+
+    // 2. Fetch workspace (brand settings)
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
+
+    if (!workspace) {
+      throw new Error(`[PDF Worker] Workspace with ID ${workspaceId} not found`);
+    }
+
+    // 3. Recalculate version number in worker before database record to prevent race conditions
+    const lastDoc = await prisma.generatedDocument.findFirst({
+      where: {
+        workspaceId,
+        entityType: 'INVOICE',
+        entityId,
+        documentType: 'INVOICE',
+      },
+      orderBy: {
+        version: 'desc',
+      },
+      select: {
+        version: true,
+      },
+    });
+    const version = lastDoc ? lastDoc.version + 1 : 1;
+
+    // 4. Format variables for generateInvoicePdfHtml
+    const formatCurrency = (val: number | any) => {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(Number(val));
+    };
+
+    const formatDate = (date: Date) => {
+      return new Date(date).toLocaleDateString('pt-BR');
+    };
+
+    const items = invoice.items.map(item => ({
+      type: item.type,
+      description: item.description,
+      quantity: item.quantity.toString(),
+      unit: item.unit,
+      unitPrice: formatCurrency(item.unitPrice),
+      totalPrice: formatCurrency(item.totalPrice),
+    }));
+
+    const templateData = {
+      invoice: {
+        number: invoice.number,
+        status: invoice.status === 'PAID' ? 'Liquidada' : invoice.status === 'OVERDUE' ? 'Atrasada' : 'Pendente',
+        issueDate: formatDate(invoice.issueDate),
+        dueDate: formatDate(invoice.dueDate),
+        paymentMethod: invoice.paymentMethod,
+        pixKey: invoice.pixKey,
+        totalAmount: formatCurrency(invoice.totalAmount),
+        items,
+      },
+      client: {
+        tradeName: invoice.client.tradeName,
+        legalName: invoice.client.legalName,
+        document: invoice.client.document,
+        email: invoice.client.email,
+      },
+      brand: {
+        brandName: workspace.brandName,
+        brandSubtitle: workspace.brandSubtitle,
+        legalName: workspace.legalName,
+        companyDocument: workspace.companyDocument,
+        companyEmail: workspace.companyEmail,
+        financialEmail: workspace.financialEmail,
+        companyPhone: workspace.companyPhone,
+        companyWebsite: workspace.companyWebsite,
+        companyAddress: workspace.companyAddress,
+        primaryColorHex: workspace.primaryColorHex,
+        documentFooterText: workspace.documentFooterText,
+        signatureName: workspace.signatureName,
+      },
+      generatedAt: new Date().toLocaleString('pt-BR'),
+    };
+
+    // 5. Render HTML
+    const html = generateInvoicePdfHtml(templateData);
+
+    // 6. Launch Playwright headless browser
+    console.log(`[PDF Worker] Launching chromium browser...`);
+    const browser = await chromium.launch({ headless: true });
+    let pdfBuffer: Buffer;
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html);
+      pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '0',
+          right: '0',
+          bottom: '0',
+          left: '0',
+        },
+      });
+    } finally {
+      await browser.close();
+    }
+
+    // 7. Resolve workspace root and storage directory
+    const workspaceRoot = process.cwd().endsWith('worker') ? path.resolve(process.cwd(), '../..') : process.cwd();
+    const storageRoot = process.env.DOCUMENT_STORAGE_ROOT || path.join(workspaceRoot, 'storage');
+
+    const sanitizedNumber = safeFilename(invoice.number);
+    const fileName = `invoice-${sanitizedNumber}-v${version}.pdf`;
+    const key = `${workspaceId}/invoices/${entityId}/${fileName}`;
+    const filePath = path.join(storageRoot, 'documents', workspaceId, 'invoices', entityId, fileName);
+
+    // 8. Create folder structure and save the file
+    console.log(`[PDF Worker] Saving physical PDF to local disk: ${filePath}`);
+    const dirPath = path.dirname(filePath);
+    await fs.promises.mkdir(dirPath, { recursive: true });
+    await fs.promises.writeFile(filePath, pdfBuffer);
+
+    // 9. Calculate file statistics
+    const stats = await fs.promises.stat(filePath);
+    const sizeBytes = BigInt(stats.size);
+    const sha256 = crypto.createHash('sha256').update(pdfBuffer).digest('hex');
+
+    // 10. Persist records in Prisma (FileObject & GeneratedDocument)
+    let fileObject;
+    let generatedDoc;
+    try {
+      fileObject = await prisma.fileObject.create({
+        data: {
+          workspaceId,
+          bucket: 'local-documents',
+          key,
+          originalFilename: `fatura-${sanitizedNumber}.pdf`,
+          mimeType: 'application/pdf',
+          sizeBytes,
+          sha256,
+          visibility: 'PRIVATE',
+          createdById: actorUserId,
+        },
+      });
+
+      generatedDoc = await prisma.generatedDocument.create({
+        data: {
+          workspaceId,
+          entityType: 'INVOICE',
+          entityId,
+          documentType: 'INVOICE',
+          version,
+          fileObjectId: fileObject.id,
+          sha256,
+          generatedById: actorUserId,
+          metadata: JSON.stringify({
+            invoiceNumber: invoice.number,
+            generatedFrom: 'invoice-preview',
+            storage: 'local',
+          }),
+        },
+      });
+    } catch (dbError) {
+      console.error('[PDF Worker] DB operations failed. Cleaning up saved file...', dbError);
+      try {
+        await fs.promises.unlink(filePath);
+      } catch (unlinkErr) {
+        console.error('[PDF Worker] Physical file cleanup failed:', unlinkErr);
+      }
+      throw dbError;
+    }
+
+    // 11. Write audit log (omitting local key, bucket, path)
+    try {
+      await prisma.auditLog.create({
+        data: {
+          workspaceId,
+          actorUserId,
+          action: 'document.generated',
+          entityType: 'DOCUMENT',
+          entityId: generatedDoc.id,
+          beforeJson: null,
+          afterJson: JSON.stringify({
+            documentId: generatedDoc.id,
+            entityType: 'INVOICE',
+            entityId,
+            version,
+            originalFilename: fileObject.originalFilename,
+            sizeBytes: sizeBytes.toString(),
+            sha256,
+            visibility: fileObject.visibility,
+          }),
+          severity: 'INFO',
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[PDF Worker] Failed to write audit log:', auditErr);
+    }
+
+    console.log(`[PDF Worker] Completed job ${job.id}. GeneratedDocId: ${generatedDoc.id}`);
+    
+    // Return ONLY generatedDocumentId, fileObjectId and version (excl. local path/bucket/key)
+    return {
+      generatedDocumentId: generatedDoc.id,
+      fileObjectId: fileObject.id,
+      version,
+    };
   },
   {
     connection,
