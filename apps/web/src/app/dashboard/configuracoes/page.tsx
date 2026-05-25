@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -8,6 +8,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { apiRequest } from '../../../lib/api';
 import Breadcrumbs from '../../../components/layout/Breadcrumbs';
 import AuthenticatedImage from '../../../components/ui/AuthenticatedImage';
+import AvatarCropModal from '../../../components/ui/AvatarCropModal';
 
 type TabId = 'geral' | 'empresa' | 'seguranca' | 'usuarios' | 'notificacoes' | 'integracoes' | 'modulos';
 
@@ -70,8 +71,8 @@ export default function SettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [showLogoCropModal, setShowLogoCropModal] = useState(false);
 
-  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const isEditable = user ? ['OWNER', 'ADMIN'].includes(user.role) : false;
 
@@ -126,45 +127,6 @@ export default function SettingsPage() {
     }
   };
 
-  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const ALLOWED = ['image/png', 'image/jpeg', 'image/webp'];
-    if (!ALLOWED.includes(file.type)) {
-      setSaveError('Tipo de arquivo não permitido. Use PNG, JPEG ou WebP.');
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      setSaveError('Arquivo muito grande. Máximo 2 MB.');
-      return;
-    }
-
-    setUploadingLogo(true);
-    setSaveError(null);
-    try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.replace(/^data:[^;]+;base64,/, ''));
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const response = await apiRequest('/settings/brand/logo', {
-        method: 'POST',
-        body: JSON.stringify({ data: base64, mimeType: file.type, filename: file.name }),
-      });
-      setLogoUrl(response.logoUrl);
-    } catch (err: any) {
-      setSaveError(err.message || 'Erro ao enviar logo.');
-    } finally {
-      setUploadingLogo(false);
-      if (logoInputRef.current) logoInputRef.current.value = '';
-    }
-  }
 
   async function handleLogoDelete() {
     if (!confirm('Remover a logo atual?')) return;
@@ -337,19 +299,11 @@ export default function SettingsPage() {
                   )}
                   {isEditable && (
                     <div className="flex gap-sm flex-wrap">
-                      <input
-                        ref={logoInputRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className="hidden"
-                        onChange={handleLogoUpload}
-                        disabled={uploadingLogo}
-                      />
                       <Button
                         type="button"
                         variant="outline"
                         className="text-xs"
-                        onClick={() => logoInputRef.current?.click()}
+                        onClick={() => setShowLogoCropModal(true)}
                         loading={uploadingLogo}
                         disabled={uploadingLogo}
                       >
@@ -654,6 +608,24 @@ export default function SettingsPage() {
       </nav>
 
       <section className="mt-md">{renderTabContent()}</section>
+
+      <AvatarCropModal
+        isOpen={showLogoCropModal}
+        onClose={() => setShowLogoCropModal(false)}
+        onSuccess={(response) => {
+          if (response && response.logoUrl) {
+            setLogoUrl(response.logoUrl);
+          } else {
+            loadSettings();
+          }
+        }}
+        uploadUrl="/settings/brand/logo"
+        title="Alterar Logo da Empresa"
+        aspect={1.5}
+        cropShape="rect"
+        buttonLabel="Salvar logo"
+        icon="business"
+      />
     </main>
   );
 }

@@ -9,7 +9,13 @@ import { useAuth } from '../../context/AuthContext';
 interface AvatarCropModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (response?: any) => void;
+  uploadUrl?: string;
+  title?: string;
+  aspect?: number;
+  cropShape?: 'rect' | 'round';
+  buttonLabel?: string;
+  icon?: string;
 }
 
 const createImage = (url: string): Promise<HTMLImageElement> =>
@@ -65,6 +71,12 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  uploadUrl = '/users/me/avatar',
+  title = 'Alterar Foto de Perfil',
+  aspect = 1,
+  cropShape = 'round',
+  buttonLabel = 'Salvar foto',
+  icon = 'account_circle',
 }) => {
   const { refreshUser } = useAuth();
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -118,22 +130,24 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
       const croppedBase64 = await getCroppedImg(imageSrc, croppedAreaPixels);
       const pureBase64 = croppedBase64.replace(/^data:[^;]+;base64,/, '');
 
-      await apiRequest('/users/me/avatar', {
+      const response = await apiRequest(uploadUrl, {
         method: 'POST',
         body: JSON.stringify({
           data: pureBase64,
           mimeType: fileType,
-          filename: fileName || 'avatar.jpg',
+          filename: fileName || 'image.jpg',
         }),
       });
 
-      // Refresh global user state to update sidebar and avatar images instantly
-      await refreshUser();
+      // Refresh global user state to update sidebar and avatar images instantly if it's the user's avatar
+      if (uploadUrl === '/users/me/avatar') {
+        await refreshUser();
+      }
 
-      if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess(response);
       handleClose();
     } catch (err: any) {
-      setError(err.message || 'Falha ao salvar avatar.');
+      setError(err.message || 'Falha ao salvar imagem.');
     } finally {
       setLoading(false);
     }
@@ -157,8 +171,8 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
         {/* Modal Header */}
         <div className="p-lg border-b border-outline-variant flex items-center justify-between">
           <h2 className="font-title-md text-on-surface font-bold flex items-center gap-sm">
-            <span className="material-symbols-outlined text-primary">account_circle</span>
-            Alterar Foto de Perfil
+            <span className="material-symbols-outlined text-primary">{icon}</span>
+            {title}
           </h2>
           <button
             onClick={handleClose}
@@ -206,8 +220,8 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
                   image={imageSrc}
                   crop={crop}
                   zoom={zoom}
-                  aspect={1}
-                  cropShape="round"
+                  aspect={aspect}
+                  cropShape={cropShape}
                   showGrid={false}
                   onCropChange={setCrop}
                   onCropComplete={onCropComplete}
@@ -255,7 +269,7 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
             loading={loading}
             className="text-xs px-lg"
           >
-            Salvar foto
+            {buttonLabel}
           </Button>
         </div>
       </div>

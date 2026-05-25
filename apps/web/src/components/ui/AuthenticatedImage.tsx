@@ -6,18 +6,21 @@ import { apiBlobRequest } from '../../lib/api';
 interface AuthenticatedImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> {
   src: string | null | undefined;
   fallback?: React.ReactNode;
+  onLoadError?: (err: Error) => void;
 }
 
-export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, fallback, ...props }) => {
+export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, fallback, onLoadError, ...props }) => {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
   useEffect(() => {
     if (!src) {
       setBlobUrl(null);
       setLoading(false);
-      setError(true);
+      setError(false);
+      setErrorDetail(null);
       return;
     }
 
@@ -26,20 +29,30 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, fal
 
     setLoading(true);
     setError(false);
+    setErrorDetail(null);
 
     apiBlobRequest(src)
       .then((blob) => {
         if (!active) return;
+
+        // Validate that we got an actual image and not an error response
+        if (blob.size === 0) {
+          throw new Error('Empty response from server');
+        }
+
         const url = URL.createObjectURL(blob);
         currentUrl = url;
         setBlobUrl(url);
         setLoading(false);
       })
       .catch((err) => {
-        console.error('Failed to load authenticated image:', err);
+        const msg = err?.message || 'Unknown error';
+        console.error(`[AuthenticatedImage] Failed to load "${src}":`, msg);
         if (active) {
           setError(true);
+          setErrorDetail(msg);
           setLoading(false);
+          onLoadError?.(err);
         }
       });
 
@@ -49,7 +62,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, fal
         URL.revokeObjectURL(currentUrl);
       }
     };
-  }, [src]);
+  }, [src, onLoadError]);
 
   if (loading) {
     return (
@@ -63,6 +76,22 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, fal
   }
 
   if (error || !blobUrl) {
+    // In dev, show a visual hint about the error for debugging
+    if (error && errorDetail && process.env.NODE_ENV === 'development') {
+      return (
+        <>
+          {fallback || (
+            <div
+              className={`flex items-center justify-center bg-error-container/10 border border-error/20 rounded ${props.className || ''}`}
+              style={props.style}
+              title={`Image load failed: ${errorDetail}`}
+            >
+              <span className="material-symbols-outlined text-error/40 text-sm">broken_image</span>
+            </div>
+          )}
+        </>
+      );
+    }
     return <>{fallback || null}</>;
   }
 

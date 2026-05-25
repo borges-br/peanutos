@@ -27,12 +27,31 @@ export class FilesController {
     @CurrentUser() user: any,
     @Res() res: any,
   ) {
+    // Dev diagnostic logging (safe — never exposes bucket/key to frontend)
+    const isDev = process.env.NODE_ENV !== "production";
+    if (isDev) {
+      console.log(`[FilesController] GET /files/${fileObjectId} | user.workspaceId=${user.workspaceId}`);
+    }
+
     const fileObject = await prisma.fileObject.findFirst({
       where: { id: fileObjectId, workspaceId: user.workspaceId },
     });
 
     if (!fileObject) {
+      if (isDev) {
+        // Check if it exists in another workspace (debug only)
+        const anyMatch = await prisma.fileObject.findUnique({ where: { id: fileObjectId } });
+        if (anyMatch) {
+          console.warn(`[FilesController] FileObject ${fileObjectId} exists but belongs to workspace ${anyMatch.workspaceId}, not ${user.workspaceId}`);
+        } else {
+          console.warn(`[FilesController] FileObject ${fileObjectId} does NOT exist in any workspace`);
+        }
+      }
       throw new NotFoundException("Arquivo não encontrado");
+    }
+
+    if (isDev) {
+      console.log(`[FilesController] Found: mime=${fileObject.mimeType}, key=${fileObject.key}`);
     }
 
     const { s3, bucket } = this.storage.getS3Config();
@@ -44,14 +63,23 @@ export class FilesController {
         Key: fileObject.key,
       }));
     } catch (err: any) {
+      if (isDev) {
+        console.error(`[FilesController] S3 GetObject failed for key=${fileObject.key}:`, err.message);
+      }
       throw new NotFoundException("Arquivo não disponível no armazenamento");
     }
 
-    res.header("Content-Type", fileObject.mimeType);
-    res.header("Cache-Control", "private, max-age=3600");
-    res.header("Content-Disposition", `inline; filename="${fileObject.originalFilename}"`);
+    if (isDev) {
+      console.log(`[FilesController] S3 OK, streaming response for ${fileObject.originalFilename}`);
+    }
 
-    const stream = s3Response.Body as NodeJS.ReadableStream;
-    stream.pipe(res.raw);
+    // Use Fastify's native .send() with the readable stream — do NOT use stream.pipe(res.raw)
+    const body = s3Response.Body as NodeJS.ReadableStream;
+
+    return res
+      .header("Content-Type", fileObject.mimeType)
+      .header("Cache-Control", "private, max-age=3600")
+      .header("Content-Disposition", `inline; filename="${fileObject.originalFilename}"`)
+      .send(body);
   }
 }
