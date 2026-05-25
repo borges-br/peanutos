@@ -10,14 +10,18 @@ import { generateInvoicePdfHtml } from '@peanut/documents';
 import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 // Load environment variables from root or local
-dotenv.config();
+dotenv.config({ override: true });
 
 // S3 Client initialization with resilient fallbacks
-const s3Endpoint = process.env.S3_ENDPOINT || "http://localhost:9000";
-const s3AccessKey = process.env.S3_ACCESS_KEY || process.env.S3_ACCESS_KEY_ID || "minio_admin";
-const s3SecretKey = process.env.S3_SECRET_KEY || process.env.S3_SECRET_ACCESS_KEY || "change-me-in-production";
-const s3Bucket = process.env.S3_BUCKET || "peanut-documents";
-const s3Region = process.env.S3_REGION || "us-east-1";
+const normalizeS3Endpoint = (endpoint?: string) => {
+  const value = endpoint || "http://localhost:9000";
+  return /^https?:\/\//i.test(value) ? value : `http://${value}`;
+};
+
+const s3Endpoint = normalizeS3Endpoint(process.env.S3_ENDPOINT);
+const s3AccessKey = process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || "minio_admin";
+const s3SecretKey = process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || "change-me-in-production";
+const s3Bucket = process.env.S3_BUCKET || process.env.S3_BUCKET_NAME || "peanut-os-documents";
 
 const s3Client = new S3Client({
   endpoint: s3Endpoint,

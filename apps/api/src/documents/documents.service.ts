@@ -13,11 +13,15 @@ export class DocumentsService {
     });
   }
 
-  private readonly s3Endpoint = process.env.S3_ENDPOINT || "http://localhost:9000";
-  private readonly s3AccessKey = process.env.S3_ACCESS_KEY || process.env.S3_ACCESS_KEY_ID || "minio_admin";
-  private readonly s3SecretKey = process.env.S3_SECRET_KEY || process.env.S3_SECRET_ACCESS_KEY || "change-me-in-production";
-  private readonly s3Bucket = process.env.S3_BUCKET || "peanut-documents";
-  private readonly s3Region = process.env.S3_REGION || "us-east-1";
+  private normalizeS3Endpoint(endpoint?: string) {
+    const value = endpoint || "http://localhost:9000";
+    return /^https?:\/\//i.test(value) ? value : `http://${value}`;
+  }
+
+  private readonly s3Endpoint = this.normalizeS3Endpoint(process.env.S3_ENDPOINT);
+  private readonly s3AccessKey = process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || "minio_admin";
+  private readonly s3SecretKey = process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || "change-me-in-production";
+  private readonly s3Bucket = process.env.S3_BUCKET || process.env.S3_BUCKET_NAME || "peanut-os-documents";
 
   private readonly s3Client = new S3Client({
     endpoint: this.s3Endpoint,
