@@ -6,11 +6,15 @@ import {
 import { prisma } from "@peanut/db";
 import * as bcrypt from "bcryptjs";
 import { AuditService } from "../audit/audit.service";
+import { WebhookEventsService } from "../webhooks/webhook-events.service";
 import { UserInput } from "@peanut/validators";
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly auditService: AuditService) {}
+  constructor(
+    private readonly auditService: AuditService,
+    private readonly webhookEvents: WebhookEventsService,
+  ) {}
 
   async list(workspaceId: string) {
     const users = await prisma.user.findMany({
@@ -86,6 +90,13 @@ export class UsersService {
       userAgent,
     });
 
+    this.webhookEvents.emit({
+      workspaceId,
+      eventType: 'user.created',
+      entityId: newUser.id,
+      data: { userId: newUser.id, name: sanitizedUser.name, email: sanitizedUser.email, role: sanitizedUser.role },
+    }).catch(() => {});
+
     return sanitizedUser;
   }
 
@@ -135,6 +146,15 @@ export class UsersService {
       ipAddress,
       userAgent,
     });
+
+    if (input.role && before.role !== input.role) {
+      this.webhookEvents.emit({
+        workspaceId,
+        eventType: 'user.role_changed',
+        entityId: id,
+        data: { userId: id, name: after.name, email: after.email, oldRole: before.role, newRole: input.role },
+      }).catch(() => {});
+    }
 
     return after;
   }

@@ -458,6 +458,75 @@ export const workspaceBrandSettingsSchema = z.object({
 
 export type WorkspaceBrandSettingsInput = z.infer<typeof workspaceBrandSettingsSchema>;
 
+// --- WEBHOOK VALIDATORS ---
+
+export const WEBHOOK_EVENTS = [
+  'invoice.created',
+  'invoice.status_changed',
+  'document.generated',
+  'ticket.created',
+  'ticket.status_changed',
+  'user.created',
+  'user.role_changed',
+  'client.created',
+  'client.updated',
+  'contract.created',
+  'contract.status_changed',
+] as const;
+
+export type WebhookEventType = typeof WEBHOOK_EVENTS[number];
+
+const isPrivateHost = (url: string): boolean => {
+  try {
+    const { hostname } = new URL(url);
+    return (
+      ['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(hostname) ||
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+      /^192\.168\./.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+};
+
+// Runtime guard for private URL — evaluated at call time to allow SSR/Node env detection
+const blockPrivateUrls = (url: string): boolean => {
+  const nodeEnv =
+    typeof globalThis !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV;
+  return nodeEnv !== 'production' || !isPrivateHost(url);
+};
+
+export const createWebhookEndpointSchema = z.object({
+  name: z.string().min(2, { message: 'O nome do webhook é obrigatório' }).max(150),
+  url: z
+    .string()
+    .url({ message: 'URL inválida. Use http:// ou https://' })
+    .refine((url) => /^https?:\/\//i.test(url), {
+      message: 'URL deve usar protocolo HTTP ou HTTPS',
+    })
+    .refine(blockPrivateUrls, {
+      message: 'URL aponta para rede privada ou local (não permitido em produção)',
+    }),
+  events: z
+    .array(z.enum(WEBHOOK_EVENTS))
+    .min(1, { message: 'Selecione ao menos um evento' }),
+  isActive: z.boolean().default(true),
+});
+
+export type CreateWebhookEndpointInput = z.infer<typeof createWebhookEndpointSchema>;
+
+export const updateWebhookEndpointSchema = createWebhookEndpointSchema.partial();
+
+export type UpdateWebhookEndpointInput = z.infer<typeof updateWebhookEndpointSchema>;
+
+export const webhookDeliveryQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export type WebhookDeliveryQueryInput = z.infer<typeof webhookDeliveryQuerySchema>;
+
 // --- DOCUMENT VALIDATORS ---
 
 export const documentTypeEnum = z.enum(["QUOTE", "INVOICE", "TICKET_CLOSURE", "CONTRACT", "REPORT"]);

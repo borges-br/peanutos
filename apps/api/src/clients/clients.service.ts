@@ -5,11 +5,15 @@ import {
 } from "@nestjs/common";
 import { prisma, ClientStatus } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
+import { WebhookEventsService } from "../webhooks/webhook-events.service";
 import { ClientInput, ClientContactInput } from "@peanut/validators";
 
 @Injectable()
 export class ClientsService {
-  constructor(private readonly auditService: AuditService) {}
+  constructor(
+    private readonly auditService: AuditService,
+    private readonly webhookEvents: WebhookEventsService,
+  ) {}
 
   async list(
     workspaceId: string,
@@ -125,6 +129,13 @@ export class ClientsService {
       userAgent,
     });
 
+    this.webhookEvents.emit({
+      workspaceId,
+      eventType: 'client.created',
+      entityId: newClient.id,
+      data: { clientId: newClient.id, tradeName: newClient.tradeName, legalName: newClient.legalName, document: newClient.document, status: newClient.status },
+    }).catch(() => {});
+
     return newClient;
   }
 
@@ -182,6 +193,13 @@ export class ClientsService {
       ipAddress,
       userAgent,
     });
+
+    this.webhookEvents.emit({
+      workspaceId,
+      eventType: 'client.updated',
+      entityId: id,
+      data: { clientId: id, tradeName: updatedClient.tradeName, legalName: updatedClient.legalName, status: updatedClient.status },
+    }).catch(() => {});
 
     return updatedClient;
   }

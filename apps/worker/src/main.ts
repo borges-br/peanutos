@@ -5,6 +5,8 @@ import * as dotenv from 'dotenv';
 import { Worker, Job, Queue } from 'bullmq';
 import { prisma } from '@peanut/db';
 import * as crypto from 'crypto';
+import * as https from 'https';
+import * as http from 'http';
 import { chromium } from 'playwright';
 import { generateInvoicePdfHtml } from '@peanut/documents';
 import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
@@ -70,6 +72,79 @@ ensureBucketExists().catch(err => {
 });
 
 console.log('👷 Background job worker initializing...');
+
+// ==============================================================================
+// WEBHOOK EVENT EMITTER (standalone, no NestJS DI)
+// ==============================================================================
+
+const WORKER_SENSITIVE_KEYS = new Set([
+  'password', 'passwordhash', 'token', 'secret', 'encryptedsecret',
+  'accesstoken', 'refreshtoken', 'authorization', 'apikey', 'credential',
+  'sensitivedataencrypted', 'sensitivedata', 'bucket', 'key', 's3key',
+  'storagekey', 'stack', 'stacktrace',
+]);
+
+function workerSanitize(obj: unknown): unknown {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return (obj as unknown[]).map(workerSanitize);
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    result[k] = WORKER_SENSITIVE_KEYS.has(k.toLowerCase()) ? '[REDACTED]' : workerSanitize(v);
+  }
+  return result;
+}
+
+async function emitWebhookEventFromWorker(event: {
+  workspaceId: string;
+  eventType: string;
+  entityId: string;
+  data: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    const endpoints = await prisma.webhookEndpoint.findMany({
+      where: { workspaceId: event.workspaceId, isActive: true, events: { has: event.eventType } },
+      select: { id: true },
+    });
+    if (endpoints.length === 0) return;
+
+    const webhookDispatchQueue = new Queue('webhook-dispatch', { connection });
+    const payload = {
+      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      type: event.eventType,
+      createdAt: new Date().toISOString(),
+      workspaceId: event.workspaceId,
+      data: workerSanitize(event.data),
+    };
+
+    for (const endpoint of endpoints) {
+      try {
+        const delivery = await prisma.webhookDelivery.create({
+          data: {
+            workspaceId: event.workspaceId,
+            webhookId: endpoint.id,
+            eventType: event.eventType,
+            payload: payload as any,
+            status: 'PENDING',
+            maxAttempts: 5,
+            nextAttemptAt: new Date(),
+          },
+        });
+        await webhookDispatchQueue.add('webhook-dispatch', { deliveryId: delivery.id }, {
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: 100,
+          removeOnFail: 200,
+        }).catch((err: Error) => {
+          console.warn(`[Worker WebhookEmit] Redis unavailable for delivery ${delivery.id}:`, err.message);
+        });
+      } catch (err: any) {
+        console.error(`[Worker WebhookEmit] Failed for endpoint ${endpoint.id}:`, err.message);
+      }
+    }
+  } catch (err: any) {
+    console.error('[Worker WebhookEmit] Unhandled error (safe bypass):', err.message);
+  }
+}
 
 const redisHost = process.env.REDIS_HOST || 'localhost';
 const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
@@ -377,7 +452,22 @@ const pdfWorker = new Worker(
     }
 
     console.log(`[PDF Worker] Completed job ${job.id}. GeneratedDocId: ${generatedDoc.id}`);
-    
+
+    // Emit document.generated webhook event (non-blocking)
+    emitWebhookEventFromWorker({
+      workspaceId,
+      eventType: 'document.generated',
+      entityId: generatedDoc.id,
+      data: {
+        documentId: generatedDoc.id,
+        entityType: 'INVOICE',
+        entityId,
+        documentType: 'INVOICE',
+        version,
+        originalFilename: fileObject.originalFilename,
+      },
+    }).catch(() => {});
+
     // Return ONLY generatedDocumentId, fileObjectId and version (excl. bucket/key/endpoint)
     return {
       generatedDocumentId: generatedDoc.id,
@@ -391,23 +481,268 @@ const pdfWorker = new Worker(
   }
 );
 
+// ==============================================================================
+// WEBHOOK SIGNING HELPERS
+// ==============================================================================
+
+const getWebhookEncKey = (): Buffer => {
+  const raw = process.env.WEBHOOK_ENCRYPTION_KEY || 'peanut-os-webhook-key-change-in-production!!';
+  return crypto.createHash('sha256').update(raw).digest();
+};
+
+function decryptWebhookSecret(encryptedSecret: string): string {
+  const parts = encryptedSecret.split(':');
+  if (parts.length !== 3) throw new Error('Invalid encrypted secret format');
+  const ivHex = parts[0]!;
+  const tagHex = parts[1]!;
+  const encHex = parts[2]!;
+  const key = getWebhookEncKey();
+  const iv = Buffer.from(ivHex, 'hex');
+  const tag = Buffer.from(tagHex, 'hex');
+  const enc = Buffer.from(encHex, 'hex');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  return decipher.update(enc).toString('utf8') + decipher.final('utf8');
+}
+
+function computeHmac(secret: string, timestamp: number, rawBody: string): string {
+  const payload = `${timestamp}.${rawBody}`;
+  return 'sha256=' + crypto.createHmac('sha256', secret).update(payload).digest('hex');
+}
+
+function isPrivateHost(hostname: string): boolean {
+  return (
+    ['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(hostname) ||
+    /^10\./.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+    /^192\.168\./.test(hostname)
+  );
+}
+
+function doHttpPost(
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return reject(new Error('URL inválida'));
+    }
+
+    if (process.env.NODE_ENV === 'production' && isPrivateHost(parsed.hostname)) {
+      return reject(new Error('URL aponta para rede privada (bloqueado em produção)'));
+    }
+
+    const lib = parsed.protocol === 'https:' ? https : http;
+    const options = {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Length': Buffer.byteLength(body),
+      },
+      timeout: timeoutMs,
+    };
+
+    const req = lib.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode || 0, body: data }));
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error(`Request timeout after ${timeoutMs}ms`));
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 /**
- * WEBHOOK DISPATCH JOB WORKER STUB
+ * WEBHOOK DISPATCH JOB WORKER
  * ============================================================================
- * Outbox Event webhook signature and POST sending in Phase 6.
+ * Receives { deliveryId }, fetches the delivery + endpoint, sends HMAC-signed
+ * POST request, and updates the delivery record with the result.
  * ============================================================================
  */
 const webhookWorker = new Worker(
   'webhook-dispatch',
   async (job: Job) => {
-    console.log(`[Webhook Worker] Sending payload for event ${job.data.eventType} to ${job.data.endpoint}...`);
-    // Stub delay simulating HTTP dispatch
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    console.log(`[Webhook Worker] Hook sent successfully signature-verified.`);
-    return { success: true };
+    const { deliveryId } = job.data;
+
+    if (!deliveryId) {
+      console.warn('[Webhook Worker] Job missing deliveryId, skipping.');
+      return { skipped: true };
+    }
+
+    const delivery = await prisma.webhookDelivery.findUnique({
+      where: { id: deliveryId },
+      include: { webhook: true },
+    });
+
+    if (!delivery) {
+      console.warn(`[Webhook Worker] Delivery ${deliveryId} not found, skipping.`);
+      return { skipped: true };
+    }
+
+    if (!delivery.webhook || !delivery.webhook.isActive) {
+      await prisma.webhookDelivery.update({
+        where: { id: deliveryId },
+        data: { status: 'CANCELLED', errorMessage: 'Webhook inativo ou removido' },
+      });
+      console.log(`[Webhook Worker] Delivery ${deliveryId} cancelled — webhook inactive.`);
+      return { cancelled: true };
+    }
+
+    const attempt = (delivery.attempt || 0) + 1;
+    await prisma.webhookDelivery.update({
+      where: { id: deliveryId },
+      data: { attempt, status: attempt > 1 ? 'RETRYING' : 'PENDING' },
+    });
+
+    console.log(`[Webhook Worker] Dispatching delivery ${deliveryId} (attempt ${attempt}) for event ${delivery.eventType} to ${delivery.webhook.url}`);
+
+    const rawBody = JSON.stringify(delivery.payload);
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    let signature = '';
+    if (delivery.webhook.encryptedSecret) {
+      try {
+        const secret = decryptWebhookSecret(delivery.webhook.encryptedSecret);
+        signature = computeHmac(secret, timestamp, rawBody);
+      } catch (sigErr: any) {
+        console.error(`[Webhook Worker] Failed to compute HMAC for delivery ${deliveryId}:`, sigErr.message);
+      }
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'PeanutOS-Webhooks/1.0',
+      'X-Peanut-Event': delivery.eventType,
+      'X-Peanut-Delivery': deliveryId,
+      'X-Peanut-Timestamp': String(timestamp),
+      ...(signature ? { 'X-Peanut-Signature': signature } : {}),
+    };
+
+    try {
+      const result = await doHttpPost(delivery.webhook.url, rawBody, headers, 8000);
+      const isSuccess = result.status >= 200 && result.status < 300;
+      const truncatedBody = result.body.substring(0, 500);
+
+      if (isSuccess) {
+        await prisma.webhookDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            status: 'DELIVERED',
+            responseStatus: result.status,
+            responseBody: truncatedBody,
+            deliveredAt: new Date(),
+            errorMessage: null,
+          },
+        });
+
+        await writeWebhookAudit(delivery.workspaceId, 'webhook.delivery_succeeded', deliveryId, {
+          eventType: delivery.eventType,
+          webhookId: delivery.webhookId,
+          responseStatus: result.status,
+          attempt,
+        });
+
+        console.log(`[Webhook Worker] Delivery ${deliveryId} succeeded (HTTP ${result.status}).`);
+        return { success: true, status: result.status };
+      } else {
+        const isRetryable = attempt < delivery.maxAttempts;
+        const backoffMs = Math.pow(2, attempt) * 5000;
+        const nextAttemptAt = isRetryable ? new Date(Date.now() + backoffMs) : null;
+
+        await prisma.webhookDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            status: isRetryable ? 'RETRYING' : 'FAILED',
+            responseStatus: result.status,
+            responseBody: truncatedBody.substring(0, 500),
+            errorMessage: `HTTP ${result.status}`,
+            nextAttemptAt,
+          },
+        });
+
+        if (!isRetryable) {
+          await writeWebhookAudit(delivery.workspaceId, 'webhook.delivery_failed', deliveryId, {
+            eventType: delivery.eventType,
+            webhookId: delivery.webhookId,
+            responseStatus: result.status,
+            attempt,
+          });
+        }
+
+        console.warn(`[Webhook Worker] Delivery ${deliveryId} failed (HTTP ${result.status}, attempt ${attempt}/${delivery.maxAttempts}).`);
+        if (isRetryable) throw new Error(`HTTP ${result.status} — will retry`);
+        return { failed: true, status: result.status };
+      }
+    } catch (err: any) {
+      const isRetryable = attempt < delivery.maxAttempts;
+      const backoffMs = Math.pow(2, attempt) * 5000;
+      const nextAttemptAt = isRetryable ? new Date(Date.now() + backoffMs) : null;
+      const errorMsg = (err.message || 'Erro desconhecido').substring(0, 500);
+
+      await prisma.webhookDelivery.update({
+        where: { id: deliveryId },
+        data: {
+          status: isRetryable ? 'RETRYING' : 'FAILED',
+          errorMessage: errorMsg,
+          nextAttemptAt,
+        },
+      });
+
+      if (!isRetryable) {
+        await writeWebhookAudit(delivery.workspaceId, 'webhook.delivery_failed', deliveryId, {
+          eventType: delivery.eventType,
+          webhookId: delivery.webhookId,
+          errorMessage: errorMsg,
+          attempt,
+        });
+      }
+
+      console.error(`[Webhook Worker] Delivery ${deliveryId} error (attempt ${attempt}):`, err.message);
+      throw err;
+    }
   },
-  { connection }
+  {
+    connection,
+    concurrency: parseInt(process.env.WEBHOOK_MAX_CONCURRENCY || '5', 10),
+  },
 );
+
+async function writeWebhookAudit(
+  workspaceId: string,
+  action: string,
+  deliveryId: string,
+  details: Record<string, unknown>,
+) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        actorUserId: null,
+        action,
+        entityType: 'WEBHOOK_DELIVERY',
+        entityId: deliveryId,
+        afterJson: JSON.stringify(details),
+        severity: action.includes('failed') ? 'WARN' : 'INFO',
+      },
+    });
+  } catch (err: any) {
+    console.warn('[Webhook Worker] Failed to write audit log:', err.message);
+  }
+}
 
 /**
  * SLA MONITOR JOB WORKER

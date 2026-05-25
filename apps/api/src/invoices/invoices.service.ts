@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { prisma, Prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
+import { WebhookEventsService } from "../webhooks/webhook-events.service";
 
 @Injectable()
 export class InvoicesService {
-  constructor(private readonly auditService: AuditService) {}
+  constructor(
+    private readonly auditService: AuditService,
+    private readonly webhookEvents: WebhookEventsService,
+  ) {}
 
   /**
    * Sanitizes invoice details based on the requester's role.
@@ -288,6 +292,14 @@ export class InvoicesService {
       severity: "INFO",
     });
 
+    // 7. Emit webhook event (non-blocking, never fails main operation)
+    this.webhookEvents.emit({
+      workspaceId,
+      eventType: 'invoice.created',
+      entityId: newInvoice.id,
+      data: { invoiceId: newInvoice.id, number: newInvoice.number, status: newInvoice.status, clientId: newInvoice.clientId, dueDate: newInvoice.dueDate },
+    }).catch(() => {});
+
     return newInvoice;
   }
 
@@ -384,6 +396,13 @@ export class InvoicesService {
       userAgent,
       severity,
     });
+
+    this.webhookEvents.emit({
+      workspaceId,
+      eventType: 'invoice.status_changed',
+      entityId: invoiceId,
+      data: { invoiceId, number: invoice.number, oldStatus, newStatus },
+    }).catch(() => {});
 
     return updatedInvoice;
   }

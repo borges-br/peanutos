@@ -11,6 +11,7 @@ import {
 } from "@peanut/db";
 import { SlaService } from "./sla.service";
 import { AuditService } from "../audit/audit.service";
+import { WebhookEventsService } from "../webhooks/webhook-events.service";
 import { isValidTransition } from "./ticket-state-machine";
 
 const FORBIDDEN_WORDS = [
@@ -28,6 +29,7 @@ export class TicketsService {
   constructor(
     private readonly slaService: SlaService,
     private readonly auditService: AuditService,
+    private readonly webhookEvents: WebhookEventsService,
   ) {}
 
   async listSlaPolicies(workspaceId: string) {
@@ -308,6 +310,14 @@ export class TicketsService {
       userAgent,
     });
 
+    // 6. Emit webhook event (non-blocking)
+    this.webhookEvents.emit({
+      workspaceId,
+      eventType: 'ticket.created',
+      entityId: ticket.id,
+      data: { ticketId: ticket.id, number: ticket.number, title: ticket.title, status: ticket.status, priority: ticket.priority, clientId: ticket.clientId },
+    }).catch(() => {});
+
     return ticket;
   }
 
@@ -520,6 +530,13 @@ export class TicketsService {
       ipAddress,
       userAgent,
     });
+
+    this.webhookEvents.emit({
+      workspaceId,
+      eventType: 'ticket.status_changed',
+      entityId: id,
+      data: { ticketId: id, number: original.number, oldStatus: original.status, newStatus: status },
+    }).catch(() => {});
 
     return updated;
   }

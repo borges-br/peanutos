@@ -194,6 +194,8 @@ model Workspace {
   fileObjects         FileObject[]
   generatedDocuments  GeneratedDocument[]
   outboxEvents        OutboxEvent[]
+  webhookEndpoints    WebhookEndpoint[]
+  webhookDeliveries   WebhookDelivery[]
   auditLogs           AuditLog[]
   ticketComments      TicketComment[]
   ticketHistories     TicketHistory[]
@@ -679,42 +681,65 @@ model GeneratedDocument {
 }
 
 model OutboxEvent {
-  id            String             @id @default(uuid()) @db.Uuid
-  workspaceId   String             @db.Uuid
-  eventType     String             @db.VarChar(100)
-  payload       String             @db.Text
-  status        String             @default("PENDING") @db.VarChar(20) // PENDING, PROCESSING, COMPLETED, FAILED
-  attempts      Int                @default(0)
-  nextAttemptAt DateTime?          @default(now())
-  lastError     String?            @db.Text
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id            String    @id @default(uuid()) @db.Uuid
+  workspaceId   String    @db.Uuid
+  eventType     String    @db.VarChar(100)
+  payload       String    @db.Text
+  status        String    @default("PENDING") @db.VarChar(20) // PENDING, PROCESSING, COMPLETED, FAILED
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime? @default(now())
+  lastError     String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   // Relationships
-  workspace     Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  deliveries    WebhookDelivery[]
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([status, nextAttemptAt])
   @@index([workspaceId])
   @@map("outbox_events")
 }
 
+model WebhookEndpoint {
+  id              String   @id @default(uuid()) @db.Uuid
+  workspaceId     String   @db.Uuid
+  name            String   @db.VarChar(150)
+  url             String   @db.VarChar(500)
+  encryptedSecret String?  @db.Text
+  events          String[]
+  isActive        Boolean  @default(true)
+  createdById     String?  @db.Uuid
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace  Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([workspaceId])
+  @@map("webhook_endpoints")
+}
+
 model WebhookDelivery {
-  id             String      @id @default(uuid()) @db.Uuid
-  outboxEventId  String      @db.Uuid
-  endpointUrl    String      @db.VarChar(255)
+  id             String    @id @default(uuid()) @db.Uuid
+  workspaceId    String    @db.Uuid
+  webhookId      String    @db.Uuid
+  eventType      String    @db.VarChar(100)
+  payload        Json
+  status         String    @db.VarChar(20) // PENDING, RETRYING, DELIVERED, FAILED, CANCELLED
+  attempt        Int       @default(0)
+  maxAttempts    Int       @default(5)
+  nextAttemptAt  DateTime?
   responseStatus Int?
-  responseBody   String?     @db.Text
-  attempts       Int         @default(1)
-  durationMs     Int?
-  error          String?     @db.Text
-  status         String      @db.VarChar(20) // SUCCESS or FAILED
-  deliveredAt    DateTime    @default(now())
+  responseBody   String?   @db.VarChar(1000)
+  errorMessage   String?   @db.VarChar(500)
+  createdAt      DateTime  @default(now())
+  deliveredAt    DateTime?
 
-  // Relationships
-  outboxEvent    OutboxEvent @relation(fields: [outboxEventId], references: [id], onDelete: Cascade)
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  webhook   WebhookEndpoint @relation(fields: [webhookId], references: [id], onDelete: Cascade)
 
-  @@index([outboxEventId])
+  @@index([workspaceId])
+  @@index([webhookId])
   @@map("webhook_deliveries")
 }
 

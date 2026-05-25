@@ -12,11 +12,13 @@ import { FinancialsModule } from "./financials/financials.module";
 import { InvoicesModule } from "./invoices/invoices.module";
 import { SettingsModule } from "./settings/settings.module";
 import { DocumentsModule } from "./documents/documents.module";
+import { WebhooksModule } from "./webhooks/webhooks.module";
 
 @Module({
   imports: [
     AuditModule,
     AuthModule,
+    WebhooksModule,
     UsersModule,
     ClientsModule,
     ClientUsersModule,
