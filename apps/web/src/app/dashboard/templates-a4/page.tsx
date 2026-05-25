@@ -72,7 +72,11 @@ export default function TemplatesA4Page() {
     apiRequest<TemplateSetting>(`/document-templates/${activeType}`)
       .then(data => {
         setSettings(prev => ({ ...prev, [activeType]: data }));
-        setLoaded(prev => new Set([...prev, activeType]));
+        setLoaded(prev => {
+          const next = new Set(prev);
+          next.add(activeType);
+          return next;
+        });
       })
       .catch(err => setError(err.message || 'Erro ao carregar configurações.'))
       .finally(() => setLoading(false));
@@ -94,7 +98,11 @@ export default function TemplatesA4Page() {
         enabledBlocks: { ...currentSetting.enabledBlocks, [block]: !currentSetting.enabledBlocks[block] },
       },
     }));
-    setDirtyTypes(prev => new Set([...prev, activeType]));
+    setDirtyTypes(prev => {
+      const next = new Set(prev);
+      next.add(activeType);
+      return next;
+    });
   }
 
   function moveBlock(block: Block, direction: 'up' | 'down') {
@@ -104,12 +112,23 @@ export default function TemplatesA4Page() {
     if (idx === -1) return;
     const newIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (newIdx < 0 || newIdx >= order.length) return;
-    [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
+    
+    const itemA = order[idx];
+    const itemB = order[newIdx];
+    if (itemA && itemB) {
+      order[idx] = itemB;
+      order[newIdx] = itemA;
+    }
+
     setSettings(prev => ({
       ...prev,
       [activeType]: { ...currentSetting, blockOrder: order },
     }));
-    setDirtyTypes(prev => new Set([...prev, activeType]));
+    setDirtyTypes(prev => {
+      const next = new Set(prev);
+      next.add(activeType);
+      return next;
+    });
   }
 
   async function handleSave() {

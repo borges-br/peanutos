@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { StorageService } from "../storage/storage.service";

@@ -388,6 +388,8 @@ export class UsersService {
       action: "user.avatar_removed",
       entityType: "USER",
       entityId: userId,
+      ipAddress,
+      userAgent,
       severity: "INFO",
     });
 
@@ -454,6 +456,8 @@ export class UsersService {
       action: "user.signature_removed",
       entityType: "USER",
       entityId: userId,
+      ipAddress,
+      userAgent,
       severity: "INFO",
     });
 

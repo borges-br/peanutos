@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
-import { prisma } from "@peanut/db";
+import { prisma, Prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
-import { TEMPLATE_DOCUMENT_TYPES, TEMPLATE_BLOCKS } from "@peanut/validators";
+import { TEMPLATE_DOCUMENT_TYPES } from "@peanut/validators";
 
 type DocType = typeof TEMPLATE_DOCUMENT_TYPES[number];
 
@@ -18,15 +18,14 @@ const DEFAULT_ORDER = [
   "responsibleSignature", "footer",
 ];
 
-function buildDefault(documentType: string) {
+function buildDefault() {
   return {
-    documentType,
     templateKey: "standard",
     layoutVariant: "default",
     enabledBlocks: DEFAULT_ENABLED,
     blockOrder: DEFAULT_ORDER,
-    customTexts: null,
-    settings: null,
+    customTexts: Prisma.JsonNull,
+    settings: Prisma.JsonNull,
   };
 }
 
@@ -41,20 +40,20 @@ export class DocumentTemplatesService {
 
     return TEMPLATE_DOCUMENT_TYPES.map((docType) => {
       const found = stored.find((s) => s.documentType === docType);
-      return found ?? { id: null, workspaceId, ...buildDefault(docType), createdAt: null, updatedAt: null };
+      return found ?? { id: null, workspaceId, documentType: docType, ...buildDefault(), createdAt: null, updatedAt: null };
     });
   }
 
   async getByType(workspaceId: string, documentType: string) {
     if (!TEMPLATE_DOCUMENT_TYPES.includes(documentType as DocType)) {
-      return { id: null, workspaceId, ...buildDefault(documentType), createdAt: null, updatedAt: null };
+      return { id: null, workspaceId, documentType, ...buildDefault(), createdAt: null, updatedAt: null };
     }
 
     const stored = await prisma.documentTemplateSetting.findUnique({
       where: { workspaceId_documentType: { workspaceId, documentType } },
     });
 
-    return stored ?? { id: null, workspaceId, ...buildDefault(documentType), createdAt: null, updatedAt: null };
+    return stored ?? { id: null, workspaceId, documentType, ...buildDefault(), createdAt: null, updatedAt: null };
   }
 
   async upsert(
@@ -69,15 +68,19 @@ export class DocumentTemplatesService {
       where: { workspaceId_documentType: { workspaceId, documentType } },
     });
 
-    const baseData = existing ?? buildDefault(documentType);
+    const baseData = existing ?? buildDefault();
 
     const merged = {
       templateKey: input.templateKey ?? baseData.templateKey,
       layoutVariant: input.layoutVariant ?? baseData.layoutVariant,
       enabledBlocks: input.enabledBlocks ?? baseData.enabledBlocks,
       blockOrder: input.blockOrder ?? baseData.blockOrder,
-      customTexts: input.customTexts !== undefined ? input.customTexts : (baseData.customTexts ?? null),
-      settings: input.settings !== undefined ? input.settings : (baseData.settings ?? null),
+      customTexts: input.customTexts === undefined
+        ? (baseData.customTexts ?? Prisma.JsonNull)
+        : (input.customTexts === null ? Prisma.JsonNull : input.customTexts),
+      settings: input.settings === undefined
+        ? (baseData.settings ?? Prisma.JsonNull)
+        : (input.settings === null ? Prisma.JsonNull : input.settings),
     };
 
     const result = await prisma.documentTemplateSetting.upsert({
@@ -109,7 +112,7 @@ export class DocumentTemplatesService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const defaults = buildDefault(documentType);
+    const defaults = buildDefault();
 
     const result = await prisma.documentTemplateSetting.upsert({
       where: { workspaceId_documentType: { workspaceId, documentType } },

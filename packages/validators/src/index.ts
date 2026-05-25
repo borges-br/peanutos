@@ -469,7 +469,7 @@ export type WorkspaceBrandSettingsInput = z.infer<typeof workspaceBrandSettingsS
 // --- FILE UPLOAD VALIDATOR ---
 
 const ALLOWED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp'] as const;
-const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+export const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 
 export const uploadImageSchema = z.object({
   data: z.string().min(1, { message: 'Dados do arquivo são obrigatórios' }),

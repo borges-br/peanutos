@@ -150,7 +150,11 @@ export default function ProfilePage() {
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onload = () => {
+          const res = reader.result as string;
+          const parts = res.split(',');
+          resolve(parts[1] || '');
+        };
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });

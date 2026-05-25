@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
-import { useI18n } from '../../../i18n/useI18n';
 import { useAuth } from '../../../context/AuthContext';
 import { apiRequest } from '../../../lib/api';
 
@@ -58,7 +57,6 @@ function ColorField({
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { t } = useI18n();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('geral');
   const [successSaved, setSuccessSaved] = useState(false);

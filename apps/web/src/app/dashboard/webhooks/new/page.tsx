@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../../../../context/AuthContext';
 import { apiRequest } from '../../../../lib/api';
 import Button from '../../../../components/ui/Button';
 import Card from '../../../../components/ui/Card';
@@ -23,7 +22,6 @@ const WEBHOOK_EVENTS = [
 
 export default function NewWebhookPage() {
   const router = useRouter();
-  const { user } = useAuth();
 
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
