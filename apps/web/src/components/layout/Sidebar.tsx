@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/useI18n';
 import logoImg from '../../../images/layout/logo.webp';
+import AvatarCropModal from '../ui/AvatarCropModal';
 
 interface SidebarProps {
   onCloseMobile?: () => void;
@@ -77,6 +78,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
       </div>
     );
   };
+
+  const [showCropModal, setShowCropModal] = useState(false);
 
   return (
     <aside className="w-sidebar-width bg-surface border-r border-outline-variant flex flex-col py-lg h-full select-none z-50">
@@ -168,26 +171,48 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
 
       {/* Sidebar Footer / User Profile */}
       <div className="mt-auto px-md pt-md border-t border-outline-variant">
-        <div className="flex items-center gap-sm p-sm hover:bg-surface-container-high rounded-lg cursor-pointer transition-colors duration-150 group">
-          <div className="w-10 h-10 bg-surface-container-highest rounded-full flex items-center justify-center border border-outline-variant overflow-hidden">
+        <div className="flex items-center gap-sm p-sm bg-surface-container/10 border border-outline-variant/10 rounded-lg">
+          {/* Avatar button */}
+          <button
+            onClick={() => setShowCropModal(true)}
+            className="w-10 h-10 bg-surface-container-highest rounded-full flex items-center justify-center border border-outline-variant overflow-hidden hover:opacity-85 transition-opacity shrink-0 cursor-pointer"
+            title="Alterar foto"
+            aria-label="Alterar foto de perfil"
+          >
             {user?.avatarUrl ? (
               <img src={user.avatarUrl} alt={userDisplayName} className="w-full h-full object-cover" />
             ) : (
               <span className="font-bold text-primary text-sm">{userInitials}</span>
             )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-title-sm text-xs truncate text-on-surface font-semibold">{userDisplayName}</p>
+          </button>
+
+          {/* User info button */}
+          <button
+            onClick={() => handleNavigation('/dashboard/configuracoes/perfil')}
+            className="flex-1 min-w-0 text-left hover:text-primary transition-colors cursor-pointer group"
+            title="Abrir configurações do perfil"
+            aria-label="Abrir configurações do perfil"
+          >
+            <p className="font-title-sm text-xs truncate text-on-surface font-semibold group-hover:text-primary transition-colors">{userDisplayName}</p>
             <p className="text-[10px] text-on-surface-variant truncate uppercase tracking-wider">{userRoleName}</p>
-          </div>
+          </button>
+
+          {/* Logout button */}
           <button
             onClick={logout}
-            className="material-symbols-outlined text-error-container hover:text-error transition-colors p-1"
+            className="material-symbols-outlined text-error-container hover:text-error transition-colors p-1 cursor-pointer shrink-0"
             title={t.auth.logout}
+            aria-label={t.auth.logout}
           >
             logout
           </button>
         </div>
+
+        {/* Global Avatar Crop Modal */}
+        <AvatarCropModal
+          isOpen={showCropModal}
+          onClose={() => setShowCropModal(false)}
+        />
       </div>
     </aside>
   );

@@ -6,6 +6,7 @@ import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { useAuth } from '../../../context/AuthContext';
 import { apiRequest } from '../../../lib/api';
+import Breadcrumbs from '../../../components/layout/Breadcrumbs';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
@@ -582,8 +583,29 @@ export default function SettingsPage() {
     }
   };
 
+  const getTabLabel = (id: TabId) => {
+    switch (id) {
+      case 'geral': return 'Geral';
+      case 'empresa': return 'Empresa';
+      case 'seguranca': return 'Segurança';
+      case 'usuarios': return 'Usuários e Permissões';
+      case 'notificacoes': return 'Notificações';
+      case 'integracoes': return 'Integrações';
+      case 'modulos': return 'Módulos';
+      default: return 'Geral';
+    }
+  };
+
   return (
     <main className="max-w-[1200px] mx-auto p-md space-y-lg animate-fade-in pb-xl">
+      <Breadcrumbs
+        items={[
+          { label: 'Início', href: '/dashboard' },
+          { label: 'Configurações', href: '/dashboard/configuracoes' },
+          { label: getTabLabel(activeTab) },
+        ]}
+        className="mb-sm"
+      />
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-md mb-xl pb-md border-b border-outline-variant/30">
         <div>
           <h1 className="font-display-lg text-3xl text-on-surface font-semibold tracking-tight">Configurações</h1>

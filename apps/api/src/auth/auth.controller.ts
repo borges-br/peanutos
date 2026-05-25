@@ -38,7 +38,14 @@ export class AuthController {
   @UseGuards(AuthGuard)
   @Get("me")
   async me(@CurrentUser() user: any) {
-    return user;
+    return {
+      id: user.id,
+      workspaceId: user.workspaceId,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatarUrl: user.avatarFileObjectId ? `/api/v1/files/${user.avatarFileObjectId}` : null,
+    };
   }
 
   @Post("logout")

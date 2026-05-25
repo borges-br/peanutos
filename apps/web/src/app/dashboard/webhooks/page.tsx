@@ -5,6 +5,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { apiRequest } from '../../../lib/api';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
+import Breadcrumbs from '../../../components/layout/Breadcrumbs';
 import {
   WEBHOOK_EVENT_CATALOG,
   WEBHOOK_EVENTS_BY_CATEGORY,
@@ -96,6 +97,29 @@ export default function WebhooksPage() {
   const [formActive, setFormActive] = useState(true);
   const [formSaving, setFormSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formEventFilter, setFormEventFilter] = useState<'Todos' | 'Operação' | 'Comercial' | 'Auditoria' | 'Ativos' | 'Planejados'>('Todos');
+  const [expandedPreviewEvent, setExpandedPreviewEvent] = useState<string | null>(null);
+
+  // Active events counts
+  const auditActiveCount = WEBHOOK_EVENT_CATALOG.filter(e => e.category === 'AUDIT' && e.status === 'active').length;
+  const operationActiveCount = WEBHOOK_EVENT_CATALOG.filter(e => e.category === 'OPERATION' && e.status === 'active').length;
+  const commercialActiveCount = WEBHOOK_EVENT_CATALOG.filter(e => e.category === 'COMMERCIAL' && e.status === 'active').length;
+
+  const selectAllActiveInFilter = () => {
+    let visibleActiveEvents = WEBHOOK_EVENT_CATALOG.filter(ev => ev.status === 'active');
+    if (formEventFilter === 'Operação') {
+      visibleActiveEvents = visibleActiveEvents.filter(ev => ev.category === 'OPERATION');
+    } else if (formEventFilter === 'Comercial') {
+      visibleActiveEvents = visibleActiveEvents.filter(ev => ev.category === 'COMMERCIAL');
+    } else if (formEventFilter === 'Auditoria') {
+      visibleActiveEvents = visibleActiveEvents.filter(ev => ev.category === 'AUDIT');
+    }
+    const visibleActiveTypes = visibleActiveEvents.map(e => e.type);
+    setFormEvents(prev => {
+      const merged = new Set([...prev, ...visibleActiveTypes]);
+      return Array.from(merged);
+    });
+  };
 
   // Inbound create/edit modal
   const [showInboundForm, setShowInboundForm] = useState(false);
@@ -424,10 +448,20 @@ export default function WebhooksPage() {
 
   return (
     <main className="max-w-7xl mx-auto space-y-lg p-md animate-fade-in pb-xl select-none">
+      {/* Breadcrumbs */}
+      <Breadcrumbs
+        items={[
+          { label: 'Início', href: '/dashboard' },
+          { label: 'Configurações', href: '/dashboard/configuracoes' },
+          { label: 'Webhooks' },
+        ]}
+        className="mb-sm"
+      />
+
       {/* Page Header */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-lg border-b border-outline-variant/30 pb-md">
         <div className="space-y-sm">
-          <h1 className="font-display-lg text-3xl text-on-surface font-semibold tracking-tight">Event Hub & Webhooks v2</h1>
+          <h1 className="font-display-lg text-3xl text-on-surface font-semibold tracking-tight">Webhooks</h1>
           <p className="font-body-md text-on-surface-variant max-w-2xl text-[14px]">
             Central de automação e integração de dados. Configure disparos em tempo real ou crie endpoints seguros para receber chamadas de parceiros e sistemas de terceiros.
           </p>
@@ -441,21 +475,21 @@ export default function WebhooksPage() {
           className={`px-md py-sm flex items-center gap-sm text-[13px] font-semibold border-b-2 transition-all ${activeMainTab === 'outbound' ? 'border-primary text-primary font-bold' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
         >
           <span className="material-symbols-outlined text-[18px]">publish</span>
-          Disparos / Webhooks de Saída
+          Webhooks de saída
         </button>
         <button
           onClick={() => setActiveMainTab('catalog')}
           className={`px-md py-sm flex items-center gap-sm text-[13px] font-semibold border-b-2 transition-all ${activeMainTab === 'catalog' ? 'border-primary text-primary font-bold' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
         >
           <span className="material-symbols-outlined text-[18px]">menu_book</span>
-          Catálogo Geral de Eventos
+          Catálogo de eventos
         </button>
         <button
           onClick={() => setActiveMainTab('inbound')}
           className={`px-md py-sm flex items-center gap-sm text-[13px] font-semibold border-b-2 transition-all ${activeMainTab === 'inbound' ? 'border-primary text-primary font-bold' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
         >
           <span className="material-symbols-outlined text-[18px]">file_download</span>
-          Integrações de Entrada (Inbound)
+          Integrações de entrada
         </button>
       </div>
 
@@ -985,25 +1019,112 @@ export default function WebhooksPage() {
                 <p className="text-[11px] text-on-surface-variant/70">Endpoint externo seguro para recebimento via HTTP POST.</p>
               </div>
 
-              <div className="flex flex-col gap-xs">
+              <div className="flex flex-col gap-xs animate-fade-in">
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">
-                  Assinar Eventos Ativos <span className="text-error">*</span>
+                  Filtrar e Selecionar Eventos <span className="text-error">*</span>
                 </label>
-                <div className="bg-background border border-outline-variant rounded p-sm max-h-52 overflow-y-auto space-y-0.5">
-                  {WEBHOOK_EVENT_CATALOG.map(ev => {
-                    const isActive = ev.status === 'active';
+
+                {/* Category filter chips inside the form */}
+                <div className="flex flex-wrap gap-xs pb-xs border-b border-outline-variant/20 mb-xs">
+                  {(['Todos', 'Operação', 'Comercial', 'Auditoria', 'Ativos', 'Planejados'] as const).map(filter => {
+                    let badge = '';
+                    if (filter === 'Operação') badge = ` (${operationActiveCount} ativos)`;
+                    else if (filter === 'Comercial') badge = ` (${commercialActiveCount} ativos)`;
+                    else if (filter === 'Auditoria') badge = ` (${auditActiveCount} ativos)`;
+
+                    const isActiveFilter = formEventFilter === filter;
                     return (
-                      <label key={ev.type} className={`flex items-center gap-sm cursor-pointer hover:bg-surface-container/30 rounded px-1 py-0.5 transition-colors ${!isActive ? 'opacity-40 select-none cursor-not-allowed' : ''}`}>
-                        <input
-                          type="checkbox"
-                          className="accent-primary"
-                          disabled={!isActive}
-                          checked={formEvents.includes(ev.type)}
-                          onChange={() => toggleEventCheckbox(ev.type)}
-                        />
-                        <span className="font-body-sm text-[12px] text-on-surface flex-1">{ev.label}</span>
-                        <span className="font-mono text-[10px] text-on-surface-variant/60">{ev.type}</span>
-                      </label>
+                      <button
+                        key={filter}
+                        type="button"
+                        onClick={() => setFormEventFilter(filter)}
+                        className={`px-sm py-1 rounded-full text-[11px] font-semibold transition-all border ${isActiveFilter ? 'bg-primary border-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container/50 border-outline-variant/30 text-on-surface-variant hover:bg-surface-container'}`}
+                      >
+                        {filter}{badge}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Bulk Select all button */}
+                {['Todos', 'Operação', 'Comercial', 'Auditoria'].includes(formEventFilter) && (
+                  <div className="flex justify-between items-center py-xs">
+                    <span className="text-[11px] text-on-surface-variant/70 italic">Visualizando: {formEventFilter}</span>
+                    <button
+                      type="button"
+                      onClick={selectAllActiveInFilter}
+                      className="text-[11px] text-primary font-bold hover:underline flex items-center gap-xs cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">done_all</span>
+                      Selecionar todos ativos desta categoria
+                    </button>
+                  </div>
+                )}
+
+                <div className="bg-background border border-outline-variant rounded p-sm max-h-60 overflow-y-auto space-y-md">
+                  {WEBHOOK_EVENT_CATALOG.filter(ev => {
+                    if (formEventFilter === 'Operação') return ev.category === 'OPERATION';
+                    if (formEventFilter === 'Comercial') return ev.category === 'COMMERCIAL';
+                    if (formEventFilter === 'Auditoria') return ev.category === 'AUDIT';
+                    if (formEventFilter === 'Ativos') return ev.status === 'active';
+                    if (formEventFilter === 'Planejados') return ev.status === 'planned';
+                    return true;
+                  }).map(ev => {
+                    const isActive = ev.status === 'active';
+                    const isSelected = formEvents.includes(ev.type);
+                    const isPreviewExpanded = expandedPreviewEvent === ev.type;
+
+                    return (
+                      <div key={ev.type} className={`border-b border-outline-variant/15 pb-sm last:border-b-0 last:pb-0 ${!isActive ? 'opacity-50' : ''}`}>
+                        <label className={`flex items-start gap-sm cursor-pointer hover:bg-surface-container/20 rounded p-1 transition-colors ${!isActive ? 'cursor-not-allowed' : ''}`}>
+                          <input
+                            type="checkbox"
+                            className="accent-primary mt-1 shrink-0"
+                            disabled={!isActive}
+                            checked={isSelected}
+                            onChange={() => toggleEventCheckbox(ev.type)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-xs flex-wrap">
+                              <span className="font-body-sm text-[12px] text-on-surface font-semibold">{ev.label}</span>
+                              <span className="font-mono text-[9px] text-primary/80 bg-primary/5 px-1 rounded">{ev.type}</span>
+                              {!isActive && (
+                                <span className="text-[8px] bg-outline-variant/35 text-on-surface-variant px-1 rounded font-bold uppercase shrink-0">
+                                  Planejado
+                                </span>
+                              )}
+                            </div>
+                            {ev.description && (
+                              <p className="text-[11px] text-on-surface-variant/70 mt-0.5 leading-relaxed">
+                                {ev.description}
+                              </p>
+                            )}
+                          </div>
+                          
+                          {/* Toggle Preview Button */}
+                          {isActive && ev.payloadExample && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setExpandedPreviewEvent(isPreviewExpanded ? null : ev.type);
+                              }}
+                              className={`p-1 rounded hover:bg-surface-container shrink-0 text-on-surface-variant hover:text-on-surface ${isPreviewExpanded ? 'text-primary' : ''}`}
+                              title="Visualizar Exemplo de Payload"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">terminal</span>
+                            </button>
+                          )}
+                        </label>
+
+                        {/* Inline Payload Preview */}
+                        {isPreviewExpanded && isActive && ev.payloadExample && (
+                          <div className="ml-7 mt-xs bg-black/45 border border-outline-variant/30 rounded p-sm font-mono text-[10px] text-primary max-h-40 overflow-y-auto animate-slide-down">
+                            <pre>{JSON.stringify(ev.payloadExample, null, 2)}</pre>
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>

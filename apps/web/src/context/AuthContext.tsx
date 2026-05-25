@@ -10,6 +10,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,6 +41,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadUser();
   }, []);
 
+  const refreshUser = async () => {
+    try {
+      const userData = await apiRequest('/auth/me');
+      setUser(userData);
+    } catch (e) {
+      console.error('Failed to refresh user', e);
+    }
+  };
+
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
@@ -68,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

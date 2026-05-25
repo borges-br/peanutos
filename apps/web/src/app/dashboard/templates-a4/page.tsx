@@ -5,6 +5,7 @@ import A4PreviewShell from '../../../components/ui/A4PreviewShell';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { apiRequest } from '../../../lib/api';
+import Breadcrumbs from '../../../components/layout/Breadcrumbs';
 
 type DocumentType = 'INVOICE' | 'QUOTE' | 'SERVICE_ORDER' | 'CONTRACT' | 'REPORT';
 
@@ -283,6 +284,14 @@ export default function TemplatesA4Page() {
 
   return (
     <main className="max-w-7xl mx-auto p-md space-y-lg animate-fade-in pb-xl">
+      <Breadcrumbs
+        items={[
+          { label: 'Início', href: '/dashboard' },
+          { label: 'Configurações', href: '/dashboard/configuracoes' },
+          { label: 'Templates de Documentos' },
+        ]}
+        className="mb-sm"
+      />
       {successMsg && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-md rounded-lg flex items-center gap-sm animate-fade-in text-[13px]">
           <span className="material-symbols-outlined">check_circle</span>
