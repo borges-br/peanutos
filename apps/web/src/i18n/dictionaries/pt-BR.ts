@@ -616,6 +616,10 @@ export const ptBR = {
     confirmPaidBtn: "Confirmar Pagamento (Pago)",
     markOverdueBtn: "Marcar como Atrasado",
     cancelInvoiceBtn: "Cancelar Fatura",
+    issueInvoiceBtn: "Emitir Fatura",
+    confirmIssueText: "Deseja emitir esta fatura? Após emitida, ela poderá ser marcada como paga, atrasada ou cancelada.",
+    noStatusTransitions: "Fatura cancelada. Nenhuma nova transição de status está disponível.",
+    paidCancelRestricted: "Somente administradores podem cancelar uma fatura paga.",
     
     confirmPaidTitle: "Confirmar Pagamento",
     confirmPaidText: "Deseja realmente marcar esta fatura como PAGA? Esta ação registrará a data de pagamento atual.",

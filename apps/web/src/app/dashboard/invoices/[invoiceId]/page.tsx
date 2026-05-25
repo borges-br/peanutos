@@ -63,9 +63,10 @@ export default function InvoiceDetailPage() {
 
   const handleStatusChange = async (newStatus: string) => {
     if (!hasFinancialPrivilege) return;
-
     let confirmMsg = '';
-    if (newStatus === 'PAID') {
+    if (newStatus === 'ISSUED') {
+      confirmMsg = t.invoices.confirmIssueText || 'Deseja emitir esta fatura? Após emitida, ela poderá ser marcada como paga, atrasada ou cancelada.';
+    } else if (newStatus === 'PAID') {
       confirmMsg = t.invoices.confirmPaidText || 'Deseja realmente marcar esta fatura como PAGA?';
     } else if (newStatus === 'OVERDUE') {
       confirmMsg = t.invoices.confirmOverdueText || 'Tem certeza que deseja marcar esta fatura como ATRASADA?';
@@ -261,31 +262,104 @@ export default function InvoiceDetailPage() {
 
           {hasFinancialPrivilege && (
             <Card title={t.invoices.actionsSection || 'Ações de Status Financeiro'}>
-              <div className="flex flex-wrap gap-sm">
-                <Button
-                  variant="primary"
-                  onClick={() => handleStatusChange('PAID')}
-                  disabled={isTransitionDisabled('PAID')}
-                  className="px-5 py-2"
-                >
-                  {t.invoices.confirmPaidBtn || 'Confirmar Pagamento (Pago)'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleStatusChange('OVERDUE')}
-                  disabled={isTransitionDisabled('OVERDUE')}
-                  className="px-5 py-2"
-                >
-                  {t.invoices.markOverdueBtn || 'Marcar como Atrasado'}
-                </Button>
-                <Button
-                  variant="danger"
-                  onClick={() => handleStatusChange('CANCELLED')}
-                  disabled={isTransitionDisabled('CANCELLED')}
-                  className="px-5 py-2"
-                >
-                  {t.invoices.cancelInvoiceBtn || 'Cancelar Fatura'}
-                </Button>
+              <div className="flex flex-wrap gap-sm items-center">
+                {invoice.status === 'DRAFT' && (
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={() => handleStatusChange('ISSUED')}
+                      disabled={isTransitionDisabled('ISSUED')}
+                      className="px-5 py-2"
+                    >
+                      {t.invoices.issueInvoiceBtn || 'Emitir Fatura'}
+                    </Button>
+
+                    <Button
+                      variant="danger"
+                      onClick={() => handleStatusChange('CANCELLED')}
+                      disabled={isTransitionDisabled('CANCELLED')}
+                      className="px-5 py-2"
+                    >
+                      {t.invoices.cancelInvoiceBtn || 'Cancelar Fatura'}
+                    </Button>
+                  </>
+                )}
+
+                {invoice.status === 'ISSUED' && (
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={() => handleStatusChange('PAID')}
+                      disabled={isTransitionDisabled('PAID')}
+                      className="px-5 py-2"
+                    >
+                      {t.invoices.confirmPaidBtn || 'Confirmar Pagamento'}
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      onClick={() => handleStatusChange('OVERDUE')}
+                      disabled={isTransitionDisabled('OVERDUE')}
+                      className="px-5 py-2"
+                    >
+                      {t.invoices.markOverdueBtn || 'Marcar como Atrasado'}
+                    </Button>
+
+                    <Button
+                      variant="danger"
+                      onClick={() => handleStatusChange('CANCELLED')}
+                      disabled={isTransitionDisabled('CANCELLED')}
+                      className="px-5 py-2"
+                    >
+                      {t.invoices.cancelInvoiceBtn || 'Cancelar Fatura'}
+                    </Button>
+                  </>
+                )}
+
+                {invoice.status === 'OVERDUE' && (
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={() => handleStatusChange('PAID')}
+                      disabled={isTransitionDisabled('PAID')}
+                      className="px-5 py-2"
+                    >
+                      {t.invoices.confirmPaidBtn || 'Confirmar Pagamento'}
+                    </Button>
+
+                    <Button
+                      variant="danger"
+                      onClick={() => handleStatusChange('CANCELLED')}
+                      disabled={isTransitionDisabled('CANCELLED')}
+                      className="px-5 py-2"
+                    >
+                      {t.invoices.cancelInvoiceBtn || 'Cancelar Fatura'}
+                    </Button>
+                  </>
+                )}
+
+                {invoice.status === 'PAID' && (
+                  ['OWNER', 'ADMIN'].includes(user?.role || '') ? (
+                    <Button
+                      variant="danger"
+                      onClick={() => handleStatusChange('CANCELLED')}
+                      disabled={isTransitionDisabled('CANCELLED')}
+                      className="px-5 py-2"
+                    >
+                      {t.invoices.cancelInvoiceBtn || 'Cancelar Fatura'}
+                    </Button>
+                  ) : (
+                    <div className="text-[13px] text-on-surface-variant italic">
+                      {t.invoices.paidCancelRestricted || 'Somente administradores podem cancelar uma fatura paga.'}
+                    </div>
+                  )
+                )}
+
+                {invoice.status === 'CANCELLED' && (
+                  <div className="text-[13px] text-on-surface-variant font-medium">
+                    {t.invoices.noStatusTransitions || 'Fatura cancelada. Nenhuma nova transição de status está disponível.'}
+                  </div>
+                )}
               </div>
             </Card>
           )}
