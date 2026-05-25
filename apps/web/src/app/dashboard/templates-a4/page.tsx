@@ -1,14 +1,28 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import A4PreviewShell from '../../../components/ui/A4PreviewShell';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
+import { apiRequest } from '../../../lib/api';
 
 type TemplateType = 'quote' | 'invoice' | 'so';
 
 export default function TemplatesA4Page() {
   const [activeTemplate, setActiveTemplate] = useState<TemplateType>('quote');
+  const [brandSettings, setBrandSettings] = useState<any>(null);
+
+  useEffect(() => {
+    async function loadBrand() {
+      try {
+        const data = await apiRequest('/settings/brand');
+        setBrandSettings(data);
+      } catch (err) {
+        console.error('Failed to load brand settings:', err);
+      }
+    }
+    loadBrand();
+  }, []);
 
   const renderQuoteContent = () => (
     <div className="flex flex-col gap-lg text-black font-sans text-xs">
@@ -211,6 +225,13 @@ export default function TemplatesA4Page() {
           clientDocument="Dado protegido"
           clientEmail="--"
           backPath="/dashboard"
+          companyName={brandSettings?.brandName}
+          companySub={brandSettings?.brandSubtitle}
+          companyDocument={brandSettings?.companyDocument}
+          companyEmail={brandSettings?.companyEmail}
+          documentFooterText={brandSettings?.documentFooterText}
+          signatureName={brandSettings?.signatureName}
+          primaryColorHex={brandSettings?.primaryColorHex}
         >
           {shellParams.children}
         </A4PreviewShell>

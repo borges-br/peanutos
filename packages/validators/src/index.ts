@@ -439,5 +439,25 @@ export const invoiceStatusUpdateSchema = z.object({
 });
 export type InvoiceStatusUpdateInput = z.infer<typeof invoiceStatusUpdateSchema>;
 
+// --- WORKSPACE BRAND SETTINGS VALIDATORS ---
+
+export const workspaceBrandSettingsSchema = z.object({
+  brandName: z.string().max(150, { message: 'O nome público da empresa deve ter no máximo 150 caracteres' }).optional().nullable().or(z.literal('')),
+  brandSubtitle: z.string().max(150, { message: 'O subtítulo da marca deve ter no máximo 150 caracteres' }).optional().nullable().or(z.literal('')),
+  legalName: z.string().max(200, { message: 'A razão social deve ter no máximo 200 caracteres' }).optional().nullable().or(z.literal('')),
+  companyDocument: z.string().max(30, { message: 'O documento da empresa deve ter no máximo 30 caracteres' }).optional().nullable().or(z.literal('')),
+  companyEmail: z.string().email({ message: 'E-mail principal inválido' }).max(150).optional().nullable().or(z.literal('')),
+  financialEmail: z.string().email({ message: 'E-mail financeiro inválido' }).max(150).optional().nullable().or(z.literal('')),
+  companyPhone: z.string().max(30, { message: 'O telefone deve ter no máximo 30 caracteres' }).optional().nullable().or(z.literal('')),
+  companyWebsite: z.string().url({ message: 'URL do website inválida' }).max(255).optional().nullable().or(z.literal('')),
+  companyAddress: z.string().max(1000, { message: 'O endereço deve ter no máximo 1000 caracteres' }).optional().nullable().or(z.literal('')),
+  primaryColorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: 'A cor primária deve ser um formato hexadecimal válido (ex: #000000)' }).optional().nullable().or(z.literal('')),
+  documentFooterText: z.string().max(1000, { message: 'O rodapé deve ter no máximo 1000 caracteres' }).optional().nullable().or(z.literal('')),
+  signatureName: z.string().max(150, { message: 'O nome para assinatura deve ter no máximo 150 caracteres' }).optional().nullable().or(z.literal('')),
+});
+
+export type WorkspaceBrandSettingsInput = z.infer<typeof workspaceBrandSettingsSchema>;
+
+
 
 

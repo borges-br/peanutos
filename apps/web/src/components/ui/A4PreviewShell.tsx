@@ -22,6 +22,9 @@ interface A4PreviewShellProps {
   companySub?: string;
   companyDocument?: string;
   companyEmail?: string;
+  documentFooterText?: string;
+  signatureName?: string;
+  primaryColorHex?: string;
 }
 
 export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
@@ -41,6 +44,9 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
   companySub,
   companyDocument,
   companyEmail,
+  documentFooterText,
+  signatureName,
+  primaryColorHex,
 }) => {
   const router = useRouter();
   const { t } = useI18n();
@@ -49,6 +55,7 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
   const displayCompanySub = companySub || "Configuração de marca pendente";
   const displayCompanyDocument = companyDocument ? `CNPJ: ${companyDocument}` : "CNPJ não configurado";
   const displayCompanyEmail = companyEmail || "E-mail não configurado";
+  const displayFooterText = documentFooterText || "Gerado automaticamente pelo sistema";
 
   return (
     <div className="flex flex-col gap-lg select-none">
@@ -86,12 +93,15 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
         </div>
       </header>
 
-      {/* A4 Sheet Container Canvas */}
+      {/* A4 Sheet Canvas */}
       <div className="flex justify-center items-center py-xl bg-surface-container-lowest/50 border border-outline-variant/20 rounded-2xl overflow-x-auto">
         <div className="w-[794px] h-[1123px] min-w-[794px] min-h-[1123px] bg-white text-black p-[50px] shadow-2xl relative flex flex-col font-sans select-text border border-black/10">
           
           {/* Header A4 */}
-          <div className="flex justify-between items-start border-b-2 border-black pb-md mb-md">
+          <div 
+            className="flex justify-between items-start border-b-2 pb-md mb-md"
+            style={{ borderBottomColor: primaryColorHex || '#000000' }}
+          >
             <div className="flex flex-col gap-1">
               <span className="text-xl font-bold tracking-tight text-black">{displayCompanyName}</span>
               <span className="text-[10px] uppercase font-bold tracking-widest text-black/60">
@@ -145,12 +155,22 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
 
           {/* Document Dynamic Body */}
           <div className="flex-1 flex flex-col">
-            {children}
+            <div className="flex-1">
+              {children}
+            </div>
+
+            {signatureName && (
+              <div className="mt-xl pt-md flex flex-col items-center justify-center max-w-[280px] mx-auto text-center font-sans text-xs select-none">
+                <div className="w-full border-t border-black/30 mb-xs"></div>
+                <span className="font-bold text-black">{signatureName}</span>
+                <span className="text-[10px] text-black/50">Responsável Autorizado</span>
+              </div>
+            )}
           </div>
 
           {/* Footer A4 */}
           <div className="border-t border-black/10 pt-md mt-lg flex justify-between items-end text-[10px] text-black/50 font-mono">
-            <span>Gerado automaticamente por Peanut OS</span>
+            <span>{displayFooterText}</span>
             <span>Página 1 de 1</span>
           </div>
 
@@ -161,3 +181,4 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
 };
 
 export default A4PreviewShell;
+

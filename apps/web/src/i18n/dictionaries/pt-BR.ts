@@ -738,6 +738,46 @@ export const ptBR = {
       restrictedAccessDetail: "Você não possui permissão para visualizar o payload de alteração deste evento.",
     },
   },
+  settings: {
+    brand: {
+      title: "Configurações da Empresa",
+      subtitle: "Personalize os dados institucionais e identidade visual da sua marca.",
+      brandName: "Nome Público da Empresa / Marca",
+      brandSubtitle: "Subtítulo da Marca",
+      legalName: "Razão Social",
+      companyDocument: "CNPJ / Tax ID",
+      companyEmail: "E-mail Principal",
+      financialEmail: "E-mail Financeiro",
+      companyPhone: "Telefone",
+      companyWebsite: "Website",
+      companyAddress: "Endereço Completo",
+      primaryColorHex: "Cor Primária (Hexadecimal)",
+      documentFooterText: "Rodapé Padrão dos Documentos",
+      signatureName: "Nome do Responsável (Assinatura)",
+      visualIdentity: "Identidade Visual",
+      visualIdentityDesc: "Módulo de customização de marca (White-label) em desenvolvimento para uma próxima fase.",
+      saveSuccess: "Configurações da empresa salvas com sucesso!",
+      saveError: "Erro ao salvar as configurações da empresa.",
+      noPermission: "Você não tem permissão para editar estas configurações.",
+      loadingSettings: "Carregando configurações...",
+    }
+  },
+  templatesA4: {
+    title: "Gabarito de Documentos A4",
+    subtitle: "Selecione e visualize a estrutura de diagramação prevista para os relatórios e faturamento do Peanut OS:",
+    selector: {
+      quote: "Orçamento",
+      invoice: "Fatura",
+      so: "Ordem de Serviço",
+    },
+    placeholders: {
+      companyName: "Dados da empresa configuráveis",
+      companySub: "Configuração de marca pendente",
+      companyDocument: "CNPJ não configurado",
+      companyEmail: "E-mail não configurado",
+      footerText: "Gerado automaticamente pelo sistema",
+    }
+  },
 };
 
 export type Dictionary = typeof ptBR;

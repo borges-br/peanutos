@@ -10,6 +10,7 @@ import { TicketsModule } from "./tickets/tickets.module";
 import { ContractsModule } from "./contracts/contracts.module";
 import { FinancialsModule } from "./financials/financials.module";
 import { InvoicesModule } from "./invoices/invoices.module";
+import { SettingsModule } from "./settings/settings.module";
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { InvoicesModule } from "./invoices/invoices.module";
     ContractsModule,
     FinancialsModule,
     InvoicesModule,
+    SettingsModule,
   ],
   controllers: [HealthController],
   providers: [],

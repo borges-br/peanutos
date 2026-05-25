@@ -18,6 +18,19 @@ export default function InvoiceA4PreviewPage() {
   const [invoice, setInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [brandSettings, setBrandSettings] = useState<any>(null);
+
+  useEffect(() => {
+    async function loadBrand() {
+      try {
+        const data = await apiRequest('/settings/brand');
+        setBrandSettings(data);
+      } catch (err) {
+        console.error("Failed to load brand settings:", err);
+      }
+    }
+    loadBrand();
+  }, []);
 
   const hasFinancialPrivilege = user ? ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role) : false;
 
@@ -104,6 +117,13 @@ export default function InvoiceA4PreviewPage() {
       clientEmail={invoice.client?.email}
       statusBadge={getStatusBadge(invoice.status)}
       backPath={`/dashboard/invoices/${invoiceId}`}
+      companyName={brandSettings?.brandName}
+      companySub={brandSettings?.brandSubtitle}
+      companyDocument={brandSettings?.companyDocument}
+      companyEmail={brandSettings?.companyEmail}
+      documentFooterText={brandSettings?.documentFooterText}
+      signatureName={brandSettings?.signatureName}
+      primaryColorHex={brandSettings?.primaryColorHex}
     >
       {!hasFinancialPrivilege ? (
         <div className="my-auto">
@@ -164,7 +184,12 @@ export default function InvoiceA4PreviewPage() {
               {t.invoices.instructionsTitle || "Instruções de Pagamento e Recebimento"}
             </span>
             <div className="flex flex-col gap-0.5">
-              <span>{t.invoices.favoredLabel?.replace('{favored}', 'Dados do favorecido configuráveis') || "Favorecido: Dados do favorecido configuráveis"}</span>
+              <span>
+                {t.invoices.favoredLabel?.replace(
+                  '{favored}',
+                  brandSettings?.legalName || brandSettings?.brandName || 'Dados do favorecido configuráveis'
+                ) || `Favorecido: ${brandSettings?.legalName || brandSettings?.brandName || 'Dados do favorecido configuráveis'}`}
+              </span>
               <span>{t.invoices.preferentialMethod || "Método preferencial: PIX (Chave Pix abaixo)"}</span>
               <span className="font-bold text-black">
                 {t.invoices.pixKeyLabelA4?.replace('{key}', invoice.pixKey || 'Chave Pix não configurada') || `Chave PIX: ${invoice.pixKey || 'Chave Pix não configurada'}`}

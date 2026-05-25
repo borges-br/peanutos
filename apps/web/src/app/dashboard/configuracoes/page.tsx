@@ -1,16 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import { useI18n } from '../../../i18n/useI18n';
+import { useAuth } from '../../../context/AuthContext';
+import { apiRequest } from '../../../lib/api';
 
 type TabId = 'geral' | 'empresa' | 'seguranca' | 'usuarios' | 'notificacoes' | 'integracoes' | 'modulos';
 
 export default function SettingsPage() {
   const router = useRouter();
   const { t } = useI18n();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('geral');
   const [successSaved, setSuccessSaved] = useState(false);
 
@@ -18,9 +21,119 @@ export default function SettingsPage() {
   const [logSensitiveViews, setLogSensitiveViews] = useState(true);
   const [confirmCriticalActions, setConfirmCriticalActions] = useState(true);
 
+  // Workspace Brand Settings States
+  const [brandSettings, setBrandSettings] = useState<any>({
+    brandName: '',
+    brandSubtitle: '',
+    legalName: '',
+    companyDocument: '',
+    companyEmail: '',
+    financialEmail: '',
+    companyPhone: '',
+    companyWebsite: '',
+    companyAddress: '',
+    primaryColorHex: '',
+    documentFooterText: '',
+    signatureName: '',
+  });
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const isEditable = user ? ['OWNER', 'ADMIN'].includes(user.role) : false;
+
+  useEffect(() => {
+    async function loadSettings() {
+      setLoadingSettings(true);
+      setSaveError(null);
+      try {
+        const data = await apiRequest('/settings/brand');
+        const normalized: any = {};
+        const fields = [
+          "brandName",
+          "brandSubtitle",
+          "legalName",
+          "companyDocument",
+          "companyEmail",
+          "financialEmail",
+          "companyPhone",
+          "companyWebsite",
+          "companyAddress",
+          "primaryColorHex",
+          "documentFooterText",
+          "signatureName",
+        ];
+        for (const key of fields) {
+          normalized[key] = data[key] === null || data[key] === undefined ? '' : data[key];
+        }
+        setBrandSettings(normalized);
+      } catch (err: any) {
+        console.error('Failed to load settings:', err);
+        setSaveError('Falha ao carregar as configurações da empresa.');
+      } finally {
+        setLoadingSettings(false);
+      }
+    }
+    if (activeTab === 'empresa') {
+      loadSettings();
+    }
+  }, [activeTab]);
+
+  const handleInputChange = (field: string, value: string) => {
+    setBrandSettings((prev: any) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleSaveSettings = async () => {
+    if (!isEditable) return;
+    setSuccessSaved(false);
+    setSaveError(null);
+    setSaveSuccess(false);
+    setLoadingSettings(true);
+
+    try {
+      const response = await apiRequest('/settings/brand', {
+        method: 'PATCH',
+        body: JSON.stringify(brandSettings),
+      });
+
+      const normalized: any = {};
+      const fields = [
+        "brandName",
+        "brandSubtitle",
+        "legalName",
+        "companyDocument",
+        "companyEmail",
+        "financialEmail",
+        "companyPhone",
+        "companyWebsite",
+        "companyAddress",
+        "primaryColorHex",
+        "documentFooterText",
+        "signatureName",
+      ];
+      for (const key of fields) {
+        normalized[key] = response[key] === null || response[key] === undefined ? '' : response[key];
+      }
+      setBrandSettings(normalized);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      setSaveError(err.message || 'Erro ao salvar configurações.');
+    } finally {
+      setLoadingSettings(false);
+    }
+  };
+
   const handleSave = () => {
-    setSuccessSaved(true);
-    setTimeout(() => setSuccessSaved(false), 3000);
+    if (activeTab === 'empresa') {
+      handleSaveSettings();
+    } else {
+      setSuccessSaved(true);
+      setTimeout(() => setSuccessSaved(false), 3000);
+    }
   };
 
   const renderGeral = () => (
@@ -77,71 +190,217 @@ export default function SettingsPage() {
     </div>
   );
 
-  const renderEmpresa = () => (
-    <div className="space-y-gutter animate-fade-in">
-      <Card title="Dados da Organização" headerAction={
-        <span className="px-2 py-0.5 bg-tertiary/10 border border-tertiary/20 text-tertiary font-label-caps text-[10px] rounded uppercase font-bold tracking-wider">Beta</span>
-      }>
-        <form className="grid grid-cols-1 md:grid-cols-3 gap-md" onSubmit={(e) => e.preventDefault()}>
-          <div className="flex flex-col gap-xs md:col-span-2">
-            <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Razão Social</label>
-            <input
-              className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
-              placeholder="Informe o dado"
-              type="text"
-            />
-          </div>
-          <div className="flex flex-col gap-xs">
-            <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">CNPJ / Tax ID</label>
-            <input
-              className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface font-mono"
-              placeholder="--"
-              type="text"
-            />
-          </div>
-          <div className="flex flex-col gap-xs">
-            <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">E-mail Financeiro</label>
-            <input
-              className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
-              placeholder="Dado protegido"
-              type="email"
-            />
-          </div>
-          <div className="flex flex-col gap-xs">
-            <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Telefone</label>
-            <input
-              className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface"
-              placeholder="--"
-              type="text"
-            />
-          </div>
-          <div className="flex flex-col gap-xs">
-            <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Website</label>
-            <input
-              className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface"
-              placeholder="https://..."
-              type="text"
-            />
-          </div>
-        </form>
-      </Card>
-
-      <div className="bg-surface border border-outline-variant rounded-xl p-lg opacity-60 shadow">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-sm">
-            <span className="material-symbols-outlined text-on-surface-variant">palette</span>
-            <h2 className="font-title-sm text-sm font-semibold text-on-surface">Identidade Visual</h2>
-          </div>
-          <span className="px-2 py-0.5 bg-secondary-container/30 border border-outline-variant/30 text-on-surface-variant font-label-caps text-[9px] rounded uppercase font-bold tracking-wider">
-            {t.common.planned}
-          </span>
+  const renderEmpresa = () => {
+    if (loadingSettings && !brandSettings.brandName && !brandSettings.legalName) {
+      return (
+        <div className="flex flex-col justify-center items-center py-xl gap-sm text-on-surface-variant font-body-sm">
+          <div className="w-8 h-8 rounded-full border-3 border-primary/10 border-t-primary animate-spin" />
+          <p>{t.settings.brand.loadingSettings || 'Carregando configurações...'}</p>
         </div>
-        <p className="mt-md font-body-sm text-[13px] text-on-surface-variant italic">
-          Módulo de customização de marca (White-label) em desenvolvimento para uma próxima fase.
-        </p>
+      );
+    }
+
+    return (
+      <div className="space-y-gutter animate-fade-in">
+        {/* Permission and Status notifications */}
+        {!isEditable && (
+          <div className="bg-surface-container/60 border border-outline-variant/30 text-on-surface-variant p-md rounded-lg flex items-center gap-sm">
+            <span className="material-symbols-outlined text-[18px]">lock</span>
+            <p className="font-body-sm text-[13px]">{t.settings.brand.noPermission}</p>
+          </div>
+        )}
+
+        {saveSuccess && (
+          <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-md rounded-lg flex items-center gap-sm animate-fade-in">
+            <span className="material-symbols-outlined">check_circle</span>
+            <p className="font-body-md text-[13px]">{t.settings.brand.saveSuccess}</p>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="bg-error-container/10 border border-error/20 text-error p-md rounded-lg flex items-center gap-sm animate-fade-in">
+            <span className="material-symbols-outlined">error</span>
+            <p className="font-body-md text-[13px]">{saveError}</p>
+          </div>
+        )}
+
+        <form onSubmit={(e) => { e.preventDefault(); handleSaveSettings(); }} className="space-y-gutter">
+          <Card title="Dados da Organização" headerAction={
+            <span className="px-2 py-0.5 bg-tertiary/10 border border-tertiary/20 text-tertiary font-label-caps text-[10px] rounded uppercase font-bold tracking-wider">Beta</span>
+          }>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.brandName}</label>
+                <input
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
+                  placeholder="Nome público"
+                  type="text"
+                  value={brandSettings.brandName}
+                  onChange={(e) => handleInputChange('brandName', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.brandSubtitle}</label>
+                <input
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
+                  placeholder="Subtítulo descritivo"
+                  type="text"
+                  value={brandSettings.brandSubtitle}
+                  onChange={(e) => handleInputChange('brandSubtitle', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.legalName}</label>
+                <input
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
+                  placeholder="Razão social oficial"
+                  type="text"
+                  value={brandSettings.legalName}
+                  onChange={(e) => handleInputChange('legalName', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.companyDocument}</label>
+                <input
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface font-mono focus:border-primary outline-none"
+                  placeholder="CNPJ / CPF / Tax ID"
+                  type="text"
+                  value={brandSettings.companyDocument}
+                  onChange={(e) => handleInputChange('companyDocument', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.companyEmail}</label>
+                <input
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
+                  placeholder="email@empresa.com"
+                  type="email"
+                  value={brandSettings.companyEmail}
+                  onChange={(e) => handleInputChange('companyEmail', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.financialEmail}</label>
+                <input
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
+                  placeholder="financeiro@empresa.com"
+                  type="email"
+                  value={brandSettings.financialEmail}
+                  onChange={(e) => handleInputChange('financialEmail', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.companyPhone}</label>
+                <input
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
+                  placeholder="Telefone de contato"
+                  type="text"
+                  value={brandSettings.companyPhone}
+                  onChange={(e) => handleInputChange('companyPhone', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.companyWebsite}</label>
+                <input
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
+                  placeholder="https://suaempresa.com"
+                  type="text"
+                  value={brandSettings.companyWebsite}
+                  onChange={(e) => handleInputChange('companyWebsite', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+
+              <div className="flex flex-col gap-xs md:col-span-3">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.companyAddress}</label>
+                <textarea
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none min-h-[60px]"
+                  placeholder="Endereço físico livre..."
+                  value={brandSettings.companyAddress}
+                  onChange={(e) => handleInputChange('companyAddress', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Configurações de White-label & Documentos A4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.primaryColorHex}</label>
+                <div className="flex gap-xs items-center">
+                  <input
+                    className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface font-mono focus:border-primary outline-none flex-1"
+                    placeholder="#4f46e5"
+                    type="text"
+                    value={brandSettings.primaryColorHex}
+                    onChange={(e) => handleInputChange('primaryColorHex', e.target.value)}
+                    disabled={loadingSettings || !isEditable}
+                  />
+                  <div 
+                    className="w-10 h-10 rounded border border-outline-variant shrink-0 transition-colors"
+                    style={{ backgroundColor: /^#[0-9A-Fa-f]{6}$/.test(brandSettings.primaryColorHex) ? brandSettings.primaryColorHex : '#000000' }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-xs md:col-span-2">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.signatureName}</label>
+                <input
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
+                  placeholder="Nome do responsável para assinatura (ex: João Silva)"
+                  type="text"
+                  value={brandSettings.signatureName}
+                  onChange={(e) => handleInputChange('signatureName', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+
+              <div className="flex flex-col gap-xs md:col-span-3">
+                <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{t.settings.brand.documentFooterText}</label>
+                <textarea
+                  className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none min-h-[60px]"
+                  placeholder="Mensagem do rodapé dos documentos A4 (ex: Peanut OS — Central de TI)"
+                  value={brandSettings.documentFooterText}
+                  onChange={(e) => handleInputChange('documentFooterText', e.target.value)}
+                  disabled={loadingSettings || !isEditable}
+                />
+              </div>
+            </div>
+          </Card>
+        </form>
+
+        <div className="bg-surface border border-outline-variant rounded-xl p-lg opacity-60 shadow">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-sm">
+              <span className="material-symbols-outlined text-on-surface-variant">palette</span>
+              <h2 className="font-title-sm text-sm font-semibold text-on-surface">{t.settings.brand.visualIdentity}</h2>
+            </div>
+            <span className="px-2 py-0.5 bg-secondary-container/30 border border-outline-variant/30 text-on-surface-variant font-label-caps text-[9px] rounded uppercase font-bold tracking-wider">
+              {t.common.planned}
+            </span>
+          </div>
+          <p className="mt-md font-body-sm text-[13px] text-on-surface-variant italic">
+            {t.settings.brand.visualIdentityDesc}
+          </p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderSeguranca = () => (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-lg animate-fade-in">
@@ -438,9 +697,13 @@ export default function SettingsPage() {
             <span className="material-symbols-outlined text-[18px] mr-1">history</span>
             Ver Auditoria
           </Button>
-          <Button variant="primary" onClick={handleSave}>
+          <Button 
+            variant="primary" 
+            onClick={handleSave}
+            disabled={activeTab === 'empresa' ? (loadingSettings || !isEditable) : false}
+          >
             <span className="material-symbols-outlined text-[18px] mr-1">save</span>
-            Salvar Alterações
+            {activeTab === 'empresa' && loadingSettings ? (t.common.saving || 'Salvando...') : (t.common.save || 'Salvar')}
           </Button>
         </div>
       </header>

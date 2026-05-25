@@ -163,6 +163,20 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // White-label Brand Settings
+  brandName           String? @db.VarChar(150)
+  brandSubtitle       String? @db.VarChar(150)
+  legalName           String? @db.VarChar(200)
+  companyDocument     String? @db.VarChar(30)
+  companyEmail        String? @db.VarChar(150)
+  financialEmail      String? @db.VarChar(150)
+  companyPhone        String? @db.VarChar(30)
+  companyWebsite      String? @db.VarChar(255)
+  companyAddress      String? @db.Text
+  primaryColorHex     String? @db.VarChar(7)
+  documentFooterText  String? @db.Text
+  signatureName       String? @db.VarChar(150)
+
   // Relationships
   users               User[]
   clients             Client[]
