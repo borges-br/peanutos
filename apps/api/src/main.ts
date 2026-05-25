@@ -6,7 +6,8 @@ import {
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const adapter = new FastifyAdapter();
+  // 5 MB body limit to support base64 image uploads (2 MB image ≈ 2.67 MB base64 in JSON)
+  const adapter = new FastifyAdapter({ bodyLimit: 5 * 1024 * 1024 });
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     adapter,
