@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { apiRequest } from '../../../../../lib/api';
+import { apiRequest, apiBlobRequest } from '../../../../../lib/api';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '../../../../../context/AuthContext';
 import { useI18n } from '../../../../../i18n/useI18n';
@@ -20,11 +20,14 @@ export default function InvoiceA4PreviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [brandSettings, setBrandSettings] = useState<any>(null);
 
-  // PDF Generation States
+  // PDF Generation & File Operations States
   const [existingDoc, setExistingDoc] = useState<any>(null);
   const [generating, setGenerating] = useState(false);
   const [genSuccess, setGenSuccess] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+
+  const [downloading, setDownloading] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   const hasFinancialPrivilege = user ? ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role) : false;
 
@@ -83,7 +86,6 @@ export default function InvoiceA4PreviewPage() {
     try {
       const response = await apiRequest<any>(`/documents/invoices/${invoiceId}/generate-pdf`, {
         method: 'POST',
-        body: JSON.stringify({}),
       });
       const jobId = response.jobId;
       
@@ -112,6 +114,50 @@ export default function InvoiceA4PreviewPage() {
     } catch (err: any) {
       setGenerating(false);
       setGenError(err.message || t.invoices.pdf?.failure || 'Falha ao iniciar geração de PDF.');
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!existingDoc || downloading) return;
+    setDownloading(true);
+    setGenError(null);
+    try {
+      const blob = await apiBlobRequest(`/documents/${existingDoc.id}/download`);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const safeNumber = invoice.number.replace(/[^a-zA-Z0-9_-]/g, '_');
+      a.download = `fatura-${safeNumber}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setGenError(t.documents?.errors?.downloadFailed || "Falha ao baixar documento.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handlePrintPdf = async () => {
+    if (!existingDoc || printing) return;
+    setPrinting(true);
+    setGenError(null);
+    try {
+      const blob = await apiBlobRequest(`/documents/${existingDoc.id}/inline`);
+      const url = window.URL.createObjectURL(blob);
+      const printWindow = window.open(url, '_blank', 'noopener,noreferrer');
+
+      if (!printWindow) {
+        setGenError(t.documents?.errors?.popupBlocked || "O navegador bloqueou a janela de impressão. Permita pop-ups para continuar.");
+      } else {
+        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+      }
+    } catch (err: any) {
+      setGenError(t.documents?.errors?.printFailed || "Falha ao abrir documento para impressão.");
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -167,26 +213,46 @@ export default function InvoiceA4PreviewPage() {
     .filter((i: any) => i.type === 'MATERIAL')
     .reduce((sum: number, i: any) => sum + parseFloat(i.totalPrice || 0), 0);
 
-  // Dynamic A4PreviewShell PDF Button props
-  let pdfActionLabel = t.invoices.pdf?.generate || "Gerar PDF";
-  let onPdfAction: (() => void) | undefined = undefined;
-  let pdfActionLoading = false;
-  let pdfActionDisabled = false;
+  // Map generic documentActions list for A4PreviewShell header
+  const documentActions: any[] = [];
   const showPdfAction = hasFinancialPrivilege;
 
   if (hasFinancialPrivilege) {
-    if (generating) {
-      pdfActionLabel = t.invoices.pdf?.generating || "PDF em geração";
-      pdfActionLoading = true;
-      pdfActionDisabled = true;
-    } else if (existingDoc) {
-      pdfActionLabel = "Ver Documento Gerado";
-      onPdfAction = () => {
-        router.push(`/dashboard/documentos?search=${invoice.number}`);
-      };
+    if (!existingDoc) {
+      documentActions.push({
+        label: generating ? (t.invoices.pdf?.generating || "PDF em geração") : (t.invoices.pdf?.generate || "Gerar PDF"),
+        icon: "picture_as_pdf",
+        variant: "primary" as const,
+        disabled: generating,
+        loading: generating,
+        onClick: handleGeneratePdf,
+      });
     } else {
-      pdfActionLabel = t.invoices.pdf?.generate || "Gerar PDF";
-      onPdfAction = handleGeneratePdf;
+      documentActions.push({
+        label: downloading ? "Baixando..." : (t.documents?.actions?.downloadPdf || "Baixar PDF"),
+        icon: "download",
+        variant: "primary" as const,
+        disabled: downloading || printing,
+        loading: downloading,
+        onClick: handleDownloadPdf,
+      });
+      documentActions.push({
+        label: printing ? "Carregando..." : (t.documents?.actions?.printPdf || "Imprimir PDF"),
+        icon: "print",
+        variant: "secondary" as const,
+        disabled: downloading || printing,
+        loading: printing,
+        onClick: handlePrintPdf,
+      });
+      documentActions.push({
+        label: t.invoices.pdf?.viewGenerated || "Ver Documento Gerado",
+        icon: "folder_shared",
+        variant: "outline" as const,
+        disabled: downloading || printing,
+        onClick: () => {
+          router.push(`/dashboard/documentos?search=${invoice.number}`);
+        },
+      });
     }
   }
 
@@ -210,11 +276,8 @@ export default function InvoiceA4PreviewPage() {
       documentFooterText={brandSettings?.documentFooterText}
       signatureName={brandSettings?.signatureName}
       primaryColorHex={brandSettings?.primaryColorHex}
-      pdfActionLabel={pdfActionLabel}
-      onPdfAction={onPdfAction}
-      pdfActionDisabled={pdfActionDisabled}
-      pdfActionLoading={pdfActionLoading}
       showPdfAction={showPdfAction}
+      documentActions={documentActions}
     >
       {!hasFinancialPrivilege ? (
         <div className="my-auto">
@@ -239,10 +302,10 @@ export default function InvoiceA4PreviewPage() {
           )}
 
           {/* Error Banner */}
-          {genError && (
+          {(genError || error) && (
             <div className="bg-red-500/10 border border-red-500/20 text-red-700 p-md rounded-lg text-body-sm flex items-center gap-sm mb-md font-sans">
               <span className="material-symbols-outlined text-red-600 text-[18px]">error</span>
-              <span>{genError}</span>
+              <span>{genError || error}</span>
             </div>
           )}
 

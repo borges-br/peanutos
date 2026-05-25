@@ -1,12 +1,58 @@
-import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from "@nestjs/common";
 import { prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { DocumentQueryInput } from "@peanut/validators";
 import { Queue } from "bullmq";
+import { S3Client, GetObjectCommand, HeadBucketCommand, CreateBucketCommand } from "@aws-sdk/client-s3";
 
 @Injectable()
 export class DocumentsService {
-  constructor(private readonly auditService: AuditService) {}
+  constructor(private readonly auditService: AuditService) {
+    this.ensureBucketExists().catch(err => {
+      console.warn('[S3 API Initialize] Auto-create check threw unhandled error:', err.message);
+    });
+  }
+
+  private readonly s3Endpoint = process.env.S3_ENDPOINT || "http://localhost:9000";
+  private readonly s3AccessKey = process.env.S3_ACCESS_KEY || process.env.S3_ACCESS_KEY_ID || "minio_admin";
+  private readonly s3SecretKey = process.env.S3_SECRET_KEY || process.env.S3_SECRET_ACCESS_KEY || "change-me-in-production";
+  private readonly s3Bucket = process.env.S3_BUCKET || "peanut-documents";
+  private readonly s3Region = process.env.S3_REGION || "us-east-1";
+
+  private readonly s3Client = new S3Client({
+    endpoint: this.s3Endpoint,
+    region: this.s3Region,
+    credentials: {
+      accessKeyId: this.s3AccessKey,
+      secretAccessKey: this.s3SecretKey,
+    },
+    forcePathStyle: true,
+  });
+
+  private async ensureBucketExists() {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const autoCreate = process.env.S3_AUTO_CREATE_BUCKET === 'true';
+
+    if (!isProduction && autoCreate) {
+      console.log(`[S3 API Initialize] Checking bucket "${this.s3Bucket}" existence...`);
+      try {
+        await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }));
+        console.log(`[S3 API Initialize] Bucket "${this.s3Bucket}" is ready.`);
+      } catch (err: any) {
+        if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
+          console.log(`[S3 API Initialize] Bucket "${this.s3Bucket}" not found. Creating dynamically...`);
+          try {
+            await this.s3Client.send(new CreateBucketCommand({ Bucket: this.s3Bucket }));
+            console.log(`[S3 API Initialize] Bucket "${this.s3Bucket}" created successfully.`);
+          } catch (createErr: any) {
+            console.error(`[S3 API Initialize] Failed to create bucket "${this.s3Bucket}":`, createErr.message);
+          }
+        } else {
+          console.warn(`[S3 API Initialize] HeadBucket query failed (safe bypass):`, err.message);
+        }
+      }
+    }
+  }
 
   private isUuid(val: string): boolean {
     const uuidRegex =
@@ -38,11 +84,6 @@ export class DocumentsService {
       visibility: fileObject.visibility,
       createdAt: fileObject.createdAt,
     };
-
-    if (role === "OWNER" || role === "ADMIN") {
-      file.bucket = fileObject.bucket;
-      file.key = fileObject.key;
-    }
 
     const sha256 = role === "READ_ONLY" ? undefined : doc.sha256;
 
@@ -331,11 +372,26 @@ export class DocumentsService {
         };
       }
 
+      let sanitizedFailedReason: string | undefined = undefined;
+      if (failedReason) {
+        if (failedReason.includes("permissão") || failedReason.includes("permission")) {
+          sanitizedFailedReason = "Permissão negada ao acessar o armazenamento.";
+        } else if (failedReason.includes("PDF") || failedReason.includes("gerar")) {
+          sanitizedFailedReason = "Falha ao gerar o arquivo PDF.";
+        } else if (failedReason.includes("salvar") || failedReason.includes("armazenamento") || failedReason.includes("upload")) {
+          sanitizedFailedReason = "Falha ao salvar o arquivo no armazenamento.";
+        } else if (failedReason.includes("banco") || failedReason.includes("registrar")) {
+          sanitizedFailedReason = "Falha ao registrar o documento.";
+        } else {
+          sanitizedFailedReason = "Ocorreu um erro interno durante a geração do documento.";
+        }
+      }
+
       return {
         jobId,
         status: (state === "completed" || state === "failed" || state === "waiting" || state === "active" ? state : "unknown") as any,
         result: sanitizedResult,
-        failedReason,
+        failedReason: sanitizedFailedReason,
       };
     } catch (err: any) {
       console.error(`[DocumentsService] Failed to fetch job status for ${jobId}:`, err);
@@ -344,5 +400,81 @@ export class DocumentsService {
         status: "unknown" as const,
       };
     }
+  }
+
+  async getFileStream(documentId: string, workspaceId: string, role: string, actorUserId: string, mode: "attachment" | "inline") {
+    // 1. Fetch GeneratedDocument
+    const doc = await prisma.generatedDocument.findFirst({
+      where: { id: documentId, workspaceId },
+      include: {
+        fileObject: true,
+      },
+    });
+
+    if (!doc || !doc.fileObject) {
+      throw new NotFoundException("Documento não encontrado");
+    }
+
+    // 2. Validate RBAC (restrict INVOICE type to OWNER, ADMIN, FINANCIAL)
+    if (doc.documentType === "INVOICE") {
+      const hasFinancialPrivilege = ["OWNER", "ADMIN", "FINANCIAL"].includes(role);
+      if (!hasFinancialPrivilege) {
+        throw new ForbiddenException("Você não possui permissão para baixar ou visualizar este documento financeiro.");
+      }
+    }
+
+    // 3. Get file from MinIO S3
+    console.log(`[DocumentsService] Fetching S3 object for document ${documentId} from bucket "${doc.fileObject.bucket}" key "${doc.fileObject.key}"...`);
+    let s3Response;
+    try {
+      s3Response = await this.s3Client.send(new GetObjectCommand({
+        Bucket: doc.fileObject.bucket,
+        Key: doc.fileObject.key,
+      }));
+    } catch (err: any) {
+      console.error(`[DocumentsService] MinIO GetObjectCommand failed for doc ${documentId}:`, err.message);
+      // Throw secure generic error to avoid exposing raw SDK error
+      throw new NotFoundException("Arquivo físico não encontrado no armazenamento em nuvem.");
+    }
+
+    // 4. Validate Body exists and is a readable stream
+    const isStream = s3Response.Body && typeof (s3Response.Body as any).pipe === "function";
+    if (!isStream) {
+      throw new BadRequestException("O conteúdo retornado do armazenamento em nuvem não é um fluxo de dados válido.");
+    }
+
+    // 5. Register audit log ONLY after successful retrieval success
+    const auditAction = mode === "attachment" ? "document.downloaded" : "document.opened_inline";
+    try {
+      await this.auditService.log({
+        workspaceId,
+        actorUserId,
+        action: auditAction,
+        entityType: "DOCUMENT",
+        entityId: documentId,
+        severity: "INFO",
+        after: {
+          documentId,
+          documentType: doc.documentType,
+          entityType: doc.entityType,
+          entityId: doc.entityId,
+          version: doc.version,
+          fileObjectId: doc.fileObjectId,
+          sizeBytes: doc.fileObject.sizeBytes.toString(),
+          sha256: doc.sha256,
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[DocumentsService] Failed to write audit log:", auditErr);
+    }
+
+    const safeNumber = doc.metadata ? (JSON.parse(doc.metadata)?.invoiceNumber || doc.version.toString()) : doc.version.toString();
+    const sanitizedNumber = safeNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `fatura-${sanitizedNumber}-v${doc.version}.pdf`;
+
+    return {
+      stream: s3Response.Body,
+      filename,
+    };
   }
 }

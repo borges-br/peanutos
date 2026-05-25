@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { apiRequest } from '../../../lib/api';
+import { apiRequest, apiBlobRequest } from '../../../lib/api';
 import { useAuth } from '../../../context/AuthContext';
 import { useI18n } from '../../../i18n/useI18n';
 import { formatDateTime } from '../../../i18n/formatters';
@@ -35,6 +35,71 @@ export default function DocumentosPage() {
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
+
+  // S3 File operations states
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [printingId, setPrintingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleDownload = async (doc: any) => {
+    if (downloadingId || printingId) return;
+    setActionError(null);
+
+    if (doc.documentType === 'INVOICE') {
+      const allowed = ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user?.role || '');
+      if (!allowed) {
+        setActionError(t.documents.errors.restrictedDownload);
+        return;
+      }
+    }
+
+    setDownloadingId(doc.id);
+    try {
+      const blob = await apiBlobRequest(`/documents/${doc.id}/download`);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.file?.originalFilename || `documento-${doc.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setActionError(err.message || t.documents.errors.downloadFailed);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handlePrint = async (doc: any) => {
+    if (downloadingId || printingId) return;
+    setActionError(null);
+
+    if (doc.documentType === 'INVOICE') {
+      const allowed = ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user?.role || '');
+      if (!allowed) {
+        setActionError(t.documents.errors.restrictedPrint);
+        return;
+      }
+    }
+
+    setPrintingId(doc.id);
+    try {
+      const blob = await apiBlobRequest(`/documents/${doc.id}/inline`);
+      const url = window.URL.createObjectURL(blob);
+      const printWindow = window.open(url, '_blank', 'noopener,noreferrer');
+
+      if (!printWindow) {
+        setActionError(t.documents.errors.popupBlocked);
+      } else {
+        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+      }
+    } catch (err: any) {
+      setActionError(err.message || t.documents.errors.printFailed);
+    } finally {
+      setPrintingId(null);
+    }
+  };
 
   const fetchDocuments = async (pageNum = page) => {
     setLoading(true);
@@ -491,10 +556,57 @@ export default function DocumentosPage() {
                         <td className="p-md font-mono text-on-surface-variant/80 whitespace-nowrap">
                           {formatDateTime(doc.generatedAt)}
                         </td>
-                        <td className="p-md text-right whitespace-nowrap">
-                          <button className="material-symbols-outlined text-outline group-hover:text-primary transition-colors">
-                            visibility
-                          </button>
+                        <td className="p-md text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-xs">
+                            {doc.documentType === 'INVOICE' && !['OWNER', 'ADMIN', 'FINANCIAL'].includes(user?.role || '') ? (
+                              <span className="material-symbols-outlined text-outline/40 text-[18px] cursor-not-allowed animate-none" title="Acesso restrito">
+                                lock
+                              </span>
+                            ) : doc.file?.mimeType !== 'application/pdf' ? (
+                              <>
+                                <button
+                                  className="material-symbols-outlined text-outline/30 text-[18px] cursor-not-allowed"
+                                  disabled
+                                  title="Download apenas para PDF"
+                                >
+                                  download
+                                </button>
+                                <button
+                                  className="material-symbols-outlined text-outline/30 text-[18px] cursor-not-allowed"
+                                  disabled
+                                  title="Impressão apenas para PDF"
+                                >
+                                  print
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  className={`material-symbols-outlined text-outline hover:text-primary transition-colors text-[18px] disabled:opacity-40 ${downloadingId === doc.id ? 'animate-spin' : ''}`}
+                                  onClick={() => handleDownload(doc)}
+                                  disabled={!!downloadingId || !!printingId}
+                                  title="Baixar PDF"
+                                >
+                                  {downloadingId === doc.id ? 'sync' : 'download'}
+                                </button>
+                                <button
+                                  className={`material-symbols-outlined text-outline hover:text-primary transition-colors text-[18px] disabled:opacity-40 ${printingId === doc.id ? 'animate-spin' : ''}`}
+                                  onClick={() => handlePrint(doc)}
+                                  disabled={!!downloadingId || !!printingId}
+                                  title="Imprimir PDF"
+                                >
+                                  {printingId === doc.id ? 'sync' : 'print'}
+                                </button>
+                              </>
+                            )}
+                            <button
+                              className="material-symbols-outlined text-outline hover:text-primary transition-colors text-[18px]"
+                              onClick={() => setSelectedDocId(doc.id)}
+                              title="Ver Detalhes"
+                            >
+                              info
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -733,14 +845,48 @@ export default function DocumentosPage() {
                     </div>
                   )}
 
-                  {/* Botões Planejados/Desabilitados de Operações de Arquivo */}
+                  {/* Real functional file download and print buttons */}
+                  {actionError && (
+                    <div className="bg-error/10 border border-error/20 text-error p-sm rounded text-xs">
+                      {actionError}
+                    </div>
+                  )}
                   <div className="pt-md grid grid-cols-2 gap-sm">
-                    <Button variant="outline" planned>
-                      Download
-                    </Button>
-                    <Button variant="outline" planned>
-                      Visualizar
-                    </Button>
+                    {selectedDoc.documentType === 'INVOICE' && !['OWNER', 'ADMIN', 'FINANCIAL'].includes(user?.role || '') ? (
+                      <div className="col-span-2 text-center text-xs text-on-surface-variant italic py-xs border border-outline-variant/30 rounded bg-surface-container-high">
+                        Ações de download e impressão restritas
+                      </div>
+                    ) : selectedDoc.file?.mimeType !== 'application/pdf' ? (
+                      <>
+                        <Button variant="outline" planned title="Apenas arquivos PDF podem ser baixados">
+                          Download
+                        </Button>
+                        <Button variant="outline" planned title="Apenas arquivos PDF podem ser visualizados">
+                          Visualizar
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          loading={downloadingId === selectedDoc.id}
+                          disabled={!!downloadingId || !!printingId}
+                          onClick={() => handleDownload(selectedDoc)}
+                        >
+                          <span className="material-symbols-outlined text-[16px] mr-1">download</span>
+                          Baixar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          loading={printingId === selectedDoc.id}
+                          disabled={!!downloadingId || !!printingId}
+                          onClick={() => handlePrint(selectedDoc)}
+                        >
+                          <span className="material-symbols-outlined text-[16px] mr-1">print</span>
+                          Imprimir
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               </Card>

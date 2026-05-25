@@ -4,14 +4,64 @@
 import * as dotenv from 'dotenv';
 import { Worker, Job, Queue } from 'bullmq';
 import { prisma } from '@peanut/db';
-import * as path from 'path';
-import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { chromium } from 'playwright';
 import { generateInvoicePdfHtml } from '@peanut/documents';
+import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 // Load environment variables from root or local
 dotenv.config();
+
+// S3 Client initialization with resilient fallbacks
+const s3Endpoint = process.env.S3_ENDPOINT || "http://localhost:9000";
+const s3AccessKey = process.env.S3_ACCESS_KEY || process.env.S3_ACCESS_KEY_ID || "minio_admin";
+const s3SecretKey = process.env.S3_SECRET_KEY || process.env.S3_SECRET_ACCESS_KEY || "change-me-in-production";
+const s3Bucket = process.env.S3_BUCKET || "peanut-documents";
+const s3Region = process.env.S3_REGION || "us-east-1";
+
+const s3Client = new S3Client({
+  endpoint: s3Endpoint,
+  region: s3Region,
+  credentials: {
+    accessKeyId: s3AccessKey,
+    secretAccessKey: s3SecretKey,
+  },
+  forcePathStyle: true,
+});
+
+/**
+ * Auto-create target S3 bucket in non-production environments
+ */
+async function ensureBucketExists() {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const autoCreate = process.env.S3_AUTO_CREATE_BUCKET === 'true';
+
+  if (!isProduction && autoCreate) {
+    console.log(`[S3 Initialize] Checking bucket "${s3Bucket}" existence...`);
+    try {
+      await s3Client.send(new HeadBucketCommand({ Bucket: s3Bucket }));
+      console.log(`[S3 Initialize] Bucket "${s3Bucket}" is ready.`);
+    } catch (err: any) {
+      if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
+        console.log(`[S3 Initialize] Bucket "${s3Bucket}" not found. Creating it dynamically...`);
+        try {
+          await s3Client.send(new CreateBucketCommand({ Bucket: s3Bucket }));
+          console.log(`[S3 Initialize] Bucket "${s3Bucket}" created successfully.`);
+        } catch (createErr: any) {
+          console.error(`[S3 Initialize] Failed to create bucket "${s3Bucket}":`, createErr.message);
+        }
+      } else {
+        console.warn(`[S3 Initialize] HeadBucket query failed (safe bypass):`, err.message);
+      }
+    }
+  } else {
+    console.log(`[S3 Initialize] Dynamic bucket auto-creation bypassed. Production = ${isProduction}, AutoCreate = ${autoCreate}`);
+  }
+}
+
+ensureBucketExists().catch(err => {
+  console.warn('[S3 Initialize] Auto-create check threw unhandled error:', err.message);
+});
 
 console.log('👷 Background job worker initializing...');
 
@@ -197,55 +247,64 @@ const pdfWorker = new Worker(
 
     // 6. Launch Playwright headless browser
     console.log(`[PDF Worker] Launching chromium browser...`);
-    const browser = await chromium.launch({ headless: true });
     let pdfBuffer: Buffer;
     try {
-      const page = await browser.newPage();
-      await page.setContent(html);
-      pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: {
-          top: '0',
-          right: '0',
-          bottom: '0',
-          left: '0',
-        },
-      });
-    } finally {
-      await browser.close();
+      const browser = await chromium.launch({ headless: true });
+      try {
+        const page = await browser.newPage();
+        await page.setContent(html);
+        pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+          margin: {
+            top: '0',
+            right: '0',
+            bottom: '0',
+            left: '0',
+          },
+        });
+      } finally {
+        await browser.close();
+      }
+    } catch (playwrightErr: any) {
+      console.error('[PDF Worker] Playwright PDF generation failed:', playwrightErr.message);
+      // Throw generic secure error (omit internal stack traces / raw errors)
+      throw new Error(`Falha ao gerar o arquivo PDF.`);
     }
-
-    // 7. Resolve workspace root and storage directory
-    const workspaceRoot = process.cwd().endsWith('worker') ? path.resolve(process.cwd(), '../..') : process.cwd();
-    const storageRoot = process.env.DOCUMENT_STORAGE_ROOT || path.join(workspaceRoot, 'storage');
 
     const sanitizedNumber = safeFilename(invoice.number);
     const fileName = `invoice-${sanitizedNumber}-v${version}.pdf`;
     const key = `${workspaceId}/invoices/${entityId}/${fileName}`;
-    const filePath = path.join(storageRoot, 'documents', workspaceId, 'invoices', entityId, fileName);
 
-    // 8. Create folder structure and save the file
-    console.log(`[PDF Worker] Saving physical PDF to local disk: ${filePath}`);
-    const dirPath = path.dirname(filePath);
-    await fs.promises.mkdir(dirPath, { recursive: true });
-    await fs.promises.writeFile(filePath, pdfBuffer);
+    // 7. Upload the buffer directly to MinIO
+    console.log(`[PDF Worker] Uploading PDF buffer to MinIO bucket "${s3Bucket}" key "${key}"...`);
+    try {
+      await s3Client.send(new PutObjectCommand({
+        Bucket: s3Bucket,
+        Key: key,
+        Body: pdfBuffer,
+        ContentType: 'application/pdf',
+      }));
+    } catch (uploadErr: any) {
+      console.error('[PDF Worker] MinIO upload command failed:', uploadErr.message);
+      // Throw generic secure error (omit internal paths / endpoints / S3 keys)
+      throw new Error(`Falha ao salvar o arquivo no armazenamento em nuvem.`);
+    }
 
-    // 9. Calculate file statistics
-    const stats = await fs.promises.stat(filePath);
-    const sizeBytes = BigInt(stats.size);
+    // 8. Calculate file statistics from memory buffer
+    const sizeBytes = BigInt(pdfBuffer.length);
     const sha256 = crypto.createHash('sha256').update(pdfBuffer).digest('hex');
 
-    // 10. Persist records in Prisma (FileObject & GeneratedDocument)
+    // 9. Persist records in Prisma (FileObject & GeneratedDocument)
     let fileObject;
     let generatedDoc;
     try {
       fileObject = await prisma.fileObject.create({
         data: {
           workspaceId,
-          bucket: 'local-documents',
+          bucket: s3Bucket,
           key,
-          originalFilename: `fatura-${sanitizedNumber}.pdf`,
+          originalFilename: `fatura-${sanitizedNumber}-v${version}.pdf`,
           mimeType: 'application/pdf',
           sizeBytes,
           sha256,
@@ -267,21 +326,24 @@ const pdfWorker = new Worker(
           metadata: JSON.stringify({
             invoiceNumber: invoice.number,
             generatedFrom: 'invoice-preview',
-            storage: 'local',
+            storage: 's3',
           }),
         },
       });
-    } catch (dbError) {
-      console.error('[PDF Worker] DB operations failed. Cleaning up saved file...', dbError);
+    } catch (dbError: any) {
+      console.error('[PDF Worker] DB operations failed. Cleaning up S3 object...', dbError.message);
       try {
-        await fs.promises.unlink(filePath);
-      } catch (unlinkErr) {
-        console.error('[PDF Worker] Physical file cleanup failed:', unlinkErr);
+        await s3Client.send(new DeleteObjectCommand({
+          Bucket: s3Bucket,
+          Key: key,
+        }));
+      } catch (deleteErr: any) {
+        console.error('[PDF Worker] S3 Object cleanup failed:', deleteErr.message);
       }
-      throw dbError;
+      throw new Error(`Falha ao registrar o documento no banco de dados.`);
     }
 
-    // 11. Write audit log (omitting local key, bucket, path)
+    // 10. Write audit log (omitting S3 path/bucket/key) only after real transaction success
     try {
       await prisma.auditLog.create({
         data: {
@@ -310,7 +372,7 @@ const pdfWorker = new Worker(
 
     console.log(`[PDF Worker] Completed job ${job.id}. GeneratedDocId: ${generatedDoc.id}`);
     
-    // Return ONLY generatedDocumentId, fileObjectId and version (excl. local path/bucket/key)
+    // Return ONLY generatedDocumentId, fileObjectId and version (excl. bucket/key/endpoint)
     return {
       generatedDocumentId: generatedDoc.id,
       fileObjectId: fileObject.id,

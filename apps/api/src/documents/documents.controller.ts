@@ -6,6 +6,7 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  Res,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
@@ -51,6 +52,44 @@ export class DocumentsController {
   @Roles("OWNER", "ADMIN", "FINANCIAL")
   async getJobStatus(@Param("jobId") jobId: string) {
     return this.documentsService.getJobStatus(jobId);
+  }
+
+  @Get(":documentId/download")
+  async download(
+    @Param("documentId") documentId: string,
+    @CurrentUser() user: any,
+    @Res() reply: any,
+  ) {
+    const result = await this.documentsService.getFileStream(
+      documentId,
+      user.workspaceId,
+      user.role,
+      user.id,
+      "attachment",
+    );
+
+    reply.header("Content-Type", "application/pdf");
+    reply.header("Content-Disposition", `attachment; filename="${result.filename}"`);
+    reply.send(result.stream);
+  }
+
+  @Get(":documentId/inline")
+  async inline(
+    @Param("documentId") documentId: string,
+    @CurrentUser() user: any,
+    @Res() reply: any,
+  ) {
+    const result = await this.documentsService.getFileStream(
+      documentId,
+      user.workspaceId,
+      user.role,
+      user.id,
+      "inline",
+    );
+
+    reply.header("Content-Type", "application/pdf");
+    reply.header("Content-Disposition", `inline; filename="${result.filename}"`);
+    reply.send(result.stream);
   }
 
   @Get(":documentId")

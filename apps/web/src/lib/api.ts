@@ -37,3 +37,36 @@ export async function apiRequest<T = any>(
 
   return response.json();
 }
+
+export async function apiBlobRequest(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<Blob> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('peanut_token') : null;
+
+  const headers: HeadersInit = {
+    ...(options.headers || {}),
+  };
+
+  if (token) {
+    (headers as any)['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    let errorMessage = 'Ocorreu um erro no servidor';
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.message || errorMessage;
+    } catch {
+      // ignore
+    }
+    throw new Error(errorMessage);
+  }
+
+  return response.blob();
+}

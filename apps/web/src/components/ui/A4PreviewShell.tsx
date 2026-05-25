@@ -30,6 +30,14 @@ interface A4PreviewShellProps {
   pdfActionDisabled?: boolean;
   pdfActionLoading?: boolean;
   showPdfAction?: boolean;
+  documentActions?: Array<{
+    label: string;
+    icon?: string;
+    variant?: "primary" | "secondary" | "outline" | "danger";
+    disabled?: boolean;
+    loading?: boolean;
+    onClick: () => void;
+  }>;
 }
 
 export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
@@ -57,6 +65,7 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
   pdfActionDisabled,
   pdfActionLoading,
   showPdfAction,
+  documentActions,
 }) => {
   const router = useRouter();
   const { t } = useI18n();
@@ -85,31 +94,51 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
           </p>
         </div>
 
-        <div className="flex gap-sm">
+        <div className="flex flex-wrap gap-sm">
           <Button variant="outline" onClick={() => router.push(backPath)}>
             <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">arrow_back</span>
             {t.common.back}
           </Button>
 
-          <Button variant="secondary" disabled title="A funcionalidade de impressão será liberada em breve">
-            <span className="material-symbols-outlined text-[16px] mr-1.5">print</span>
-            Imprimir — Planejado
-          </Button>
+          {documentActions && documentActions.length > 0 ? (
+            documentActions.map((act, index) => (
+              <Button
+                key={index}
+                variant={act.variant || "primary"}
+                disabled={act.disabled || act.loading}
+                onClick={act.onClick}
+              >
+                {act.loading ? (
+                  <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin mr-1.5" />
+                ) : act.icon ? (
+                  <span className="material-symbols-outlined text-[16px] mr-1.5">{act.icon}</span>
+                ) : null}
+                {act.label}
+              </Button>
+            ))
+          ) : (
+            <>
+              <Button variant="secondary" disabled title="A funcionalidade de impressão será liberada em breve">
+                <span className="material-symbols-outlined text-[16px] mr-1.5">print</span>
+                Imprimir — Planejado
+              </Button>
 
-          {showPdfAction !== false && (
-            <Button
-              variant="primary"
-              disabled={pdfActionDisabled || pdfActionLoading}
-              onClick={onPdfAction}
-              title={onPdfAction ? undefined : "Exportação de PDF será liberada na próxima rodada"}
-            >
-              {pdfActionLoading ? (
-                <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin mr-1.5" />
-              ) : (
-                <span className="material-symbols-outlined text-[16px] mr-1.5">picture_as_pdf</span>
+              {showPdfAction !== false && (
+                <Button
+                  variant="primary"
+                  disabled={pdfActionDisabled || pdfActionLoading}
+                  onClick={onPdfAction}
+                  title={onPdfAction ? undefined : "Exportação de PDF será liberada na próxima rodada"}
+                >
+                  {pdfActionLoading ? (
+                    <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin mr-1.5" />
+                  ) : (
+                    <span className="material-symbols-outlined text-[16px] mr-1.5">picture_as_pdf</span>
+                  )}
+                  {pdfActionLabel || (onPdfAction ? "Gerar PDF" : "PDF — Planejado")}
+                </Button>
               )}
-              {pdfActionLabel || (onPdfAction ? "Gerar PDF" : "PDF — Planejado")}
-            </Button>
+            </>
           )}
         </div>
       </header>
