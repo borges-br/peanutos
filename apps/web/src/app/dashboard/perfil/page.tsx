@@ -4,11 +4,10 @@ import React, { useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
-import { useI18n } from '../../../i18n/useI18n';
 
 export default function ProfilePage() {
   const { user } = useAuth();
-  const { t } = useI18n();
+
 
   // Basic form states
   const [fullName, setFullName] = useState(user?.name || 'Operador Peanut OS');

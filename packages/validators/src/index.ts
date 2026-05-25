@@ -374,3 +374,22 @@ export const billingScheduleQuerySchema = z.object({
 
 export type BillingScheduleQueryInput = z.infer<typeof billingScheduleQuerySchema>;
 
+// --- AUDIT VALIDATORS ---
+
+export const auditSeverityEnum = z.enum(['INFO', 'WARN', 'SECURITY_ALERT']);
+
+export const auditLogQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  search: z.string().optional().nullable(),
+  entityType: z.string().optional().nullable(),
+  action: z.string().optional().nullable(),
+  severity: auditSeverityEnum.optional().nullable(),
+  actorUserId: z.string().uuid().optional().nullable(),
+  dateFrom: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data inválida' }).optional().nullable().or(z.literal('')),
+  dateTo: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data inválida' }).optional().nullable().or(z.literal('')),
+});
+
+export type AuditLogQueryInput = z.infer<typeof auditLogQuerySchema>;
+
+

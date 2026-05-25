@@ -82,4 +82,80 @@ export class AuditService {
       console.error("Failed to write audit log:", error);
     }
   }
+
+  public sanitizeForRead(data: any, role: string): any {
+    if (!data) return data;
+    if (typeof data !== "object") return data;
+
+    if (Array.isArray(data)) {
+      return data.map((item) => this.sanitizeForRead(item, role));
+    }
+
+    const sanitized = { ...data };
+
+    // 1. General sensitive keys (applied to ALL roles)
+    const generalKeys = [
+      "password",
+      "token",
+      "secret",
+      "key",
+      "credential",
+      "vpn",
+      "bearer",
+      "authorization"
+    ];
+
+    // 2. Technical sensitive keys (redacted for FINANCIAL and READ_ONLY)
+    const techKeys = [
+      "ipaddress",
+      "macaddress",
+      "hostname",
+      "remoteaccessid",
+      "ssh",
+      "port",
+      "host",
+      "connection",
+      "url",
+      "database",
+      "db"
+    ];
+
+    // 3. Financial sensitive keys (redacted for TECHNICIAN and READ_ONLY)
+    const financialKeys = [
+      "amount",
+      "cents",
+      "price",
+      "billing",
+      "invoice",
+      "quote",
+      "payment",
+      "pix",
+      "card",
+      "cost",
+      "value",
+      "revenue"
+    ];
+
+    for (const key of Object.keys(sanitized)) {
+      const lowerKey = key.toLowerCase();
+
+      let shouldRedact = generalKeys.some((sub) => lowerKey.includes(sub));
+
+      if (role === "FINANCIAL") {
+        shouldRedact = shouldRedact || techKeys.some((sub) => lowerKey.includes(sub));
+      } else if (role === "TECHNICIAN") {
+        shouldRedact = shouldRedact || financialKeys.some((sub) => lowerKey.includes(sub));
+      } else if (role === "READ_ONLY") {
+        shouldRedact = shouldRedact || techKeys.some((sub) => lowerKey.includes(sub)) || financialKeys.some((sub) => lowerKey.includes(sub));
+      }
+
+      if (shouldRedact) {
+        sanitized[key] = "[REDACTED]";
+      } else if (typeof sanitized[key] === "object" && sanitized[key] !== null) {
+        sanitized[key] = this.sanitizeForRead(sanitized[key], role);
+      }
+    }
+    return sanitized;
+  }
 }
+

@@ -3,10 +3,10 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Button from '../../../../components/ui/Button';
-import Card from '../../../../components/ui/Card';
-import { useI18n } from '../../../../i18n/useI18n';
+
 
 interface InternalUser {
+
   id: string;
   initials: string;
   name: string;
@@ -67,7 +67,6 @@ const mockUsers: InternalUser[] = [
 
 export default function InternalUsersPage() {
   const router = useRouter();
-  const { t } = useI18n();
   const [selectedUser, setSelectedUser] = useState<InternalUser | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');

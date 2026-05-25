@@ -3,8 +3,8 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import Button from '../../../components/ui/Button';
-import Card from '../../../components/ui/Card';
 import { useI18n } from '../../../i18n/useI18n';
+
 
 export default function WebhooksPage() {
   const router = useRouter();
