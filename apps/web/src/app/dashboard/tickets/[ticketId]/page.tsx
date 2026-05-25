@@ -2,16 +2,25 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
-import { Button } from '@peanut/ui';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '../../../../context/AuthContext';
+import { useI18n } from '../../../../i18n/useI18n';
+import Button from '../../../../components/ui/Button';
+import Badge from '../../../../components/ui/Badge';
+import Input from '../../../../components/ui/Input';
+import Select from '../../../../components/ui/Select';
+import ErrorState from '../../../../components/ui/ErrorState';
+
+type TabType = 'summary' | 'comments' | 'time' | 'history' | 'related';
 
 export default function TicketDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { t } = useI18n();
   const { user: authUser } = useAuth();
   const ticketId = params?.ticketId as string;
 
+  const [activeTab, setActiveTab] = useState<TabType>('summary');
   const [ticket, setTicket] = useState<any>(null);
   const [technicians, setTechnicians] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,63 +157,53 @@ export default function TicketDetailPage() {
     }
   };
 
-  const getPriorityStyle = (priority: string) => {
+  const getPriorityVariant = (priority: string) => {
     switch (priority) {
-      case 'CRITICAL': return { backgroundColor: 'rgba(220, 38, 38, 0.15)', color: '#ef4444', borderColor: 'rgba(220, 38, 38, 0.3)' };
-      case 'URGENT': return { backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.2)' };
-      case 'HIGH': return { backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', borderColor: 'rgba(245, 158, 11, 0.2)' };
-      case 'MEDIUM': return { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', borderColor: 'rgba(59, 130, 246, 0.2)' };
-      default: return { backgroundColor: 'rgba(156, 163, 175, 0.1)', color: '#9ca3af', borderColor: 'rgba(156, 163, 175, 0.2)' };
+      case 'CRITICAL':
+      case 'URGENT':
+        return 'error';
+      case 'HIGH':
+        return 'warning';
+      case 'MEDIUM':
+        return 'info';
+      default:
+        return 'neutral';
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'OPEN': return 'Aberto';
-      case 'TRIAGE': return 'Triagem';
-      case 'IN_PROGRESS': return 'Em Atendimento';
-      case 'WAITING_CLIENT': return 'Aguardando Cliente';
-      case 'WAITING_THIRD_PARTY': return 'Aguardando Terceiros';
-      case 'RESOLVED': return 'Resolvido';
-      case 'CLOSED': return 'Fechado';
-      case 'CANCELLED': return 'Cancelado';
-      default: return status;
-    }
-  };
-
-  const getStatusStyle = (status: string) => {
+  const getStatusVariant = (status: string) => {
     switch (status) {
       case 'RESOLVED':
       case 'CLOSED':
-        return { backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.2)' };
+        return 'success';
       case 'OPEN':
       case 'TRIAGE':
-        return { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', borderColor: 'rgba(59, 130, 246, 0.2)' };
+        return 'info';
       case 'IN_PROGRESS':
-        return { backgroundColor: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', borderColor: 'rgba(139, 92, 246, 0.2)' };
+        return 'info';
       case 'WAITING_CLIENT':
       case 'WAITING_THIRD_PARTY':
-        return { backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', borderColor: 'rgba(245, 158, 11, 0.2)' };
+        return 'warning';
       default:
-        return { backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.2)' };
+        return 'error';
     }
   };
 
   const renderSlaBadge = (dueStr: string | null, completedAtStr: string | null, label: string) => {
     if (completedAtStr) {
       return (
-        <div style={{ ...styles.slaIndicatorCard, borderColor: 'rgba(16, 185, 129, 0.2)' }}>
-          <span style={styles.slaIndicatorLabel}>{label}</span>
-          <span style={{ ...styles.slaIndicatorTime, color: '#34d399' }}>✓ Concluído</span>
+        <div className="flex flex-col gap-0.5 bg-surface border border-outline-variant p-md rounded-xl shadow">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant/75">{label}</span>
+          <span className="text-sm font-semibold font-mono text-success">Concluído</span>
         </div>
       );
     }
 
     if (!dueStr) {
       return (
-        <div style={styles.slaIndicatorCard}>
-          <span style={styles.slaIndicatorLabel}>{label}</span>
-          <span style={styles.slaIndicatorTime}>Não definido</span>
+        <div className="flex flex-col gap-0.5 bg-surface border border-outline-variant p-md rounded-xl shadow opacity-65">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant/75">{label}</span>
+          <span className="text-sm font-semibold font-mono text-on-surface-variant/40">Sem SLA definido</span>
         </div>
       );
     }
@@ -216,25 +215,26 @@ export default function TicketDetailPage() {
 
     if (diffMin < 0) {
       return (
-        <div style={{ ...styles.slaIndicatorCard, borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-          <span style={styles.slaIndicatorLabel}>{label}</span>
-          <span style={{ ...styles.slaIndicatorTime, color: '#ef4444', fontWeight: 'bold' }}>⚠️ Estourado ({Math.abs(diffMin)}m)</span>
+        <div className="flex flex-col gap-0.5 bg-surface border border-error/20 p-md rounded-xl shadow bg-error/5">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-error/85">{label}</span>
+          <span className="text-sm font-bold font-mono text-error">Vencido</span>
         </div>
       );
     }
 
-    const hours = Math.floor(diffMin / 60);
-    const minutes = diffMin % 60;
-    const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-
-    let activeColor = '#60a5fa';
-    if (diffMin <= 30) activeColor = '#ef4444';
-    else if (diffMin <= 120) activeColor = '#fbbf24';
+    if (diffMin <= 30) {
+      return (
+        <div className="flex flex-col gap-0.5 bg-surface border border-warning/20 p-md rounded-xl shadow bg-warning/5 animate-pulse">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-warning/85">{label}</span>
+          <span className="text-sm font-semibold font-mono text-warning">Em atenção</span>
+        </div>
+      );
+    }
 
     return (
-      <div style={{ ...styles.slaIndicatorCard, borderColor: activeColor + '33' }}>
-        <span style={styles.slaIndicatorLabel}>{label}</span>
-        <span style={{ ...styles.slaIndicatorTime, color: activeColor }}>{timeStr} restantes</span>
+      <div className="flex flex-col gap-0.5 bg-surface border border-success/20 p-md rounded-xl shadow bg-success/5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-success/85">{label}</span>
+        <span className="text-sm font-semibold font-mono text-success">Dentro do prazo</span>
       </div>
     );
   };
@@ -253,826 +253,427 @@ export default function TicketDetailPage() {
 
   if (loading) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.loadingSpinner} />
-        <p style={{ marginTop: '12px', color: '#9ca3af' }}>Carregando dados do chamado...</p>
+      <div className="flex flex-col gap-md select-none">
+        <div className="h-10 bg-surface border border-outline-variant/30 rounded-xl animate-pulse w-[40%]" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 bg-surface border border-outline-variant/30 rounded-xl animate-pulse" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-md h-[400px] mt-md">
+          <div className="md:col-span-2 bg-surface border border-outline-variant/30 rounded-xl animate-pulse" />
+          <div className="bg-surface border border-outline-variant/30 rounded-xl animate-pulse" />
+        </div>
       </div>
     );
   }
 
   if (error || !ticket) {
-    return (
-      <div style={styles.errorContainer}>
-        <h2 style={{ color: '#f87171' }}>Ocorreu um erro</h2>
-        <p style={{ margin: '12px 0', color: '#d1d5db' }}>{error || 'Não foi possível carregar o chamado técnico.'}</p>
-        <Button variant="outline" onClick={() => router.push('/dashboard/tickets')}>Voltar aos chamados</Button>
-      </div>
-    );
+    return <ErrorState onRetry={fetchTicketDetails} title="Não foi possível carregar o chamado" description={error || undefined} />;
   }
 
   const isReadOnlyUser = authUser?.role === 'READ_ONLY' || authUser?.role === 'FINANCIAL';
 
+  const tabItems = [
+    { id: 'summary', label: t.clients.tabs.summary },
+    { id: 'comments', label: t.tickets.commentsTitle },
+    { id: 'time', label: t.tickets.timeEntriesTitle },
+    { id: 'history', label: t.tickets.historyTitle },
+    { id: 'related', label: 'Dados relacionados' }
+  ];
+
   return (
-    <div style={styles.container}>
+    <div className="flex flex-col gap-lg select-none">
       {/* Top Banner Header */}
-      <header style={styles.ticketHeader}>
-        <div style={styles.headerTitleArea}>
-          <div style={styles.numBreadcrumb}>
-            <span style={styles.numberMonospace}>{ticket.number}</span>
-            <span style={styles.slashSep}>/</span>
-            <span style={styles.openedDateStr}>Aberto em {new Date(ticket.openedAt).toLocaleDateString('pt-BR')}</span>
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-md border-b border-outline-variant/30 pb-lg">
+        <div className="flex flex-col gap-xs max-w-xl">
+          <div className="flex items-center gap-xs text-[13px] text-on-surface-variant font-mono">
+            <span className="font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
+              {ticket.number}
+            </span>
+            <span>&bull;</span>
+            <span>{t.tickets.openedAt} {new Date(ticket.openedAt).toLocaleDateString('pt-BR')}</span>
           </div>
-          <h1 style={styles.ticketTitle}>{ticket.title}</h1>
+          <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight mt-1">
+            {ticket.title}
+          </h2>
         </div>
 
-        <div style={styles.headerBadges}>
-          <span style={{ ...styles.badge, ...getPriorityStyle(ticket.priority) }}>
-            Prioridade: {ticket.priority}
-          </span>
-          <span style={{ ...styles.badge, ...getStatusStyle(ticket.status) }}>
-            Status: {getStatusLabel(ticket.status)}
-          </span>
-          <Button variant="outline" onClick={() => router.push('/dashboard/tickets')}>
-            Voltar
+        <div className="flex items-center gap-sm">
+          <Badge variant={getPriorityVariant(ticket.priority)}>
+            {t.enums.ticketPriority[ticket.priority as keyof typeof t.enums.ticketPriority] || ticket.priority}
+          </Badge>
+          <Badge variant={getStatusVariant(ticket.status)}>
+            {t.enums.ticketStatus[ticket.status as keyof typeof t.enums.ticketStatus] || ticket.status}
+          </Badge>
+          <Button variant="outline" onClick={() => router.push('/dashboard/tickets')} className="py-1 px-4">
+            <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">arrow_back</span>
+            {t.common.back}
           </Button>
         </div>
       </header>
 
       {/* SLA Alert Widgets Banner */}
-      <div style={styles.slaPanelGrid}>
-        {renderSlaBadge(ticket.slaDueFirstResponseAt, ticket.firstResponseAt, 'Primeira Resposta')}
-        {renderSlaBadge(ticket.slaDueStartAt, ticket.startedAt, 'Início de Atendimento')}
-        {renderSlaBadge(ticket.slaDueResolutionAt, ticket.resolvedAt, 'Resolução de Incidente')}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
+        {renderSlaBadge(ticket.slaDueFirstResponseAt, ticket.firstResponseAt, t.tickets.firstResponse)}
+        {renderSlaBadge(ticket.slaDueStartAt, ticket.startedAt, t.tickets.startService)}
+        {renderSlaBadge(ticket.slaDueResolutionAt, ticket.resolvedAt, t.tickets.resolution)}
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="border-b border-outline-variant/30 flex gap-sm overflow-x-auto">
+        {tabItems.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as TabType)}
+            className={`py-2 px-md border-b-2 text-sm font-semibold transition-all duration-150 whitespace-nowrap ${
+              activeTab === tab.id
+                ? 'border-primary text-primary'
+                : 'border-transparent text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Main Core Columns Grid */}
-      <div style={styles.contentGrid}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg items-start">
         {/* Left Side Content Area */}
-        <div style={styles.leftCol}>
-          {/* Incidente Description Card */}
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>Descrição do Problema</h3>
-            <p style={styles.descriptionText}>{ticket.description}</p>
-          </div>
+        <div className="lg:col-span-2 flex flex-col gap-lg bg-surface border border-outline-variant p-lg rounded-xl shadow-lg min-h-[300px]">
+          
+          {/* Tab Content: Summary */}
+          {activeTab === 'summary' && (
+            <div className="flex flex-col gap-md">
+              <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
+                {t.tickets.description}
+              </h3>
+              <p className="text-sm font-body text-on-surface leading-relaxed whitespace-pre-wrap">
+                {ticket.description}
+              </p>
+            </div>
+          )}
 
-          {/* Time Tracking Entries section */}
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>Apontamentos de Tempo Técnico</h3>
-            
-            {!isReadOnlyUser && (
-              <form onSubmit={handleCreateTimeEntry} style={styles.timeForm}>
-                <div style={styles.timeInputsGrid}>
-                  <div style={styles.formGroup}>
-                    <label style={styles.smallLabel}>Início *</label>
-                    <input
-                      type="datetime-local"
-                      required
-                      value={timeStartedAt}
-                      onChange={(e) => setTimeStartedAt(e.target.value)}
-                      style={styles.inputSmall}
-                    />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.smallLabel}>Fim (Opcional)</label>
-                    <input
-                      type="datetime-local"
-                      value={timeEndedAt}
-                      onChange={(e) => setTimeEndedAt(e.target.value)}
-                      style={styles.inputSmall}
-                    />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.smallLabel}>Faturável</label>
-                    <div style={{ display: 'flex', alignItems: 'center', height: '36px' }}>
-                      <input
-                        type="checkbox"
-                        checked={timeBillable}
-                        onChange={(e) => setTimeBillable(e.target.checked)}
-                        style={styles.checkbox}
+          {/* Tab Content: Comments */}
+          {activeTab === 'comments' && (
+            <div className="flex flex-col gap-md">
+              <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
+                {t.tickets.commentsTitle}
+              </h3>
+
+              {!isReadOnlyUser && (
+                <form onSubmit={handlePostComment} className="flex flex-col gap-sm bg-surface-container-low border border-outline-variant p-md rounded-xl">
+                  <textarea
+                    rows={3}
+                    required
+                    placeholder={t.tickets.commentPlaceholder}
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    className="w-full bg-surface border border-outline-variant text-on-surface text-sm rounded-lg p-sm outline-none resize-none font-body transition-colors focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                  />
+                  
+                  <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-sm">
+                    <div className="flex gap-xs items-center">
+                      <span className="text-[12px] font-semibold text-on-surface-variant">Visibilidade:</span>
+                      <Select
+                        value={commentVisibility}
+                        onChange={(e) => setCommentVisibility(e.target.value as any)}
+                        options={[
+                          { value: 'INTERNAL', label: t.tickets.commentInternal },
+                          { value: 'CLIENT_VISIBLE_FUTURE', label: t.tickets.commentPublic }
+                        ]}
+                        className="py-1 text-xs"
                       />
                     </div>
-                  </div>
-                </div>
-                <div style={styles.timeDescRow}>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Descrição da atividade técnica realizada..."
-                    value={timeDescription}
-                    onChange={(e) => setTimeDescription(e.target.value)}
-                    style={{ ...styles.input, flexGrow: 1 }}
-                  />
-                  <Button type="submit" variant="secondary" disabled={timeLoading}>
-                    {timeLoading ? 'Registrando...' : 'Lançar'}
-                  </Button>
-                </div>
-                {timeError && <p style={styles.timeErrorMsg}>{timeError}</p>}
-              </form>
-            )}
 
-            {/* List logged entries */}
-            <div style={styles.timeList}>
-              {(!ticket.timeEntries || ticket.timeEntries.length === 0) ? (
-                <p style={styles.emptyCardText}>Nenhum tempo lançado para este chamado.</p>
-              ) : (
-                ticket.timeEntries.map((entry: any) => (
-                  <div key={entry.id} style={styles.timeEntryRow}>
-                    <div style={styles.timeEntryHeader}>
-                      <span style={styles.timeUser}>{entry.user?.name}</span>
-                      <span style={styles.timeSpan}>
-                        {new Date(entry.startedAt).toLocaleString('pt-BR')} {entry.endedAt ? `até ${new Date(entry.endedAt).toLocaleTimeString('pt-BR')}` : ''}
-                      </span>
-                    </div>
-                    <p style={styles.timeDesc}>{entry.description}</p>
-                    <div style={styles.timeMeta}>
-                      <span style={styles.timeMinutes}>{entry.durationMinutes || 0} minutos</span>
-                      {entry.billable && <span style={styles.billableBadge}>Faturável</span>}
-                    </div>
+                    <Button type="submit" variant="primary" disabled={commentLoading} className="py-1.5 px-4 text-xs justify-center">
+                      {commentLoading ? 'Enviando...' : t.tickets.commentBtn}
+                    </Button>
                   </div>
-                ))
+                  {commentError && <p className="text-xs text-error font-semibold">{commentError}</p>}
+                </form>
               )}
-            </div>
-          </div>
 
-          {/* Internal / External chat comments thread */}
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>Comunicação & Comentários</h3>
-
-            {!isReadOnlyUser && (
-              <form onSubmit={handlePostComment} style={styles.commentForm}>
-                <textarea
-                  rows={3}
-                  required
-                  placeholder="Escreva um comentário ou atualização técnica..."
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  style={styles.textarea}
-                />
-                
-                <div style={styles.commentActionsRow}>
-                  <div style={styles.visibilityToggle}>
-                    <label style={styles.switchLabel}>Visibilidade:</label>
-                    <select
-                      value={commentVisibility}
-                      onChange={(e) => setCommentVisibility(e.target.value as any)}
-                      style={styles.selectSmall}
+              <div className="flex flex-col gap-sm mt-2">
+                {(!ticket.comments || ticket.comments.length === 0) ? (
+                  <p className="text-sm font-medium text-on-surface-variant/50 text-center py-6">{t.tickets.commentsEmpty}</p>
+                ) : (
+                  ticket.comments.map((c: any) => (
+                    <div
+                      key={c.id}
+                      className={`p-md border rounded-xl flex flex-col gap-xs ${
+                        c.isInternal
+                          ? 'bg-warning/5 border-warning/10'
+                          : 'bg-surface-container-low border-outline-variant/40'
+                      }`}
                     >
-                      <option value="INTERNAL">🔒 Nota Técnica Interna</option>
-                      <option value="CLIENT_VISIBLE_FUTURE">🌐 Visível para o Cliente</option>
-                    </select>
+                      <div className="flex justify-between items-center text-xs">
+                        <div className="flex gap-xs items-center font-mono">
+                          <span className="font-semibold text-on-surface">{c.user?.name || 'Sistema'}</span>
+                          <span className="text-[10px] bg-outline-variant border border-outline-variant/30 text-on-surface-variant px-1.5 py-0.5 rounded font-sans uppercase">
+                            {c.user?.role || 'SYSTEM'}
+                          </span>
+                          {c.isInternal && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-warning/10 border border-warning/20 text-[10px] font-semibold text-warning font-sans">
+                              Nota Interna
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-on-surface-variant font-mono">
+                          {new Date(c.createdAt).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                      <p className="text-sm font-body text-on-surface mt-1 leading-relaxed whitespace-pre-wrap">{c.content}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tab Content: Time Tracking */}
+          {activeTab === 'time' && (
+            <div className="flex flex-col gap-md">
+              <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
+                {t.tickets.timeEntriesTitle}
+              </h3>
+              
+              {!isReadOnlyUser && (
+                <form onSubmit={handleCreateTimeEntry} className="flex flex-col gap-sm bg-surface-container-low border border-outline-variant p-md rounded-xl">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-sm">
+                    <div className="flex flex-col gap-xs">
+                      <label className="text-[11px] font-semibold text-on-surface-variant">{t.tickets.timeStart} *</label>
+                      <input
+                        type="datetime-local"
+                        required
+                        value={timeStartedAt}
+                        onChange={(e) => setTimeStartedAt(e.target.value)}
+                        className="bg-surface border border-outline-variant text-on-surface text-xs rounded-lg p-sm outline-none w-full"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-xs">
+                      <label className="text-[11px] font-semibold text-on-surface-variant">{t.tickets.timeEnd}</label>
+                      <input
+                        type="datetime-local"
+                        value={timeEndedAt}
+                        onChange={(e) => setTimeEndedAt(e.target.value)}
+                        className="bg-surface border border-outline-variant text-on-surface text-xs rounded-lg p-sm outline-none w-full"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-xs">
+                      <label className="text-[11px] font-semibold text-on-surface-variant">{t.tickets.timeBillable}</label>
+                      <div className="flex items-center h-[34px] px-1">
+                        <input
+                          type="checkbox"
+                          checked={timeBillable}
+                          onChange={(e) => setTimeBillable(e.target.checked)}
+                          className="w-4 h-4 cursor-pointer accent-primary bg-surface border-outline"
+                        />
+                        <span className="text-xs text-on-surface font-medium ml-2">{t.tickets.timeBillableBadge}</span>
+                      </div>
+                    </div>
                   </div>
+                  
+                  <div className="flex gap-sm items-center mt-1">
+                    <Input
+                      type="text"
+                      required
+                      placeholder={t.tickets.timeDescription}
+                      value={timeDescription}
+                      onChange={(e) => setTimeDescription(e.target.value)}
+                      className="flex-1 text-xs py-1.5"
+                    />
+                    <Button type="submit" variant="secondary" disabled={timeLoading} className="py-1.5 px-4 text-xs justify-center">
+                      {timeLoading ? 'Enviando...' : t.tickets.timeBtn}
+                    </Button>
+                  </div>
+                  {timeError && <p className="text-xs text-error font-semibold">{timeError}</p>}
+                </form>
+              )}
 
-                  <Button type="submit" variant="primary" disabled={commentLoading}>
-                    {commentLoading ? 'Enviando...' : 'Comentar'}
-                  </Button>
-                </div>
-                {commentError && <p style={styles.commentErrorMsg}>{commentError}</p>}
-              </form>
-            )}
-
-            <div style={styles.commentsThread}>
-              {(!ticket.comments || ticket.comments.length === 0) ? (
-                <p style={styles.emptyCardText}>Nenhum comentário registrado.</p>
-              ) : (
-                ticket.comments.map((c: any) => (
-                  <div
-                    key={c.id}
-                    style={{
-                      ...styles.commentBox,
-                      backgroundColor: c.isInternal ? 'rgba(245, 158, 11, 0.05)' : 'rgba(255, 255, 255, 0.02)',
-                      borderColor: c.isInternal ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.06)',
-                    }}
-                  >
-                    <div style={styles.commentHeader}>
-                      <div style={styles.commentAuthorArea}>
-                        <span style={styles.commentAuthor}>{c.user?.name || 'Sistema'}</span>
-                        <span style={styles.commentRoleBadge}>{c.user?.role || 'SYSTEM'}</span>
-                        {c.isInternal && (
-                          <span style={styles.internalBadge}>🔒 Nota Interna</span>
+              <div className="flex flex-col gap-sm mt-2">
+                {(!ticket.timeEntries || ticket.timeEntries.length === 0) ? (
+                  <p className="text-sm font-medium text-on-surface-variant/50 text-center py-6">{t.tickets.timeEmpty}</p>
+                ) : (
+                  ticket.timeEntries.map((entry: any) => (
+                    <div key={entry.id} className="p-md bg-surface-container-low border border-outline-variant/40 rounded-xl flex flex-col gap-xs">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-semibold text-on-surface font-mono">{entry.user?.name}</span>
+                        <span className="text-on-surface-variant font-mono">
+                          {new Date(entry.startedAt).toLocaleString('pt-BR')} {entry.endedAt ? `até ${new Date(entry.endedAt).toLocaleTimeString('pt-BR')}` : ''}
+                        </span>
+                      </div>
+                      <p className="text-sm text-on-surface leading-relaxed mt-1 font-body">{entry.description}</p>
+                      <div className="flex justify-between items-center mt-1 text-xs">
+                        <span className="font-mono text-primary font-bold">{entry.durationMinutes || 0} {t.tickets.timeMinutes}</span>
+                        {entry.billable && (
+                          <Badge variant="info" className="text-[10px] py-0 px-2 uppercase">
+                            {t.tickets.timeBillableBadge}
+                          </Badge>
                         )}
                       </div>
-                      <span style={styles.commentDate}>
-                        {new Date(c.createdAt).toLocaleString('pt-BR')}
-                      </span>
                     </div>
-                    <p style={styles.commentTextContent}>{c.content}</p>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Ticket history audit change logs */}
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>Histórico de Alterações</h3>
-            <div style={styles.historyTimeline}>
-              {(!ticket.history || ticket.history.length === 0) ? (
-                <p style={styles.emptyCardText}>Nenhum histórico registrado.</p>
-              ) : (
-                ticket.history.map((h: any) => (
-                  <div key={h.id} style={styles.historyItem}>
-                    <div style={styles.historyDot} />
-                    <div style={styles.historyContent}>
-                      <div style={styles.historyHeader}>
-                        <span style={styles.historyEvent}>{h.event}</span>
-                        <span style={styles.historyTime}>{new Date(h.createdAt).toLocaleString('pt-BR')}</span>
+          {/* Tab Content: History */}
+          {activeTab === 'history' && (
+            <div className="flex flex-col gap-md">
+              <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
+                {t.tickets.historyTitle}
+              </h3>
+              
+              <div className="relative pl-6 border-l border-outline-variant/50 flex flex-col gap-md py-2">
+                {(!ticket.history || ticket.history.length === 0) ? (
+                  <p className="text-sm font-medium text-on-surface-variant/50 text-left pl-2">{t.inventory.details.noHistory}</p>
+                ) : (
+                  ticket.history.map((h: any) => (
+                    <div key={h.id} className="relative flex flex-col gap-0.5">
+                      <div className="absolute -left-[30px] top-1.5 w-2 h-2 rounded-full bg-primary border-4 border-background" />
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-mono font-bold text-primary">{h.event}</span>
+                        <span className="text-on-surface-variant font-mono">{new Date(h.createdAt).toLocaleString('pt-BR')}</span>
                       </div>
-                      <p style={styles.historyDesc}>{h.description}</p>
-                      <span style={styles.historyActor}>Por: {h.actorUser?.name || 'Sistema'}</span>
+                      <p className="text-sm font-body text-on-surface mt-0.5">{h.description}</p>
+                      <span className="text-[11px] text-on-surface-variant/70 font-mono mt-0.5">Por: {h.actorUser?.name || 'Sistema'}</span>
                     </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Tab Content: Related Data */}
+          {activeTab === 'related' && (
+            <div className="flex flex-col gap-md">
+              <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
+                Dados relacionados
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-md text-sm">
+                <div className="flex flex-col gap-xs bg-surface-container-low border border-outline-variant p-md rounded-xl">
+                  <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider font-sans">Categoria</span>
+                  <span className="text-on-surface font-semibold mt-0.5">{ticket.category || '--'}</span>
+                </div>
+                
+                <div className="flex flex-col gap-xs bg-surface-container-low border border-outline-variant p-md rounded-xl">
+                  <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider font-sans">Canal de Entrada</span>
+                  <span className="text-on-surface font-semibold mt-0.5">
+                    {ticket.channel === 'EMAIL' ? 'E-mail' : ticket.channel === 'WHATSAPP' ? 'WhatsApp' : ticket.channel === 'PHONE' ? 'Telefone' : ticket.channel === 'PORTAL' ? 'Portal do Cliente' : ticket.channel === 'MANUAL' ? 'Manual' : ticket.channel || '--'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
 
         {/* Right Side Sidebar Actions & Meta Info */}
-        <div style={styles.rightCol}>
+        <div className="flex flex-col gap-lg">
+          
           {/* Metadata Card Info */}
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>Informações de Associação</h3>
+          <div className="flex flex-col gap-md bg-surface border border-outline-variant p-lg rounded-xl shadow-lg">
+            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
+              {t.tickets.associationTitle}
+            </h3>
             
-            <div style={styles.metaRow}>
-              <span style={styles.metaLabel}>Cliente:</span>
-              <span style={styles.metaValue}>{ticket.client?.tradeName || ticket.client?.legalName || '-'}</span>
-            </div>
+            <div className="flex flex-col gap-sm divide-y divide-outline-variant/30 text-sm">
+              <div className="flex justify-between items-center py-2">
+                <span className="font-semibold text-on-surface-variant">{t.tickets.clientLabel}</span>
+                <span className="text-on-surface text-right font-medium">{ticket.client?.tradeName || ticket.client?.legalName || '--'}</span>
+              </div>
 
-            <div style={styles.metaRow}>
-              <span style={styles.metaLabel}>Contato:</span>
-              <span style={styles.metaValue}>
-                {ticket.contact ? `${ticket.contact.name} (${ticket.contact.email})` : '-'}
-              </span>
-            </div>
+              <div className="flex justify-between items-center py-2">
+                <span className="font-semibold text-on-surface-variant">{t.tickets.contactLabel}</span>
+                <span className="text-on-surface text-right truncate max-w-[180px] font-medium" title={ticket.contact?.email}>
+                  {ticket.contact ? `${ticket.contact.name}` : '--'}
+                </span>
+              </div>
 
-            <div style={styles.metaRow}>
-              <span style={styles.metaLabel}>Usuário Afetado:</span>
-              <span style={styles.metaValue}>
-                {ticket.clientUser ? `${ticket.clientUser.fullName} (${ticket.clientUser.email})` : '-'}
-              </span>
-            </div>
+              <div className="flex justify-between items-center py-2">
+                <span className="font-semibold text-on-surface-variant">{t.tickets.clientUserLabel}</span>
+                <span className="text-on-surface text-right truncate max-w-[180px] font-medium" title={ticket.clientUser?.email}>
+                  {ticket.clientUser ? `${ticket.clientUser.fullName}` : '--'}
+                </span>
+              </div>
 
-            <div style={styles.metaRow}>
-              <span style={styles.metaLabel}>Ativo Vinculado:</span>
-              {ticket.asset ? (
-                <button
-                  onClick={() => router.push(`/dashboard/clients/${ticket.clientId}/assets/${ticket.asset.id}`)}
-                  style={styles.assetLinkBtn}
-                >
-                  🔗 {ticket.asset.name} ({ticket.asset.type})
-                </button>
-              ) : (
-                <span style={styles.metaValue}>Nenhum ativo vinculado</span>
-              )}
+              <div className="flex justify-between items-center py-2">
+                <span className="font-semibold text-on-surface-variant">{t.tickets.assetLabel}</span>
+                {ticket.asset ? (
+                  <button
+                    onClick={() => router.push(`/dashboard/clients/${ticket.clientId}/assets/${ticket.asset.id}`)}
+                    className="text-primary hover:underline text-right font-mono font-bold text-xs"
+                  >
+                    🔗 {ticket.asset.name}
+                  </button>
+                ) : (
+                  <span className="text-on-surface-variant/40 text-right italic font-medium">{t.tickets.assetNone}</span>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Quick Actions Control panel */}
           {!isReadOnlyUser && (
-            <div style={styles.card}>
-              <h3 style={styles.cardTitle}>Ações de Atendimento</h3>
+            <div className="flex flex-col gap-md bg-surface border border-outline-variant p-lg rounded-xl shadow-lg">
+              <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
+                {t.tickets.actionsTitle}
+              </h3>
 
               {/* Assignment Controls */}
-              <div style={styles.actionBlock}>
-                <label style={styles.actionLabel}>Reatribuir Técnico</label>
-                <select
+              <div className="flex flex-col gap-xs">
+                <label className="text-[12px] font-semibold text-on-surface-variant">{t.tickets.assignedTech}</label>
+                <Select
                   value={ticket.assignedToId || ''}
                   onChange={(e) => handleAssignTech(e.target.value)}
-                  style={styles.select}
-                >
-                  <option value="">Não atribuído</option>
-                  {technicians.map((tech) => (
-                    <option key={tech.id} value={tech.id}>{tech.name}</option>
-                  ))}
-                </select>
+                  options={[
+                    { value: '', label: 'Não atribuído' },
+                    ...technicians.map((tech) => ({ value: tech.id, label: tech.name }))
+                  ]}
+                  className="w-full text-xs py-1"
+                />
               </div>
 
               {/* Status Controls */}
-              <div style={styles.actionBlock}>
-                <label style={styles.actionLabel}>Alterar Status</label>
-                <div style={styles.statusTransitionsPanel}>
-                  {/* Current Status display */}
-                  <div style={styles.currentStatusWrapper}>
-                    <span style={styles.statusLabelSmall}>Status Atual:</span>
-                    <span style={{ ...styles.badge, ...getStatusStyle(ticket.status), marginTop: '4px' }}>
-                      {getStatusLabel(ticket.status)}
-                    </span>
+              <div className="flex flex-col gap-xs mt-2 border-t border-outline-variant/30 pt-md">
+                <label className="text-[12px] font-semibold text-on-surface-variant">{t.tickets.statusTransitions}</label>
+                
+                <div className="flex flex-col gap-sm">
+                  <div className="flex flex-col bg-surface-container-low border border-outline-variant/50 p-2 rounded-lg items-center">
+                    <span className="text-[10px] text-on-surface-variant uppercase font-semibold">{t.tickets.currentStatus}</span>
+                    <Badge variant={getStatusVariant(ticket.status)} className="mt-1 uppercase text-[10px]">
+                      {t.enums.ticketStatus[ticket.status as keyof typeof t.enums.ticketStatus] || ticket.status}
+                    </Badge>
                   </div>
 
                   {/* Transition actions */}
-                  <div style={styles.actionButtonsCol}>
+                  <div className="flex flex-col gap-xs mt-1">
                     {getValidStatusTransitions(ticket.status).map((tStatus) => (
-                      <button
+                      <Button
                         key={tStatus}
+                        variant="outline"
                         onClick={() => handleStatusChange(tStatus)}
-                        style={styles.transitionBtn}
+                        className="py-1 px-3 text-[11px] justify-center text-on-surface font-semibold hover:border-primary/50"
                       >
-                        Mudar para: {getStatusLabel(tStatus)}
-                      </button>
+                        {t.tickets.transitionTo.replace('{status}', t.enums.ticketStatus[tStatus as keyof typeof t.enums.ticketStatus] || tStatus)}
+                      </Button>
                     ))}
                     {getValidStatusTransitions(ticket.status).length === 0 && (
-                      <p style={styles.transitionTerminalText}>Sem transições permitidas para chamados encerrados.</p>
+                      <p className="text-[11px] text-on-surface-variant/40 italic text-center py-2">
+                        {t.tickets.noTransitions}
+                      </p>
                     )}
                   </div>
                 </div>
               </div>
             </div>
           )}
+
         </div>
       </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  ticketHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingBottom: '20px',
-  },
-  headerTitleArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  numBreadcrumb: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '13px',
-  },
-  numberMonospace: {
-    fontFamily: 'monospace',
-    fontWeight: 'bold',
-    color: '#3b82f6',
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    padding: '2px 8px',
-    borderRadius: '4px',
-  },
-  slashSep: {
-    color: '#4b5563',
-  },
-  openedDateStr: {
-    color: '#9ca3af',
-  },
-  ticketTitle: {
-    fontSize: '24px',
-    fontWeight: 800,
-    color: '#f9fafb',
-  },
-  headerBadges: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  badge: {
-    padding: '6px 12px',
-    borderRadius: '6px',
-    fontSize: '12px',
-    fontWeight: 600,
-    border: '1px solid',
-    display: 'inline-block',
-  },
-  slaPanelGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: '16px',
-  },
-  slaIndicatorCard: {
-    backgroundColor: 'rgba(17, 24, 39, 0.5)',
-    border: '1px solid rgba(255, 255, 255, 0.06)',
-    borderRadius: '10px',
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  slaIndicatorLabel: {
-    fontSize: '12px',
-    color: '#9ca3af',
-    fontWeight: 500,
-  },
-  slaIndicatorTime: {
-    fontSize: '15px',
-    fontFamily: 'monospace',
-    fontWeight: 600,
-    color: '#fff',
-  },
-  contentGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 320px',
-    gap: '24px',
-    alignItems: 'start',
-  },
-  leftCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  rightCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  card: {
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  cardTitle: {
-    fontSize: '16px',
-    fontWeight: 600,
-    color: '#3b82f6',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-    paddingBottom: '8px',
-  },
-  descriptionText: {
-    fontSize: '15px',
-    lineHeight: 1.6,
-    color: '#e5e7eb',
-    whiteSpace: 'pre-wrap',
-  },
-  metaRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    fontSize: '14px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
-    paddingBottom: '8px',
-  },
-  metaLabel: {
-    color: '#9ca3af',
-    fontWeight: 500,
-  },
-  metaValue: {
-    color: '#f3f4f6',
-    textAlign: 'right',
-  },
-  assetLinkBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#60a5fa',
-    cursor: 'pointer',
-    fontSize: '14px',
-    padding: 0,
-    textDecoration: 'underline',
-    fontWeight: 500,
-    textAlign: 'right',
-  },
-  actionBlock: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  actionLabel: {
-    fontSize: '13px',
-    color: '#9ca3af',
-    fontWeight: 500,
-  },
-  select: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '8px 12px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  selectSmall: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '6px',
-    padding: '6px 10px',
-    fontSize: '12px',
-    color: '#f9fafb',
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '8px 12px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-  },
-  inputSmall: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '6px',
-    padding: '6px 10px',
-    fontSize: '12px',
-    color: '#f9fafb',
-    outline: 'none',
-  },
-  textarea: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '12px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    resize: 'vertical',
-  },
-  checkbox: {
-    width: '16px',
-    height: '16px',
-    cursor: 'pointer',
-  },
-  statusTransitionsPanel: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
-    borderRadius: '8px',
-    padding: '12px',
-  },
-  currentStatusWrapper: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-  },
-  statusLabelSmall: {
-    fontSize: '11px',
-    color: '#9ca3af',
-  },
-  actionButtonsCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    marginTop: '6px',
-  },
-  transitionBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.06)',
-    borderRadius: '6px',
-    padding: '8px 12px',
-    fontSize: '12px',
-    color: '#e5e7eb',
-    textAlign: 'left',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    outline: 'none',
-  },
-  transitionTerminalText: {
-    fontSize: '11px',
-    color: '#9ca3af',
-    fontStyle: 'italic',
-    textAlign: 'center',
-  },
-  commentForm: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    backgroundColor: 'rgba(255, 255, 255, 0.01)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
-    padding: '16px',
-    borderRadius: '8px',
-  },
-  commentActionsRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  visibilityToggle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  switchLabel: {
-    fontSize: '12px',
-    color: '#9ca3af',
-  },
-  commentErrorMsg: {
-    fontSize: '12px',
-    color: '#f87171',
-    marginTop: '4px',
-  },
-  commentsThread: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    marginTop: '8px',
-  },
-  commentBox: {
-    border: '1px solid',
-    borderRadius: '8px',
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  commentHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    fontSize: '12px',
-  },
-  commentAuthorArea: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  commentAuthor: {
-    fontWeight: 600,
-    color: '#f3f4f6',
-  },
-  commentRoleBadge: {
-    fontSize: '10px',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    color: '#9ca3af',
-    padding: '1px 6px',
-    borderRadius: '4px',
-  },
-  internalBadge: {
-    fontSize: '10px',
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    color: '#fbbf24',
-    padding: '1px 6px',
-    borderRadius: '4px',
-    fontWeight: 500,
-  },
-  commentDate: {
-    color: '#6b7280',
-  },
-  commentTextContent: {
-    fontSize: '14px',
-    color: '#e5e7eb',
-    lineHeight: 1.5,
-    whiteSpace: 'pre-wrap',
-  },
-  emptyCardText: {
-    color: '#9ca3af',
-    fontSize: '13px',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    padding: '12px 0',
-  },
-  timeForm: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    backgroundColor: 'rgba(255, 255, 255, 0.01)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
-    padding: '16px',
-    borderRadius: '8px',
-  },
-  timeInputsGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr 80px',
-    gap: '12px',
-  },
-  smallLabel: {
-    fontSize: '11px',
-    color: '#9ca3af',
-    fontWeight: 500,
-  },
-  timeDescRow: {
-    display: 'flex',
-    gap: '12px',
-  },
-  timeErrorMsg: {
-    fontSize: '12px',
-    color: '#f87171',
-  },
-  timeList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    marginTop: '8px',
-  },
-  timeEntryRow: {
-    backgroundColor: 'rgba(255, 255, 255, 0.01)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
-    borderRadius: '8px',
-    padding: '12px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  timeEntryHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    fontSize: '12px',
-  },
-  timeUser: {
-    fontWeight: 600,
-    color: '#e5e7eb',
-  },
-  timeSpan: {
-    color: '#9ca3af',
-  },
-  timeDesc: {
-    fontSize: '13px',
-    color: '#d1d5db',
-  },
-  timeMeta: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    fontSize: '11px',
-    marginTop: '2px',
-  },
-  timeMinutes: {
-    color: '#60a5fa',
-    fontWeight: 'bold',
-  },
-  billableBadge: {
-    color: '#34d399',
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    padding: '2px 6px',
-    borderRadius: '4px',
-    fontWeight: 'bold',
-  },
-  historyTimeline: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-    position: 'relative',
-    paddingLeft: '16px',
-    borderLeft: '1px solid rgba(255, 255, 255, 0.06)',
-    margin: '8px 4px',
-  },
-  historyItem: {
-    position: 'relative',
-  },
-  historyDot: {
-    width: '9px',
-    height: '9px',
-    borderRadius: '50%',
-    backgroundColor: '#3b82f6',
-    position: 'absolute',
-    left: '-21px',
-    top: '4px',
-    border: '2px solid #0b0f19',
-  },
-  historyContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  historyHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    fontSize: '11px',
-  },
-  historyEvent: {
-    fontWeight: 'bold',
-    color: '#60a5fa',
-  },
-  historyTime: {
-    color: '#6b7280',
-  },
-  historyDesc: {
-    fontSize: '13px',
-    color: '#e5e7eb',
-  },
-  historyActor: {
-    fontSize: '11px',
-    color: '#9ca3af',
-  },
-  loadingSpinner: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    border: '3px solid rgba(59, 130, 246, 0.1)',
-    borderTopColor: '#3b82f6',
-    animation: 'spin 1s linear infinite',
-  },
-  loadingContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: '200px',
-  },
-  errorContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: '200px',
-    padding: '24px',
-    backgroundColor: 'rgba(239, 68, 68, 0.05)',
-    borderRadius: '12px',
-    border: '1px solid rgba(239, 68, 68, 0.15)',
-  },
-};

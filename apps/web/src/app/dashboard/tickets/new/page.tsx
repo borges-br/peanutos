@@ -2,12 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
-import { Button } from '@peanut/ui';
 import { useRouter } from 'next/navigation';
 import { ticketCreateSchema } from '@peanut/validators';
+import { useI18n } from '../../../../i18n/useI18n';
+import Button from '../../../../components/ui/Button';
+import Input from '../../../../components/ui/Input';
+import Select from '../../../../components/ui/Select';
 
 export default function NewTicketPage() {
   const router = useRouter();
+  const { t } = useI18n();
+  
   const [clients, setClients] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   
@@ -140,309 +145,209 @@ export default function NewTicketPage() {
     }
   };
 
+  const priorityOptions = [
+    { value: 'LOW', label: t.enums.ticketPriority.LOW },
+    { value: 'MEDIUM', label: t.enums.ticketPriority.MEDIUM },
+    { value: 'HIGH', label: t.enums.ticketPriority.HIGH },
+    { value: 'URGENT', label: t.enums.ticketPriority.URGENT },
+    { value: 'CRITICAL', label: t.enums.ticketPriority.CRITICAL }
+  ];
+
+  const channelOptions = [
+    { value: 'EMAIL', label: 'E-mail' },
+    { value: 'WHATSAPP', label: 'WhatsApp' },
+    { value: 'PHONE', label: 'Telefone' },
+    { value: 'PORTAL', label: 'Portal do Cliente' },
+    { value: 'MANUAL', label: 'Abertura Manual' },
+    { value: 'OTHER', label: 'Outros' }
+  ];
+
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <div style={styles.headerTitleArea}>
-          <h1 style={styles.title}>Novo Chamado Técnico</h1>
-          <p style={styles.subtitle}>Registre um novo incidente ou requisição de suporte.</p>
+    <div className="flex flex-col gap-lg max-w-4xl mx-auto select-none">
+      {/* Page Header */}
+      <header className="flex justify-between items-center w-full">
+        <div className="flex flex-col gap-xs">
+          <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
+            {t.tickets.newTicket}
+          </h2>
+          <p className="text-[14px] text-on-surface-variant">
+            {t.tickets.newTicketSubtitle}
+          </p>
         </div>
         <Button variant="outline" onClick={() => router.push('/dashboard/tickets')}>
-          Voltar
+          <span className="material-symbols-outlined text-[16px] mr-1.5">arrow_back</span>
+          {t.common.back}
         </Button>
       </header>
 
-      {error && <div style={styles.errorAlert}>{error}</div>}
+      {error && (
+        <div className="bg-error-container/10 border border-error-container/20 text-error p-md rounded-xl text-xs font-semibold">
+          {error}
+        </div>
+      )}
 
-      <form onSubmit={handleSubmit} style={styles.formCard}>
-        <div style={styles.formSection}>
-          <h3 style={styles.sectionTitle}>1. Informações do Cliente</h3>
+      {/* Creation form */}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-lg bg-surface border border-outline-variant p-lg rounded-xl shadow-lg">
+        {/* Section 1: Client Info */}
+        <div className="flex flex-col gap-md">
+          <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
+            1. {t.contracts.clientIdentification}
+          </h3>
           
-          <div style={styles.formGrid}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Cliente *</label>
-              <select
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+            <div className="flex flex-col gap-xs">
+              <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.clientLabel} *</label>
+              <Select
                 required
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
-                style={styles.select}
-              >
-                <option value="">Selecione o cliente...</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.tradeName || c.legalName}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Ponto de Contato</label>
-              <select
-                disabled={fetchingCascades || !clientId}
-                value={contactId}
-                onChange={(e) => setContactId(e.target.value)}
-                style={styles.select}
-              >
-                <option value="">Selecione o contato...</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.email})</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Usuário Final Afetado</label>
-              <select
-                disabled={fetchingCascades || !clientId}
-                value={clientUserId}
-                onChange={(e) => setClientUserId(e.target.value)}
-                style={styles.select}
-              >
-                <option value="">Selecione o usuário final...</option>
-                {clientUsers.map((u) => (
-                  <option key={u.id} value={u.id}>{u.fullName} ({u.department || 'Sem setor'})</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Ativo Técnico Relacionado</label>
-              <select
-                disabled={fetchingCascades || !clientId}
-                value={assetId}
-                onChange={(e) => setAssetId(e.target.value)}
-                style={styles.select}
-              >
-                <option value="">Nenhum ativo (Sem ativo vinculado)</option>
-                {assets.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name} ({a.type} - S/N: {a.serialNumber || 'N/A'})</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div style={styles.divider} />
-
-        <div style={styles.formSection}>
-          <h3 style={styles.sectionTitle}>2. Detalhes do Chamado</h3>
-          
-          <div style={styles.formGroupFull}>
-            <label style={styles.label}>Título do Chamado *</label>
-            <input
-              type="text"
-              required
-              placeholder="Ex: Notebook não conecta no Wi-Fi corporativo"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              style={styles.input}
-            />
-          </div>
-
-          <div style={styles.formGroupFull}>
-            <label style={styles.label}>Descrição Detalhada do Problema *</label>
-            <textarea
-              required
-              rows={6}
-              placeholder="Descreva detalhadamente o incidente, sintomas observados, etapas para reproduzir e mensagens de erro..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              style={styles.textarea}
-            />
-          </div>
-
-          <div style={styles.formGrid}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Prioridade (SLA) *</label>
-              <select
-                required
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                style={styles.select}
-              >
-                <option value="LOW">Baixa</option>
-                <option value="MEDIUM">Média</option>
-                <option value="HIGH">Alta</option>
-                <option value="URGENT">Urgente</option>
-                <option value="CRITICAL">Crítica</option>
-              </select>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Canal de Entrada *</label>
-              <select
-                required
-                value={channel}
-                onChange={(e) => setChannel(e.target.value)}
-                style={styles.select}
-              >
-                <option value="EMAIL">E-mail</option>
-                <option value="WHATSAPP">WhatsApp</option>
-                <option value="PHONE">Telefone</option>
-                <option value="PORTAL">Portal do Cliente</option>
-                <option value="MANUAL">Abertura Manual</option>
-                <option value="OTHER">Outros</option>
-              </select>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Categoria</label>
-              <input
-                type="text"
-                placeholder="Ex: Hardware, Software, Rede"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                style={styles.input}
+                options={[
+                  { value: '', label: 'Selecione o cliente...' },
+                  ...clients.map(c => ({ value: c.id, label: c.tradeName || c.legalName }))
+                ]}
               />
             </div>
 
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Técnico Responsável</label>
-              <select
-                value={assignedToId}
-                onChange={(e) => setAssignedToId(e.target.value)}
-                style={styles.select}
-              >
-                <option value="">Não atribuído (Aguardando triagem)</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
+            <div className="flex flex-col gap-xs">
+              <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.contactLabel}</label>
+              <Select
+                disabled={fetchingCascades || !clientId}
+                value={contactId}
+                onChange={(e) => setContactId(e.target.value)}
+                options={[
+                  { value: '', label: 'Selecione o contato...' },
+                  ...contacts.map(c => ({ value: c.id, label: `${c.name} (${c.email})` }))
+                ]}
+              />
+            </div>
+
+            <div className="flex flex-col gap-xs">
+              <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.clientUserLabel}</label>
+              <Select
+                disabled={fetchingCascades || !clientId}
+                value={clientUserId}
+                onChange={(e) => setClientUserId(e.target.value)}
+                options={[
+                  { value: '', label: 'Selecione o usuário final...' },
+                  ...clientUsers.map(u => ({ value: u.id, label: `${u.fullName} (${u.department || 'Sem setor'})` }))
+                ]}
+              />
+            </div>
+
+            <div className="flex flex-col gap-xs">
+              <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.assetLabel}</label>
+              <Select
+                disabled={fetchingCascades || !clientId}
+                value={assetId}
+                onChange={(e) => setAssetId(e.target.value)}
+                options={[
+                  { value: '', label: 'Nenhum ativo (Sem ativo vinculado)' },
+                  ...assets.map(a => ({ value: a.id, label: `${a.name} (${t.enums.assetType[a.type as keyof typeof t.enums.assetType] || a.type} - S/N: ${a.serialNumber || 'N/A'})` }))
+                ]}
+              />
             </div>
           </div>
         </div>
 
-        <div style={styles.formActions}>
+        {/* Section 2: Ticket Details */}
+        <div className="flex flex-col gap-md">
+          <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
+            2. {t.tickets.description}
+          </h3>
+
+          <div className="flex flex-col gap-xs">
+            <label className="text-[13px] font-semibold text-on-surface-variant">Título do Chamado *</label>
+            <Input
+              type="text"
+              required
+              placeholder={t.tickets.titlePlaceholder}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-xs">
+            <label className="text-[13px] font-semibold text-on-surface-variant">Descrição Detalhada do Problema *</label>
+            <textarea
+              required
+              rows={6}
+              placeholder={t.tickets.descriptionPlaceholder}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="bg-surface-container-low border border-outline-variant focus:border-primary/50 text-on-surface rounded-xl p-md text-sm outline-none resize-none font-body transition-colors focus:ring-1 focus:ring-primary/20"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
+            <div className="flex flex-col gap-xs">
+              <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.priority} (SLA) *</label>
+              <Select
+                required
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+                options={priorityOptions}
+              />
+            </div>
+
+            <div className="flex flex-col gap-xs">
+              <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.channelLabel}</label>
+              <Select
+                required
+                value={channel}
+                onChange={(e) => setChannel(e.target.value)}
+                options={channelOptions}
+              />
+            </div>
+
+            <div className="flex flex-col gap-xs">
+              <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.categoryLabel}</label>
+              <Input
+                type="text"
+                placeholder={t.tickets.categoryPlaceholder}
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 3: Responsibility */}
+        <div className="flex flex-col gap-md">
+          <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
+            3. {t.tickets.techLabel}
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+            <div className="flex flex-col gap-xs">
+              <label className="text-[13px] font-semibold text-on-surface-variant">Atribuído a</label>
+              <Select
+                value={assignedToId}
+                onChange={(e) => setAssignedToId(e.target.value)}
+                options={[
+                  { value: '', label: 'Não atribuído (Aguardando triagem)' },
+                  ...users.map(u => ({ value: u.id, label: u.name }))
+                ]}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Actions buttons */}
+        <div className="flex justify-end gap-sm border-t border-outline-variant/30 pt-lg mt-md">
           <Button
             type="button"
             variant="outline"
             disabled={loading}
             onClick={() => router.push('/dashboard/tickets')}
+            className="px-5"
           >
-            Cancelar
+            {t.common.cancel}
           </Button>
-          <Button type="submit" variant="primary" disabled={loading}>
-            {loading ? 'Salvando...' : 'Criar Chamado'}
+          <Button type="submit" variant="primary" disabled={loading} className="px-6">
+            {loading ? t.common.saving : t.tickets.saveBtn}
           </Button>
         </div>
       </form>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-    maxWidth: '1000px',
-    margin: '0 auto',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitleArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  title: {
-    fontSize: '28px',
-    fontWeight: 800,
-    letterSpacing: '-0.5px',
-  },
-  subtitle: {
-    fontSize: '14px',
-    color: '#9ca3af',
-  },
-  errorAlert: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    color: '#fca5a5',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    fontSize: '13px',
-  },
-  formCard: {
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
-    padding: '32px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  formSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  sectionTitle: {
-    fontSize: '16px',
-    fontWeight: 600,
-    color: '#3b82f6',
-    marginBottom: '8px',
-  },
-  divider: {
-    height: '1px',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  formGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: '20px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  formGroupFull: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    width: '100%',
-  },
-  label: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: '#d1d5db',
-  },
-  input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-  },
-  select: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  textarea: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '12px 14px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    resize: 'vertical',
-  },
-  formActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '12px',
-    marginTop: '16px',
-  },
-};

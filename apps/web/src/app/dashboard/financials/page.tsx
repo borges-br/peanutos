@@ -2,12 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
-import { Button } from '@peanut/ui';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../context/AuthContext';
+import { useI18n } from '../../../i18n/useI18n';
+import Button from '../../../components/ui/Button';
+import Badge from '../../../components/ui/Badge';
+import ErrorState from '../../../components/ui/ErrorState';
+import RestrictedState from '../../../components/ui/RestrictedState';
 
 export default function FinancialsOverviewPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const { user, loading: authLoading } = useAuth();
 
   // Metrics state
@@ -18,14 +23,6 @@ export default function FinancialsOverviewPage() {
   // Security Verification
   const hasFinancialPrivilege = user ? ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role) : false;
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    } else if (user && !hasFinancialPrivilege) {
-      router.push('/dashboard');
-    }
-  }, [user, authLoading, hasFinancialPrivilege, router]);
-
   const fetchFinancialMetrics = async () => {
     setLoading(true);
     setError(null);
@@ -33,17 +30,19 @@ export default function FinancialsOverviewPage() {
       const data = await apiRequest('/financials/mrr');
       setMetrics(data);
     } catch (err: any) {
-      setError(err.message || 'Falha ao carregar métricas financeiras. Verifique suas permissões de acesso.');
+      setError(err.message || t.states.errorTitle);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (hasFinancialPrivilege) {
+    if (!authLoading && hasFinancialPrivilege) {
       fetchFinancialMetrics();
+    } else if (!authLoading && !hasFinancialPrivilege) {
+      setLoading(false);
     }
-  }, [hasFinancialPrivilege]);
+  }, [hasFinancialPrivilege, authLoading]);
 
   const formatCurrency = (amountCents: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amountCents / 100);
@@ -51,106 +50,130 @@ export default function FinancialsOverviewPage() {
 
   if (authLoading || loading) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.spinner} />
-        <p style={{ marginTop: '12px', color: '#9ca3af' }}>Carregando dados financeiros...</p>
+      <div className="flex flex-col gap-md select-none">
+        <div className="h-10 bg-surface border border-outline-variant/30 rounded-xl animate-pulse w-[40%]" />
+        <div className="h-32 bg-surface border border-outline-variant/30 rounded-xl animate-pulse" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 bg-surface border border-outline-variant/30 rounded-xl animate-pulse" />
+          ))}
+        </div>
       </div>
     );
   }
 
+  // Unauthorized display
   if (!hasFinancialPrivilege) {
-    return null;
-  }
-
-  if (error || !metrics) {
     return (
-      <div style={styles.container}>
-        <div style={styles.errorAlert}>{error || 'Falha ao buscar dados.'}</div>
-        <Button variant="outline" onClick={() => router.push('/dashboard')}>
+      <div className="flex flex-col gap-lg max-w-4xl mx-auto select-none">
+        <RestrictedState
+          title={t.states.restrictedTitle}
+          description="Você não tem permissão para visualizar informações financeiras do Peanut OS."
+        />
+        <Button variant="outline" onClick={() => router.push('/dashboard')} className="w-fit">
+          <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">arrow_back</span>
           Voltar para Painel Principal
         </Button>
       </div>
     );
   }
 
+  if (error || !metrics) {
+    return (
+      <div className="flex flex-col gap-md select-none">
+        <ErrorState onRetry={fetchFinancialMetrics} title="Não foi possível carregar dados financeiros" description={error || undefined} />
+        <Button variant="outline" onClick={() => router.push('/dashboard')} className="w-fit">
+          {t.common.back}
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <div style={styles.headerTitleArea}>
-          <h1 style={styles.title}>Painel Financeiro</h1>
-          <p style={styles.subtitle}>Visão geral sobre Receita Recorrente Mensal (MRR) e agenda de faturamento.</p>
+    <div className="flex flex-col gap-lg select-none">
+      {/* Page Header */}
+      <header className="flex justify-between items-center w-full">
+        <div className="flex flex-col gap-xs">
+          <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
+            {t.financials.title}
+          </h2>
+          <p className="text-[14px] text-on-surface-variant">
+            {t.financials.subtitle}
+          </p>
         </div>
       </header>
 
       {/* Main MRR highlight card */}
-      <div style={styles.mrrHighlightCard}>
-        <div style={styles.mrrLeft}>
-          <span style={styles.mrrLabel}>Receita Recorrente Mensal (MRR)</span>
-          <h2 style={styles.mrrValue}>{formatCurrency(metrics.totalMrrCents)}</h2>
-          <p style={styles.mrrSubText}>Soma de todos os contratos recorrentes ativos no workspace.</p>
+      <div className="bg-gradient-to-br from-surface to-surface-container-low border border-primary/20 p-lg rounded-xl shadow-xl flex justify-between items-center relative overflow-hidden">
+        <div className="flex flex-col gap-sm z-10">
+          <span className="text-xs font-semibold text-primary uppercase tracking-widest">{t.financials.mrrTitle}</span>
+          <h3 className="text-4xl font-extrabold text-on-surface font-mono">{formatCurrency(metrics.totalMrrCents)}</h3>
+          <p className="text-[13px] text-on-surface-variant/80">{t.financials.mrrDescription}</p>
         </div>
-        <div style={styles.mrrRight}>
-          <div style={styles.badgeLabel}>Faturamento Recorrente</div>
+        <div className="z-10 hidden sm:block">
+          <span className="inline-flex items-center gap-xs px-md py-sm rounded-lg bg-primary/10 border border-primary/20 text-xs font-semibold text-primary uppercase tracking-wider">
+            {t.financials.badgeLabel}
+          </span>
         </div>
+        {/* Subtle decorative mesh background light */}
+        <div className="absolute right-0 bottom-0 w-44 h-44 rounded-full bg-primary/5 blur-3xl" />
       </div>
 
       {/* Primary KPI Grid */}
-      <div style={styles.kpiGrid}>
-        <div style={styles.kpiCard}>
-          <span style={styles.kpiLabel}>Contratos Ativos</span>
-          <span style={styles.kpiValue}>{metrics.activeContracts}</span>
-          <span style={styles.kpiSubText}>Vigência recorrente principal</span>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
+        <div className="bg-surface border border-outline-variant p-md rounded-xl shadow-lg flex flex-col gap-xs">
+          <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">{t.financials.activeContracts}</span>
+          <span className="text-2xl font-bold font-mono text-on-surface mt-1">{metrics.activeContracts}</span>
+          <span className="text-[11px] text-on-surface-variant/60">{t.financials.activeContractsDesc}</span>
         </div>
 
-        <div style={styles.kpiCard}>
-          <span style={styles.kpiLabel}>Ticket Médio por Contrato</span>
-          <span style={{ ...styles.kpiValue, color: '#60a5fa', fontSize: '24px', fontWeight: 800 }}>
-            {formatCurrency(metrics.averageContractValueCents)}
-          </span>
-          <span style={styles.kpiSubText}>Valor médio por cliente ativo</span>
+        <div className="bg-surface border border-outline-variant p-md rounded-xl shadow-lg flex flex-col gap-xs">
+          <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">{t.financials.averageContract}</span>
+          <span className="text-2xl font-bold font-mono text-primary mt-1">{formatCurrency(metrics.averageContractValueCents)}</span>
+          <span className="text-[11px] text-on-surface-variant/60">{t.financials.averageContractDesc}</span>
         </div>
 
-        <div style={styles.kpiCard}>
-          <span style={styles.kpiLabel}>Próximo Vencimento Estimado</span>
-          <span style={{ ...styles.kpiValue, fontSize: '18px', fontWeight: 700, color: '#f59e0b' }}>
-            Dia 10/mês
-          </span>
-          <span style={styles.kpiSubText}>Agrupamento padrão</span>
+        <div className="bg-surface border border-outline-variant p-md rounded-xl shadow-lg flex flex-col gap-xs">
+          <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">{t.financials.nextBilling}</span>
+          <span className="text-2xl font-bold font-mono text-warning mt-1">Dia 10/mês</span>
+          <span className="text-[11px] text-on-surface-variant/60">{t.financials.nextBillingDesc}</span>
         </div>
       </div>
 
       {/* Secondary split: Contracts status chart vs Billing events schedule */}
-      <div style={styles.splitSection}>
-        {/* Left Card: Events schedule */}
-        <div style={styles.sectionCard}>
-          <h3 style={styles.sectionTitle}>Agenda de Eventos de Faturamento Pendentes</h3>
-          {metrics.nextBillingEvents?.length === 0 ? (
-            <p style={styles.emptyText}>Nenhum evento de faturamento pendente encontrado.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+        
+        {/* Agenda Card */}
+        <div className="lg:col-span-2 bg-surface border border-outline-variant p-lg rounded-xl shadow-lg flex flex-col gap-md">
+          <h3 className="text-sm font-semibold text-on-surface border-b border-outline-variant/30 pb-2">
+            {t.financials.agendaTitle}
+          </h3>
+          
+          {(!metrics.nextBillingEvents || metrics.nextBillingEvents.length === 0) ? (
+            <p className="text-sm font-medium text-on-surface-variant/50 italic py-4">{t.financials.agendaEmpty}</p>
           ) : (
-            <div style={styles.eventsTableWrapper}>
-              <table style={styles.eventsTable}>
+            <div className="overflow-x-auto border border-outline-variant/60 rounded-xl shadow">
+              <table className="w-full text-left border-collapse text-xs font-mono">
                 <thead>
-                  <tr style={styles.thRow}>
-                    <th style={styles.th}>Data Planejada</th>
-                    <th style={styles.th}>Cliente</th>
-                    <th style={styles.th}>Contrato</th>
-                    <th style={styles.th}>Moeda / Valor</th>
-                    <th style={styles.th}>Status</th>
+                  <tr className="border-b border-outline-variant/60 bg-surface-container-low font-sans text-on-surface-variant">
+                    <th className="p-sm px-md font-semibold">{t.financials.colDate}</th>
+                    <th className="p-sm px-md font-semibold">{t.financials.colClient}</th>
+                    <th className="p-sm px-md font-semibold">{t.financials.colContract}</th>
+                    <th className="p-sm px-md font-semibold text-right">{t.financials.colValue}</th>
+                    <th className="p-sm px-md font-semibold text-right">{t.financials.colStatus}</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="text-on-surface font-medium">
                   {metrics.nextBillingEvents.map((evt: any) => (
-                    <tr key={evt.id} style={styles.tr}>
-                      <td style={{ ...styles.td, fontWeight: 600 }}>
-                        {new Date(evt.scheduledFor).toLocaleDateString('pt-BR')}
-                      </td>
-                      <td style={styles.td}>{evt.client?.tradeName}</td>
-                      <td style={styles.td}>{evt.contract?.number}</td>
-                      <td style={{ ...styles.td, color: '#34d399', fontWeight: 600 }}>
-                        {formatCurrency(evt.amountCents)}
-                      </td>
-                      <td style={styles.td}>
-                        <span style={styles.pendingBadge}>{evt.status}</span>
+                    <tr key={evt.id} className="border-b border-outline-variant/20 hover:bg-surface-container-low/50">
+                      <td className="p-sm px-md font-sans text-sm font-semibold">{new Date(evt.scheduledFor).toLocaleDateString('pt-BR')}</td>
+                      <td className="p-sm px-md font-sans text-sm">{evt.client?.tradeName || evt.client?.legalName || '--'}</td>
+                      <td className="p-sm px-md">{evt.contract?.number || '--'}</td>
+                      <td className="p-sm px-md text-right text-success font-bold">{formatCurrency(evt.amountCents)}</td>
+                      <td className="p-sm px-md text-right font-sans">
+                        <Badge variant="warning" className="text-[10px] py-0 px-2 uppercase font-semibold">
+                          {evt.status}
+                        </Badge>
                       </td>
                     </tr>
                   ))}
@@ -160,266 +183,44 @@ export default function FinancialsOverviewPage() {
           )}
         </div>
 
-        {/* Right Card: Status Distribution */}
-        <div style={styles.statusCard}>
-          <h3 style={styles.sectionTitle}>Contratos por Status</h3>
-          <div style={styles.statusList}>
-            {Object.keys(metrics.contractsByStatus).length === 0 ? (
-              <p style={styles.emptyText}>Sem dados de distribuição.</p>
+        {/* Status Breakdown Card */}
+        <div className="bg-surface border border-outline-variant p-lg rounded-xl shadow-lg flex flex-col gap-md">
+          <h3 className="text-sm font-semibold text-on-surface border-b border-outline-variant/30 pb-2">
+            {t.financials.statusTitle}
+          </h3>
+
+          <div className="flex flex-col gap-md mt-1">
+            {(!metrics.contractsByStatus || Object.keys(metrics.contractsByStatus).length === 0) ? (
+              <p className="text-sm font-medium text-on-surface-variant/50 italic py-4">{t.financials.statusEmpty}</p>
             ) : (
-              Object.entries(metrics.contractsByStatus).map(([statusName, count]: any) => (
-                <div key={statusName} style={styles.statusRow}>
-                  <span style={styles.statusLabel}>{statusName}</span>
-                  <div style={styles.progressBarWrapper}>
-                    <div
-                      style={{
-                        ...styles.statusProgressFill,
-                        width: `${Math.min(100, (count / Math.max(1, metrics.activeContracts)) * 100)}%`,
-                        backgroundColor: statusName === 'ACTIVE' ? '#10b981' : statusName === 'SUSPENDED' ? '#f59e0b' : '#6b7280',
-                      }}
-                    />
+              Object.entries(metrics.contractsByStatus).map(([statusName, count]: any) => {
+                const label = t.enums.contractStatus[statusName as keyof typeof t.enums.contractStatus] || statusName;
+                const fillPercent = Math.min(100, (count / Math.max(1, metrics.activeContracts)) * 100);
+                
+                return (
+                  <div key={statusName} className="flex items-center justify-between gap-sm text-xs font-mono">
+                    <span className="font-semibold text-on-surface-variant w-24 font-sans">{label}</span>
+                    <div className="flex-1 h-2 bg-surface-container-low border border-outline-variant/30 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          statusName === 'ACTIVE'
+                            ? 'bg-success'
+                            : statusName === 'SUSPENDED'
+                            ? 'bg-warning'
+                            : 'bg-on-surface-variant/40'
+                        }`}
+                        style={{ width: `${fillPercent}%` }}
+                      />
+                    </div>
+                    <span className="font-bold text-on-surface text-right w-6">{count}</span>
                   </div>
-                  <span style={styles.statusCount}>{count}</span>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
+
       </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitleArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  title: {
-    fontSize: '28px',
-    fontWeight: 800,
-    letterSpacing: '-0.5px',
-  },
-  subtitle: {
-    fontSize: '14px',
-    color: '#9ca3af',
-  },
-  mrrHighlightCard: {
-    background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)',
-    border: '1px solid rgba(59, 130, 246, 0.25)',
-    borderRadius: '16px',
-    padding: '32px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-  },
-  mrrLeft: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  mrrLabel: {
-    fontSize: '13px',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    color: '#60a5fa',
-    letterSpacing: '1px',
-  },
-  mrrValue: {
-    fontSize: '40px',
-    fontWeight: 950,
-    color: '#fff',
-    letterSpacing: '-1px',
-  },
-  mrrSubText: {
-    fontSize: '13px',
-    color: '#9ca3af',
-  },
-  mrrRight: {},
-  badgeLabel: {
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    border: '1px solid rgba(59, 130, 246, 0.3)',
-    color: '#60a5fa',
-    padding: '8px 16px',
-    borderRadius: '8px',
-    fontSize: '12px',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  kpiGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
-    gap: '20px',
-  },
-  kpiCard: {
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-  },
-  kpiLabel: {
-    fontSize: '12px',
-    color: '#9ca3af',
-    fontWeight: 500,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  kpiValue: {
-    fontSize: '28px',
-    fontWeight: 800,
-    color: '#f9fafb',
-  },
-  kpiSubText: {
-    fontSize: '12px',
-    color: '#6b7280',
-  },
-  splitSection: {
-    display: 'grid',
-    gridTemplateColumns: '7fr 5fr',
-    gap: '24px',
-  },
-  sectionCard: {
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  statusCard: {
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  sectionTitle: {
-    fontSize: '15px',
-    fontWeight: 600,
-    color: '#d1d5db',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-    paddingBottom: '8px',
-  },
-  eventsTableWrapper: {
-    border: '1px solid rgba(255, 255, 255, 0.06)',
-    borderRadius: '8px',
-    overflow: 'hidden',
-  },
-  eventsTable: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    textAlign: 'left',
-  },
-  thRow: {
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-  },
-  th: {
-    padding: '12px 16px',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#9ca3af',
-  },
-  tr: {
-    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
-  },
-  td: {
-    padding: '12px 16px',
-    fontSize: '13px',
-  },
-  pendingBadge: {
-    fontSize: '10px',
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    color: '#fbbf24',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    border: '1px solid rgba(245, 158, 11, 0.15)',
-    fontWeight: 600,
-  },
-  statusList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '14px',
-  },
-  statusRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-  },
-  statusLabel: {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#d1d5db',
-    width: '90px',
-  },
-  progressBarWrapper: {
-    flexGrow: 1,
-    height: '8px',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderRadius: '4px',
-    overflow: 'hidden',
-  },
-  statusProgressFill: {
-    height: '100%',
-    borderRadius: '4px',
-  },
-  statusCount: {
-    fontSize: '13px',
-    fontWeight: 700,
-    color: '#fff',
-    width: '20px',
-    textAlign: 'right',
-  },
-  emptyText: {
-    fontSize: '13px',
-    color: '#6b7280',
-    fontStyle: 'italic',
-  },
-  errorAlert: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    color: '#fca5a5',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    fontSize: '13px',
-  },
-  loadingContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: '400px',
-  },
-  spinner: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    border: '3px solid rgba(59, 130, 246, 0.1)',
-    borderTopColor: '#3b82f6',
-    animation: 'spin 1s linear infinite',
-  },
-};

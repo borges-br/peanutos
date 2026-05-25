@@ -51,7 +51,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('peanut_token', data.accessToken);
       setToken(data.accessToken);
       setUser(data.user);
-      router.push('/dashboard');
+      setLoading(false);
+      router.refresh();
+      router.replace('/dashboard');
     } catch (e) {
       setLoading(false);
       throw e;
