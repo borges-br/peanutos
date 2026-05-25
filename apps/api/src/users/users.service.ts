@@ -8,10 +8,12 @@ import { prisma } from "@peanut/db";
 import * as bcrypt from "bcryptjs";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
+import { StorageService } from "../storage/storage.service";
 import { UserRole } from "@peanut/types";
 import {
   CreateWorkspaceUserInput,
   UpdateWorkspaceUserRoleInput,
+  UpdateUserProfileInput,
 } from "@peanut/validators";
 
 @Injectable()
@@ -19,6 +21,7 @@ export class UsersService {
   constructor(
     private readonly auditService: AuditService,
     private readonly webhookEvents: WebhookEventsService,
+    private readonly storage: StorageService,
   ) {}
 
   async list(workspaceId: string) {
@@ -273,5 +276,187 @@ export class UsersService {
     });
 
     return { success: true };
+  }
+
+  // ─── Profile & Document Identity ─────────────────────────────────────────────
+
+  private sanitizeUser(user: any) {
+    const { passwordHash: _, ...safe } = user;
+    const avatarUrl = user.avatarFileObjectId ? `/api/v1/files/${user.avatarFileObjectId}` : null;
+    const signatureUrl = user.signatureImageFileObjectId ? `/api/v1/files/${user.signatureImageFileObjectId}` : null;
+    return { ...safe, avatarUrl, signatureUrl };
+  }
+
+  async getMyProfile(userId: string, workspaceId: string) {
+    const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    if (!user) throw new NotFoundException("Usuário não encontrado");
+    return this.sanitizeUser(user);
+  }
+
+  async updateMyProfile(
+    userId: string,
+    workspaceId: string,
+    input: UpdateUserProfileInput,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const before = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    if (!before) throw new NotFoundException("Usuário não encontrado");
+
+    const data: any = {};
+    if (input.name !== undefined) data.name = input.name;
+    if (input.jobTitle !== undefined) data.jobTitle = input.jobTitle || null;
+    if (input.phone !== undefined) data.phone = input.phone || null;
+    if (input.documentDisplayName !== undefined) data.documentDisplayName = input.documentDisplayName || null;
+    if (input.documentSignatureEnabled !== undefined) data.documentSignatureEnabled = input.documentSignatureEnabled;
+
+    const updated = await prisma.user.update({ where: { id: userId }, data });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId: userId,
+      action: "user.profile_updated",
+      entityType: "USER",
+      entityId: userId,
+      before: this.sanitizeUser(before),
+      after: this.sanitizeUser(updated),
+      ipAddress,
+      userAgent,
+      severity: "INFO",
+    });
+
+    return this.sanitizeUser(updated);
+  }
+
+  async uploadAvatar(
+    userId: string,
+    workspaceId: string,
+    upload: { data: string; mimeType: string; filename: string },
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    if (!user) throw new NotFoundException("Usuário não encontrado");
+
+    if (user.avatarFileObjectId) {
+      await this.storage.deleteFileObject(user.avatarFileObjectId, workspaceId);
+    }
+
+    const { fileObjectId } = await this.storage.uploadImage({
+      workspaceId,
+      actorUserId: userId,
+      folder: `users/${userId}/avatar`,
+      data: upload.data,
+      mimeType: upload.mimeType,
+      filename: upload.filename,
+    });
+
+    await prisma.user.update({ where: { id: userId }, data: { avatarFileObjectId: fileObjectId } });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId: userId,
+      action: "user.avatar_uploaded",
+      entityType: "USER",
+      entityId: userId,
+      after: { fileObjectId, filename: upload.filename },
+      ipAddress,
+      userAgent,
+      severity: "INFO",
+    });
+
+    return { avatarUrl: `/api/v1/files/${fileObjectId}` };
+  }
+
+  async deleteAvatar(
+    userId: string,
+    workspaceId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    if (!user) throw new NotFoundException("Usuário não encontrado");
+
+    if (user.avatarFileObjectId) {
+      await this.storage.deleteFileObject(user.avatarFileObjectId, workspaceId);
+      await prisma.user.update({ where: { id: userId }, data: { avatarFileObjectId: null } });
+    }
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId: userId,
+      action: "user.avatar_removed",
+      entityType: "USER",
+      entityId: userId,
+      severity: "INFO",
+    });
+
+    return { avatarUrl: null };
+  }
+
+  async uploadSignature(
+    userId: string,
+    workspaceId: string,
+    upload: { data: string; mimeType: string; filename: string },
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    if (!user) throw new NotFoundException("Usuário não encontrado");
+
+    if (user.signatureImageFileObjectId) {
+      await this.storage.deleteFileObject(user.signatureImageFileObjectId, workspaceId);
+    }
+
+    const { fileObjectId } = await this.storage.uploadImage({
+      workspaceId,
+      actorUserId: userId,
+      folder: `users/${userId}/signature`,
+      data: upload.data,
+      mimeType: upload.mimeType,
+      filename: upload.filename,
+    });
+
+    await prisma.user.update({ where: { id: userId }, data: { signatureImageFileObjectId: fileObjectId } });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId: userId,
+      action: "user.signature_uploaded",
+      entityType: "USER",
+      entityId: userId,
+      after: { fileObjectId, filename: upload.filename },
+      ipAddress,
+      userAgent,
+      severity: "INFO",
+    });
+
+    return { signatureUrl: `/api/v1/files/${fileObjectId}` };
+  }
+
+  async deleteSignature(
+    userId: string,
+    workspaceId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    if (!user) throw new NotFoundException("Usuário não encontrado");
+
+    if (user.signatureImageFileObjectId) {
+      await this.storage.deleteFileObject(user.signatureImageFileObjectId, workspaceId);
+      await prisma.user.update({ where: { id: userId }, data: { signatureImageFileObjectId: null } });
+    }
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId: userId,
+      action: "user.signature_removed",
+      entityType: "USER",
+      entityId: userId,
+      severity: "INFO",
+    });
+
+    return { signatureUrl: null };
   }
 }

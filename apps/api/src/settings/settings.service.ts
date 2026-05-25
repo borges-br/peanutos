@@ -1,43 +1,49 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
+import { StorageService } from "../storage/storage.service";
+
+const BRAND_FIELDS = [
+  "brandName", "brandSubtitle", "legalName", "companyDocument",
+  "companyEmail", "financialEmail", "companyPhone", "companyWebsite",
+  "companyAddress", "primaryColorHex", "documentSecondaryColor",
+  "documentAccentColor", "documentFooterText", "defaultInvoiceNotes",
+  "defaultQuoteTerms", "defaultServiceOrderTerms", "defaultContractTerms",
+  "signatureName",
+] as const;
+
+const BRAND_SELECT = Object.fromEntries([...BRAND_FIELDS, "logoFileObjectId"].map(f => [f, true])) as Record<string, true>;
 
 @Injectable()
 export class SettingsService {
-  constructor(private readonly auditService: AuditService) {}
+  constructor(
+    private readonly auditService: AuditService,
+    private readonly storage: StorageService,
+  ) {}
 
-  /**
-   * Retrieves the current brand/company settings of a workspace.
-   */
+  private normalizeNull(value: unknown): unknown {
+    if (value === "" || value === "null" || value === undefined) return null;
+    return value;
+  }
+
+  private async buildLogoUrl(logoFileObjectId: string | null): Promise<string | null> {
+    if (!logoFileObjectId) return null;
+    return `/api/v1/files/${logoFileObjectId}`;
+  }
+
   async getBrandSettings(workspaceId: string) {
     const workspace = await prisma.workspace.findUnique({
       where: { id: workspaceId },
-      select: {
-        brandName: true,
-        brandSubtitle: true,
-        legalName: true,
-        companyDocument: true,
-        companyEmail: true,
-        financialEmail: true,
-        companyPhone: true,
-        companyWebsite: true,
-        companyAddress: true,
-        primaryColorHex: true,
-        documentFooterText: true,
-        signatureName: true,
-      },
+      select: BRAND_SELECT,
     });
 
-    if (!workspace) {
-      throw new NotFoundException("Workspace não encontrado");
-    }
+    if (!workspace) throw new NotFoundException("Workspace não encontrado");
 
-    return workspace;
+    const logoUrl = await this.buildLogoUrl((workspace as any).logoFileObjectId);
+    const { logoFileObjectId: _, ...rest } = workspace as any;
+    return { ...rest, logoUrl, hasLogo: !!logoUrl };
   }
 
-  /**
-   * Updates brand/company settings for a workspace and registers an audit trail.
-   */
   async updateBrandSettings(
     workspaceId: string,
     input: any,
@@ -45,102 +51,126 @@ export class SettingsService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    // 1. Fetch current settings (before state)
     const before = await prisma.workspace.findUnique({
       where: { id: workspaceId },
-      select: {
-        brandName: true,
-        brandSubtitle: true,
-        legalName: true,
-        companyDocument: true,
-        companyEmail: true,
-        financialEmail: true,
-        companyPhone: true,
-        companyWebsite: true,
-        companyAddress: true,
-        primaryColorHex: true,
-        documentFooterText: true,
-        signatureName: true,
-      },
+      select: BRAND_SELECT,
     });
 
-    if (!before) {
-      throw new NotFoundException("Workspace não encontrado");
-    }
-
-    // 2. Prepare and normalize settings data
-    const fields = [
-      "brandName",
-      "brandSubtitle",
-      "legalName",
-      "companyDocument",
-      "companyEmail",
-      "financialEmail",
-      "companyPhone",
-      "companyWebsite",
-      "companyAddress",
-      "primaryColorHex",
-      "documentFooterText",
-      "signatureName",
-    ];
+    if (!before) throw new NotFoundException("Workspace não encontrado");
 
     const dataToUpdate: any = {};
-
-    for (const field of fields) {
+    for (const field of BRAND_FIELDS) {
       if (input[field] !== undefined) {
-        let value = input[field];
-        
-        // Normalize empty strings to null
-        if (value === "" || value === "null" || value === undefined) {
-          value = null;
-        }
-
-        // Clean & trim free text for company document/Tax ID
-        if (field === "companyDocument" && typeof value === "string") {
-          value = value.trim();
-          if (value === "") {
-            value = null;
-          }
-        }
-
-        dataToUpdate[field] = value;
+        dataToUpdate[field] = this.normalizeNull(input[field]);
       }
     }
 
-    // 3. Persist update in database
     const updated = await prisma.workspace.update({
       where: { id: workspaceId },
       data: dataToUpdate,
-      select: {
-        brandName: true,
-        brandSubtitle: true,
-        legalName: true,
-        companyDocument: true,
-        companyEmail: true,
-        financialEmail: true,
-        companyPhone: true,
-        companyWebsite: true,
-        companyAddress: true,
-        primaryColorHex: true,
-        documentFooterText: true,
-        signatureName: true,
-      },
+      select: BRAND_SELECT,
     });
 
-    // 4. Register audit trail containing only white-label fields
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: "settings.brand_updated",
+      action: "brand.updated",
       entityType: "WORKSPACE",
       entityId: workspaceId,
-      before,
-      after: updated,
+      before: this.sanitizeForAudit(before),
+      after: this.sanitizeForAudit(updated),
       ipAddress,
       userAgent,
       severity: "INFO",
     });
 
-    return updated;
+    const logoUrl = await this.buildLogoUrl((updated as any).logoFileObjectId);
+    const { logoFileObjectId: _, ...rest } = updated as any;
+    return { ...rest, logoUrl, hasLogo: !!logoUrl };
+  }
+
+  async uploadLogo(
+    workspaceId: string,
+    actorUserId: string,
+    upload: { data: string; mimeType: string; filename: string },
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    // Remove old logo if exists
+    const ws = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { logoFileObjectId: true },
+    });
+
+    if (ws?.logoFileObjectId) {
+      await this.storage.deleteFileObject(ws.logoFileObjectId, workspaceId);
+    }
+
+    const { fileObjectId } = await this.storage.uploadImage({
+      workspaceId,
+      actorUserId,
+      folder: "logos",
+      data: upload.data,
+      mimeType: upload.mimeType,
+      filename: upload.filename,
+    });
+
+    await prisma.workspace.update({
+      where: { id: workspaceId },
+      data: { logoFileObjectId: fileObjectId },
+    });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "brand.logo_uploaded",
+      entityType: "WORKSPACE",
+      entityId: workspaceId,
+      after: { fileObjectId, filename: upload.filename, mimeType: upload.mimeType },
+      ipAddress,
+      userAgent,
+      severity: "INFO",
+    });
+
+    return { logoUrl: `/api/v1/files/${fileObjectId}`, hasLogo: true };
+  }
+
+  async deleteLogo(
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const ws = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { logoFileObjectId: true },
+    });
+
+    if (ws?.logoFileObjectId) {
+      await this.storage.deleteFileObject(ws.logoFileObjectId, workspaceId);
+      await prisma.workspace.update({
+        where: { id: workspaceId },
+        data: { logoFileObjectId: null },
+      });
+    }
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "brand.logo_removed",
+      entityType: "WORKSPACE",
+      entityId: workspaceId,
+      ipAddress,
+      userAgent,
+      severity: "INFO",
+    });
+
+    return { logoUrl: null, hasLogo: false };
+  }
+
+  private sanitizeForAudit(data: any) {
+    if (!data) return data;
+    const { logoFileObjectId: _, ...safe } = data;
+    return safe;
   }
 }

@@ -38,8 +38,27 @@ export class SetupService {
       const existingWs = await tx.workspace.findUnique({ where: { slug } });
       const finalSlug = existingWs ? `${slug}-${Date.now()}` : slug;
 
+      // Build optional brand fields from wizard
+      const brandData: any = {};
+      if (input.brandName) brandData.brandName = input.brandName;
+      if (input.legalName) brandData.legalName = input.legalName;
+      if (input.companyDocument) brandData.companyDocument = input.companyDocument;
+      if (input.companyEmail) brandData.companyEmail = input.companyEmail;
+      if (input.companyPhone) brandData.companyPhone = input.companyPhone;
+      if (input.companyWebsite) brandData.companyWebsite = input.companyWebsite;
+      if (input.companyAddress) brandData.companyAddress = input.companyAddress;
+      if (input.primaryColorHex) brandData.primaryColorHex = input.primaryColorHex;
+      if (input.documentSecondaryColor) brandData.documentSecondaryColor = input.documentSecondaryColor;
+      if (input.documentAccentColor) brandData.documentAccentColor = input.documentAccentColor;
+      if (input.documentFooterText) brandData.documentFooterText = input.documentFooterText;
+
       const workspace = await tx.workspace.create({
-        data: { name: workspaceName, slug: finalSlug, status: "ACTIVE" },
+        data: {
+          name: workspaceName,
+          slug: finalSlug,
+          status: "ACTIVE",
+          ...brandData,
+        },
       });
 
       const passwordHash = bcrypt.hashSync(adminPassword, 12);

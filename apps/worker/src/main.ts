@@ -242,10 +242,11 @@ const pdfWorker = new Worker(
       throw new Error(`[PDF Worker] Invoice with ID ${entityId} not found in workspace ${workspaceId}`);
     }
 
-    // 2. Fetch workspace (brand settings)
+    // 2. Fetch workspace (brand settings) + responsible user
     const workspace = await prisma.workspace.findUnique({
       where: { id: workspaceId },
     });
+    const responsibleUser = actorUserId ? await prisma.user.findUnique({ where: { id: actorUserId } }) : null;
 
     if (!workspace) {
       throw new Error(`[PDF Worker] Workspace with ID ${workspaceId} not found`);
@@ -317,11 +318,47 @@ const pdfWorker = new Worker(
         companyWebsite: workspace.companyWebsite,
         companyAddress: workspace.companyAddress,
         primaryColorHex: workspace.primaryColorHex,
+        documentSecondaryColor: (workspace as any).documentSecondaryColor,
+        documentAccentColor: (workspace as any).documentAccentColor,
         documentFooterText: workspace.documentFooterText,
         signatureName: workspace.signatureName,
+        logoUrl: (workspace as any).logoFileObjectId
+          ? `${process.env.INTERNAL_API_URL || 'http://localhost:3001'}/api/v1/files/${(workspace as any).logoFileObjectId}`
+          : null,
       },
+      responsible: responsibleUser ? {
+        userId: responsibleUser.id,
+        displayName: (responsibleUser as any).documentDisplayName || responsibleUser.name,
+        jobTitle: (responsibleUser as any).jobTitle || null,
+        signatureImageUrl: (responsibleUser as any).signatureImageFileObjectId
+          ? `${process.env.INTERNAL_API_URL || 'http://localhost:3001'}/api/v1/files/${(responsibleUser as any).signatureImageFileObjectId}`
+          : null,
+        signatureEnabled: (responsibleUser as any).documentSignatureEnabled ?? false,
+      } : null,
       generatedAt: new Date().toLocaleString('pt-BR'),
     };
+
+    // Build snapshots for metadata
+    const brandSnapshot = {
+      publicName: workspace.brandName,
+      brandSubtitle: workspace.brandSubtitle,
+      legalName: workspace.legalName,
+      taxId: workspace.companyDocument,
+      email: workspace.companyEmail,
+      phone: workspace.companyPhone,
+      website: workspace.companyWebsite,
+      address: workspace.companyAddress,
+      documentPrimaryColor: workspace.primaryColorHex,
+      footerText: workspace.documentFooterText,
+      hasLogo: !!(workspace as any).logoFileObjectId,
+    };
+
+    const responsibleSnapshot = responsibleUser ? {
+      userId: responsibleUser.id,
+      displayName: (responsibleUser as any).documentDisplayName || responsibleUser.name,
+      jobTitle: (responsibleUser as any).jobTitle || null,
+      signatureEnabled: (responsibleUser as any).documentSignatureEnabled ?? false,
+    } : null;
 
     // 5. Render HTML
     const html = generateInvoicePdfHtml(templateData);
@@ -408,6 +445,13 @@ const pdfWorker = new Worker(
             invoiceNumber: invoice.number,
             generatedFrom: 'invoice-preview',
             storage: 's3',
+            brandSnapshot,
+            responsibleSnapshot,
+            templateSnapshot: {
+              documentType: 'INVOICE',
+              templateKey: 'standard',
+              layoutVariant: 'default',
+            },
           }),
         },
       });

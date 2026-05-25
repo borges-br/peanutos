@@ -14,6 +14,8 @@ import { InvoicesModule } from "./invoices/invoices.module";
 import { SettingsModule } from "./settings/settings.module";
 import { DocumentsModule } from "./documents/documents.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
+import { FilesModule } from "./files/files.module";
+import { DocumentTemplatesModule } from "./document-templates/document-templates.module";
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
     InvoicesModule,
     SettingsModule,
     DocumentsModule,
+    FilesModule,
+    DocumentTemplatesModule,
   ],
   controllers: [HealthController],
   providers: [],

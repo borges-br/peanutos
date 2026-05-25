@@ -2,21 +2,40 @@
 // PEANUT OS - DOCUMENTS & PRINT TEMPLATES
 // ==============================================================================
 
-export interface PDFTemplateData {
-  title: string;
-  subtitle?: string;
-  brandName: string;
-  logoUrl?: string;
-  createdAt: string;
-  contentHtml: string;
+// ─── Snapshot Types ───────────────────────────────────────────────────────────
+
+export interface BrandSnapshot {
+  publicName?: string | null;
+  brandSubtitle?: string | null;
+  legalName?: string | null;
+  taxId?: string | null;
+  email?: string | null;
+  financialEmail?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  address?: string | null;
+  documentPrimaryColor?: string | null;
+  documentSecondaryColor?: string | null;
+  documentAccentColor?: string | null;
+  logoUrl?: string | null;
+  footerText?: string | null;
 }
 
-/**
- * Standard A4 PDF Document layout shell generator
- */
-// ==============================================================================
-// PEANUT OS - DOCUMENTS & PRINT TEMPLATES
-// ==============================================================================
+export interface ResponsibleSnapshot {
+  userId: string;
+  displayName: string;
+  jobTitle?: string | null;
+  signatureImageUrl?: string | null;
+  signatureEnabled: boolean;
+}
+
+export interface TemplateSnapshot {
+  documentType: string;
+  templateKey: string;
+  layoutVariant: string;
+  enabledBlocks: Record<string, boolean>;
+  blockOrder: string[];
+}
 
 export interface PDFTemplateData {
   title: string;
@@ -139,9 +158,13 @@ export interface InvoicePdfTemplateData {
     companyWebsite?: string | null;
     companyAddress?: string | null;
     primaryColorHex?: string | null;
+    documentSecondaryColor?: string | null;
+    documentAccentColor?: string | null;
     documentFooterText?: string | null;
     signatureName?: string | null;
+    logoUrl?: string | null;
   };
+  responsible?: ResponsibleSnapshot | null;
   generatedAt: string;
 }
 
@@ -172,7 +195,8 @@ export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
   const companyPhone = escapeHtml(data.brand.companyPhone || "Telefone não configurado");
   const primaryColor = escapeHtml(data.brand.primaryColorHex || "#1a56db");
   const documentFooterText = escapeHtml(data.brand.documentFooterText || "Gerado automaticamente pelo sistema.");
-  
+  const logoUrl = data.brand.logoUrl || null;
+
   // Client configurations
   const clientName = escapeHtml(data.client.tradeName || data.client.legalName || "Cliente");
   const clientDocument = escapeHtml(data.client.document || "Documento não configurado");
@@ -187,7 +211,12 @@ export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
   const pixKey = escapeHtml(data.invoice.pixKey || "Não configurada");
   const totalAmount = escapeHtml(data.invoice.totalAmount);
   const generatedAt = escapeHtml(data.generatedAt);
-  const signatureName = escapeHtml(data.brand.signatureName);
+
+  // Responsible
+  const responsible = data.responsible;
+  const signatureName = responsible?.displayName
+    ? escapeHtml(responsible.displayName)
+    : escapeHtml(data.brand.signatureName);
 
   // Group items by type
   const services = data.invoice.items.filter(item => item.type === "SERVICE");
@@ -355,6 +384,7 @@ export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
     <table class="header-table">
       <tr>
         <td class="header-logo-cell">
+          ${logoUrl ? `<img src="${logoUrl}" alt="${brandName}" style="max-height: 48px; max-width: 160px; object-fit: contain; display: block; margin-bottom: 6px;" />` : ''}
           <span style="font-size: 18pt; font-weight: 800; color: #0f172a; display: block; tracking-tight: -0.5px;">${brandName}</span>
           <span style="font-size: 9pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; display: block; margin-top: 2px;">
             ${brandSubtitle}
@@ -437,11 +467,14 @@ export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
       <div style="font-weight: bold; margin-top: 4px; color: #0f172a;">Chave PIX: ${pixKey}</div>
     </div>
 
-    <!-- Signature name -->
+    <!-- Responsible Signature -->
     ${signatureName ? `
     <div class="signature-area">
+      ${responsible?.signatureImageUrl && responsible.signatureEnabled ? `
+        <img src="${escapeHtml(responsible.signatureImageUrl)}" alt="Assinatura" style="max-height: 50px; max-width: 200px; object-fit: contain; display: block; margin: 0 auto 8px;" />
+      ` : ''}
       <div class="signature-line">${signatureName}</div>
-      <div style="font-size: 8pt; color: #64748b; margin-top: 2px;">Responsável Autorizado</div>
+      <div style="font-size: 8pt; color: #64748b; margin-top: 2px;">${escapeHtml(responsible?.jobTitle || "Responsável Autorizado")}</div>
     </div>
     ` : ""}
 

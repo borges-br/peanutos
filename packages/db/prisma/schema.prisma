@@ -107,6 +107,7 @@ enum DocumentType {
   TICKET_CLOSURE
   CONTRACT
   REPORT
+  SERVICE_ORDER
 }
 
 enum ContractStatus {
@@ -164,22 +165,29 @@ model Workspace {
   updatedAt DateTime @updatedAt
 
   // White-label Brand Settings
-  brandName           String? @db.VarChar(150)
-  brandSubtitle       String? @db.VarChar(150)
-  legalName           String? @db.VarChar(200)
-  companyDocument     String? @db.VarChar(30)
-  companyEmail        String? @db.VarChar(150)
-  financialEmail      String? @db.VarChar(150)
-  companyPhone        String? @db.VarChar(30)
-  companyWebsite      String? @db.VarChar(255)
-  companyAddress      String? @db.Text
-  primaryColorHex     String? @db.VarChar(7)
-  documentFooterText  String? @db.Text
-  signatureName       String? @db.VarChar(150)
+  brandName                  String? @db.VarChar(150)
+  brandSubtitle              String? @db.VarChar(150)
+  legalName                  String? @db.VarChar(200)
+  companyDocument            String? @db.VarChar(30)
+  companyEmail               String? @db.VarChar(150)
+  financialEmail             String? @db.VarChar(150)
+  companyPhone               String? @db.VarChar(30)
+  companyWebsite             String? @db.VarChar(255)
+  companyAddress             String? @db.Text
+  primaryColorHex            String? @db.VarChar(7)
+  documentSecondaryColor     String? @db.VarChar(7)
+  documentAccentColor        String? @db.VarChar(7)
+  documentFooterText         String? @db.Text
+  defaultInvoiceNotes        String? @db.Text
+  defaultQuoteTerms          String? @db.Text
+  defaultServiceOrderTerms   String? @db.Text
+  defaultContractTerms       String? @db.Text
+  signatureName              String? @db.VarChar(150)
+  logoFileObjectId           String? @db.Uuid
 
   // Relationships
-  users               User[]
-  clients             Client[]
+  users                    User[]
+  clients                  Client[]
   clientUsers         ClientUser[]
   assets              Asset[]
   assetHistories      AssetHistory[]
@@ -194,29 +202,38 @@ model Workspace {
   fileObjects         FileObject[]
   generatedDocuments  GeneratedDocument[]
   outboxEvents        OutboxEvent[]
-  webhookEndpoints    WebhookEndpoint[]
-  webhookDeliveries   WebhookDelivery[]
-  auditLogs           AuditLog[]
-  ticketComments      TicketComment[]
-  ticketHistories     TicketHistory[]
-  ticketTimeEntries   TicketTimeEntry[]
-  slaPolicies         SlaPolicy[]
+  webhookEndpoints         WebhookEndpoint[]
+  webhookDeliveries        WebhookDelivery[]
+  auditLogs                AuditLog[]
+  ticketComments           TicketComment[]
+  ticketHistories          TicketHistory[]
+  ticketTimeEntries        TicketTimeEntry[]
+  slaPolicies              SlaPolicy[]
+  documentTemplateSettings DocumentTemplateSetting[]
 
   @@map("workspaces")
 }
 
 model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  workspaceId  String     @db.Uuid
-  name         String     @db.VarChar(150)
-  email        String     @unique @db.VarChar(150)
-  passwordHash String     @db.VarChar(255)
-  role         UserRole   @default(READ_ONLY)
-  status       UserStatus @default(ACTIVE)
-  lastLoginAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  deletedAt    DateTime?
+  id                        String     @id @default(uuid()) @db.Uuid
+  workspaceId               String     @db.Uuid
+  name                      String     @db.VarChar(150)
+  email                     String     @unique @db.VarChar(150)
+  passwordHash              String     @db.VarChar(255)
+  role                      UserRole   @default(READ_ONLY)
+  status                    UserStatus @default(ACTIVE)
+  lastLoginAt               DateTime?
+  createdAt                 DateTime   @default(now())
+  updatedAt                 DateTime   @updatedAt
+  deletedAt                 DateTime?
+
+  // Profile & Document Identity
+  jobTitle                  String?    @db.VarChar(150)
+  phone                     String?    @db.VarChar(30)
+  documentDisplayName       String?    @db.VarChar(150)
+  documentSignatureEnabled  Boolean    @default(false)
+  avatarFileObjectId        String?    @db.Uuid
+  signatureImageFileObjectId String?   @db.Uuid
 
   // Relationships
   workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -873,4 +890,24 @@ model SlaPolicy {
   @@unique([workspaceId, priority])
   @@index([workspaceId])
   @@map("sla_policies")
+}
+
+model DocumentTemplateSetting {
+  id            String   @id @default(uuid()) @db.Uuid
+  workspaceId   String   @db.Uuid
+  documentType  String   @db.VarChar(30)
+  templateKey   String   @default("standard") @db.VarChar(50)
+  layoutVariant String   @default("default") @db.VarChar(50)
+  enabledBlocks Json
+  blockOrder    Json
+  customTexts   Json?
+  settings      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, documentType])
+  @@index([workspaceId])
+  @@map("document_template_settings")
 }

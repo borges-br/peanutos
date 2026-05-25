@@ -441,8 +441,10 @@ export type InvoiceStatusUpdateInput = z.infer<typeof invoiceStatusUpdateSchema>
 
 // --- WORKSPACE BRAND SETTINGS VALIDATORS ---
 
+const hexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: 'Cor deve ser hexadecimal válido (ex: #1a56db)' }).optional().nullable().or(z.literal(''));
+
 export const workspaceBrandSettingsSchema = z.object({
-  brandName: z.string().max(150, { message: 'O nome público da empresa deve ter no máximo 150 caracteres' }).optional().nullable().or(z.literal('')),
+  brandName: z.string().max(150, { message: 'O nome público deve ter no máximo 150 caracteres' }).optional().nullable().or(z.literal('')),
   brandSubtitle: z.string().max(150, { message: 'O subtítulo da marca deve ter no máximo 150 caracteres' }).optional().nullable().or(z.literal('')),
   legalName: z.string().max(200, { message: 'A razão social deve ter no máximo 200 caracteres' }).optional().nullable().or(z.literal('')),
   companyDocument: z.string().max(30, { message: 'O documento da empresa deve ter no máximo 30 caracteres' }).optional().nullable().or(z.literal('')),
@@ -451,12 +453,73 @@ export const workspaceBrandSettingsSchema = z.object({
   companyPhone: z.string().max(30, { message: 'O telefone deve ter no máximo 30 caracteres' }).optional().nullable().or(z.literal('')),
   companyWebsite: z.string().url({ message: 'URL do website inválida' }).max(255).optional().nullable().or(z.literal('')),
   companyAddress: z.string().max(1000, { message: 'O endereço deve ter no máximo 1000 caracteres' }).optional().nullable().or(z.literal('')),
-  primaryColorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: 'A cor primária deve ser um formato hexadecimal válido (ex: #000000)' }).optional().nullable().or(z.literal('')),
-  documentFooterText: z.string().max(1000, { message: 'O rodapé deve ter no máximo 1000 caracteres' }).optional().nullable().or(z.literal('')),
+  primaryColorHex: hexColorSchema,
+  documentSecondaryColor: hexColorSchema,
+  documentAccentColor: hexColorSchema,
+  documentFooterText: z.string().max(2000, { message: 'O rodapé deve ter no máximo 2000 caracteres' }).optional().nullable().or(z.literal('')),
+  defaultInvoiceNotes: z.string().max(2000).optional().nullable().or(z.literal('')),
+  defaultQuoteTerms: z.string().max(2000).optional().nullable().or(z.literal('')),
+  defaultServiceOrderTerms: z.string().max(2000).optional().nullable().or(z.literal('')),
+  defaultContractTerms: z.string().max(2000).optional().nullable().or(z.literal('')),
   signatureName: z.string().max(150, { message: 'O nome para assinatura deve ter no máximo 150 caracteres' }).optional().nullable().or(z.literal('')),
 });
 
 export type WorkspaceBrandSettingsInput = z.infer<typeof workspaceBrandSettingsSchema>;
+
+// --- FILE UPLOAD VALIDATOR ---
+
+const ALLOWED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+
+export const uploadImageSchema = z.object({
+  data: z.string().min(1, { message: 'Dados do arquivo são obrigatórios' }),
+  mimeType: z.enum(ALLOWED_IMAGE_MIMES, { errorMap: () => ({ message: 'Tipo de arquivo não permitido. Use PNG, JPEG ou WebP' }) }),
+  filename: z.string().min(1).max(255),
+});
+
+export type UploadImageInput = z.infer<typeof uploadImageSchema>;
+
+// --- USER PROFILE VALIDATORS ---
+
+export const updateUserProfileSchema = z.object({
+  name: z.string().min(2, { message: 'Nome deve ter no mínimo 2 caracteres' }).max(150).optional(),
+  jobTitle: z.string().max(150).optional().nullable().or(z.literal('')),
+  phone: z.string().max(30).optional().nullable().or(z.literal('')),
+  documentDisplayName: z.string().max(150).optional().nullable().or(z.literal('')),
+  documentSignatureEnabled: z.boolean().optional(),
+});
+
+export type UpdateUserProfileInput = z.infer<typeof updateUserProfileSchema>;
+
+// --- DOCUMENT TEMPLATE VALIDATORS ---
+
+export const TEMPLATE_DOCUMENT_TYPES = ['INVOICE', 'QUOTE', 'SERVICE_ORDER', 'CONTRACT', 'REPORT'] as const;
+export type TemplateDocumentType = typeof TEMPLATE_DOCUMENT_TYPES[number];
+
+export const TEMPLATE_BLOCKS = [
+  'header', 'logo', 'companyInfo', 'clientInfo', 'documentTitle',
+  'itemsTable', 'financialSummary', 'paymentInfo', 'terms',
+  'observations', 'responsibleSignature', 'clientSignature', 'qrCode', 'footer',
+] as const;
+export type TemplateBlock = typeof TEMPLATE_BLOCKS[number];
+
+export const updateDocumentTemplateSettingSchema = z.object({
+  templateKey: z.string().max(50).optional(),
+  layoutVariant: z.string().max(50).optional(),
+  enabledBlocks: z.record(z.enum(TEMPLATE_BLOCKS), z.boolean()).optional(),
+  blockOrder: z.array(z.enum(TEMPLATE_BLOCKS)).optional(),
+  customTexts: z.record(z.string(), z.string()).optional().nullable(),
+  settings: z.record(z.string(), z.unknown()).optional().nullable(),
+}).refine((data) => {
+  if (data.blockOrder && data.enabledBlocks) {
+    return data.blockOrder.every(b => b in data.enabledBlocks!);
+  }
+  return true;
+}, { message: 'blockOrder contém blocos não presentes em enabledBlocks' });
+
+export type UpdateDocumentTemplateSettingInput = z.infer<typeof updateDocumentTemplateSettingSchema>;
+
+// --- SETUP VALIDATORS (extended) ---
 
 // --- WEBHOOK VALIDATORS ---
 
@@ -538,6 +601,18 @@ export const setupAdminSchema = z.object({
     .min(8, { message: 'A senha deve ter no mínimo 8 caracteres' })
     .regex(/[A-Z]/, { message: 'A senha deve conter pelo menos uma letra maiúscula' })
     .regex(/[0-9]/, { message: 'A senha deve conter pelo menos um número' }),
+  // Optional brand fields for wizard step 2 & 3
+  brandName: z.string().max(150).optional().nullable().or(z.literal('')),
+  legalName: z.string().max(200).optional().nullable().or(z.literal('')),
+  companyDocument: z.string().max(30).optional().nullable().or(z.literal('')),
+  companyEmail: z.string().email().max(150).optional().nullable().or(z.literal('')),
+  companyPhone: z.string().max(30).optional().nullable().or(z.literal('')),
+  companyWebsite: z.string().url().max(255).optional().nullable().or(z.literal('')),
+  companyAddress: z.string().max(1000).optional().nullable().or(z.literal('')),
+  primaryColorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().nullable().or(z.literal('')),
+  documentSecondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().nullable().or(z.literal('')),
+  documentAccentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().nullable().or(z.literal('')),
+  documentFooterText: z.string().max(2000).optional().nullable().or(z.literal('')),
 });
 
 export type SetupAdminInput = z.infer<typeof setupAdminSchema>;

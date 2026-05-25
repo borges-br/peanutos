@@ -19,6 +19,8 @@ import {
   createWorkspaceUserSchema,
   updateWorkspaceUserRoleSchema,
   updateWorkspaceUserStatusSchema,
+  updateUserProfileSchema,
+  uploadImageSchema,
 } from "@peanut/validators";
 
 @UseGuards(AuthGuard, RolesGuard)
@@ -126,17 +128,68 @@ export class UsersController {
     @CurrentUser() user: any,
     @Req() req: any,
   ) {
-    const ipAddress =
-      req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
+    return this.usersService.deleteUser(id, user.workspaceId, user.id, user.role, ipAddress, userAgent);
+  }
 
-    return this.usersService.deleteUser(
-      id,
-      user.workspaceId,
-      user.id,
-      user.role,
-      ipAddress,
-      userAgent,
-    );
+  // ─── My Profile & Document Identity ──────────────────────────────────────────
+
+  @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
+  @Get("me/profile")
+  async getMyProfile(@CurrentUser() user: any) {
+    return this.usersService.getMyProfile(user.id, user.workspaceId);
+  }
+
+  @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
+  @Patch("me/profile")
+  async updateMyProfile(@Body() body: any, @CurrentUser() user: any, @Req() req: any) {
+    const result = updateUserProfileSchema.safeParse(body);
+    if (!result.success) {
+      throw new BadRequestException(result.error.errors.map(e => e.message).join(", "));
+    }
+    const ip = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ua = req.headers?.["user-agent"] || "Unknown";
+    return this.usersService.updateMyProfile(user.id, user.workspaceId, result.data, ip, ua);
+  }
+
+  @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
+  @Post("me/avatar")
+  async uploadAvatar(@Body() body: any, @CurrentUser() user: any, @Req() req: any) {
+    const result = uploadImageSchema.safeParse(body);
+    if (!result.success) {
+      throw new BadRequestException(result.error.errors.map(e => e.message).join(", "));
+    }
+    const ip = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ua = req.headers?.["user-agent"] || "Unknown";
+    return this.usersService.uploadAvatar(user.id, user.workspaceId, result.data, ip, ua);
+  }
+
+  @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
+  @Delete("me/avatar")
+  async deleteAvatar(@CurrentUser() user: any, @Req() req: any) {
+    const ip = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ua = req.headers?.["user-agent"] || "Unknown";
+    return this.usersService.deleteAvatar(user.id, user.workspaceId, ip, ua);
+  }
+
+  @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
+  @Post("me/signature")
+  async uploadSignature(@Body() body: any, @CurrentUser() user: any, @Req() req: any) {
+    const result = uploadImageSchema.safeParse(body);
+    if (!result.success) {
+      throw new BadRequestException(result.error.errors.map(e => e.message).join(", "));
+    }
+    const ip = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ua = req.headers?.["user-agent"] || "Unknown";
+    return this.usersService.uploadSignature(user.id, user.workspaceId, result.data, ip, ua);
+  }
+
+  @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
+  @Delete("me/signature")
+  async deleteSignature(@CurrentUser() user: any, @Req() req: any) {
+    const ip = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ua = req.headers?.["user-agent"] || "Unknown";
+    return this.usersService.deleteSignature(user.id, user.workspaceId, ip, ua);
   }
 }
