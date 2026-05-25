@@ -458,6 +458,50 @@ export const workspaceBrandSettingsSchema = z.object({
 
 export type WorkspaceBrandSettingsInput = z.infer<typeof workspaceBrandSettingsSchema>;
 
+// --- SETUP VALIDATORS ---
+
+export const setupAdminSchema = z.object({
+  workspaceName: z.string().min(2, { message: 'Nome do workspace é obrigatório' }),
+  adminName: z.string().min(2, { message: 'Nome do administrador é obrigatório' }),
+  adminEmail: z.string().email({ message: 'E-mail inválido' }),
+  adminPassword: z
+    .string()
+    .min(8, { message: 'A senha deve ter no mínimo 8 caracteres' })
+    .regex(/[A-Z]/, { message: 'A senha deve conter pelo menos uma letra maiúscula' })
+    .regex(/[0-9]/, { message: 'A senha deve conter pelo menos um número' }),
+});
+
+export type SetupAdminInput = z.infer<typeof setupAdminSchema>;
+
+// --- WORKSPACE USER MANAGEMENT VALIDATORS ---
+
+export const createWorkspaceUserSchema = z.object({
+  name: z.string().min(2, { message: 'Nome deve ter no mínimo 2 caracteres' }),
+  email: z.string().email({ message: 'E-mail inválido' }),
+  password: z.string().min(8, { message: 'A senha deve ter no mínimo 8 caracteres' }),
+  role: z.enum(['ADMIN', 'TECHNICIAN', 'FINANCIAL', 'READ_ONLY'], {
+    errorMap: () => ({ message: 'Papel inválido. Use: ADMIN, TECHNICIAN, FINANCIAL ou READ_ONLY' }),
+  }),
+});
+
+export type CreateWorkspaceUserInput = z.infer<typeof createWorkspaceUserSchema>;
+
+export const updateWorkspaceUserRoleSchema = z.object({
+  role: z.enum(['ADMIN', 'TECHNICIAN', 'FINANCIAL', 'READ_ONLY'], {
+    errorMap: () => ({ message: 'Papel inválido. OWNER não pode ser atribuído via este endpoint.' }),
+  }),
+});
+
+export type UpdateWorkspaceUserRoleInput = z.infer<typeof updateWorkspaceUserRoleSchema>;
+
+export const updateWorkspaceUserStatusSchema = z.object({
+  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED'], {
+    errorMap: () => ({ message: 'Status inválido. Use: ACTIVE, INACTIVE ou SUSPENDED' }),
+  }),
+});
+
+export type UpdateWorkspaceUserStatusInput = z.infer<typeof updateWorkspaceUserStatusSchema>;
+
 // --- DOCUMENT VALIDATORS ---
 
 export const documentTypeEnum = z.enum(["QUOTE", "INVOICE", "TICKET_CLOSURE", "CONTRACT", "REPORT"]);

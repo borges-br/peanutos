@@ -1,20 +1,39 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/useI18n';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import { apiRequest } from '../../lib/api';
 import logoImg from '../../../images/layout/logo.webp';
 
 export default function LoginPage() {
   const { login } = useAuth();
   const { t } = useI18n();
+  const router = useRouter();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    async function checkSetup() {
+      try {
+        const { requiresSetup } = await apiRequest<{ requiresSetup: boolean }>(
+          '/setup/status',
+        );
+        if (requiresSetup) {
+          router.replace('/setup');
+        }
+      } catch {
+        // If API is unreachable, stay on login page
+      }
+    }
+    checkSetup();
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
