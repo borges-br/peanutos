@@ -2,18 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
-import { useParams, useRouter, usePathname } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { clientContactSchema } from '@peanut/validators';
 import { useI18n } from '../../../../i18n/useI18n';
 import Button from '../../../../components/ui/Button';
 import Badge from '../../../../components/ui/Badge';
 import Input from '../../../../components/ui/Input';
 import Card from '../../../../components/ui/Card';
+import ClientContextTabs from '../../../../components/layout/ClientContextTabs';
 
 export default function ClientDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { t } = useI18n();
   const clientId = params.id as string;
 
@@ -35,6 +36,19 @@ export default function ClientDetailPage() {
   const [contactNotes, setContactNotes] = useState('');
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactSaving, setContactSaving] = useState(false);
+
+  const activeTabParam = searchParams.get('tab');
+
+  useEffect(() => {
+    if (activeTabParam === 'contacts' && !loading) {
+      setTimeout(() => {
+        const element = document.getElementById('contacts');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 150);
+    }
+  }, [activeTabParam, loading]);
 
   const fetchClientData = async () => {
     setLoading(true);
@@ -187,17 +201,6 @@ export default function ClientDetailPage() {
   const clientStatusLabel =
     t.enums.clientStatus[client.status as keyof typeof t.enums.clientStatus] || client.status;
 
-  // Dossie Tabs Navigation list
-  const tabItems = [
-    { label: t.clients.tabs.summary, path: `/dashboard/clients/${clientId}`, active: pathname === `/dashboard/clients/${clientId}` },
-    { label: t.clients.tabs.users, path: `/dashboard/clients/${clientId}/users`, active: pathname === `/dashboard/clients/${clientId}/users` },
-    { label: t.clients.tabs.inventory, path: `/dashboard/clients/${clientId}/inventory`, active: pathname === `/dashboard/clients/${clientId}/inventory` },
-    { label: t.clients.tabs.tickets, path: `/dashboard/clients/${clientId}/tickets`, active: pathname === `/dashboard/clients/${clientId}/tickets` },
-    { label: t.clients.tabs.contracts, path: `/dashboard/clients/${clientId}/contracts`, active: pathname === `/dashboard/clients/${clientId}/contracts` },
-    { label: t.clients.tabs.history, path: '#', active: false, planned: true },
-    { label: "Documentos", path: '#', active: false, planned: true },
-  ];
-
   return (
     <div className="flex flex-col gap-lg select-none select-text">
       
@@ -239,35 +242,7 @@ export default function ClientDetailPage() {
         </div>
 
         {/* Dossie Tabs Row */}
-        <div className="flex flex-wrap gap-xs border-b border-outline-variant/20 pt-md -mb-4">
-          {tabItems.map((tab, index) => {
-            if (tab.planned) {
-              return (
-                <div
-                  key={index}
-                  className="px-md py-sm border-b-2 border-transparent text-[13px] text-on-surface-variant/35 cursor-not-allowed select-none flex items-center gap-1.5"
-                  title="Módulo planejado"
-                >
-                  <span className="material-symbols-outlined text-[14px]">lock</span>
-                  <span>{tab.label}</span>
-                </div>
-              );
-            }
-            return (
-              <button
-                key={index}
-                onClick={() => router.push(tab.path)}
-                className={`px-md py-sm border-b-2 text-[13px] transition-all duration-150 ${
-                  tab.active
-                    ? 'border-primary text-primary font-semibold'
-                    : 'border-transparent text-on-surface-variant hover:text-on-surface hover:border-outline-variant/40'
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        <ClientContextTabs clientId={clientId} />
       </header>
 
       {/* Main Grid Content */}
@@ -324,8 +299,9 @@ export default function ClientDetailPage() {
           </Card>
 
           {/* Contact Manager Card */}
-          <Card
-            title="Contatos e Pontos Focais"
+          <div id="contacts" className="scroll-mt-6">
+            <Card
+              title="Contatos e Pontos Focais"
             headerAction={
               !showContactForm && (
                 <Button variant="secondary" onClick={() => setShowContactForm(true)} className="py-1">
@@ -466,6 +442,7 @@ export default function ClientDetailPage() {
             )}
           </Card>
         </div>
+      </div>
 
         {/* Right Column: Tab Shortcuts & Phase 2 Modules */}
         <div className="lg:col-span-4 flex flex-col gap-lg">

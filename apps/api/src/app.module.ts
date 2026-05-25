@@ -9,6 +9,7 @@ import { InventoryModule } from "./inventory/inventory.module";
 import { TicketsModule } from "./tickets/tickets.module";
 import { ContractsModule } from "./contracts/contracts.module";
 import { FinancialsModule } from "./financials/financials.module";
+import { InvoicesModule } from "./invoices/invoices.module";
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { FinancialsModule } from "./financials/financials.module";
     TicketsModule,
     ContractsModule,
     FinancialsModule,
+    InvoicesModule,
   ],
   controllers: [HealthController],
   providers: [],

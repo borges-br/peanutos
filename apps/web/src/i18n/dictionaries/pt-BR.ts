@@ -387,6 +387,26 @@ export const ptBR = {
     tabA4: "Documento A4",
     tabHistory: "Histórico",
   },
+  invoices: {
+    title: "Faturas Comerciais",
+    subtitle: "Gerencie cobranças de serviços de TI, mensalidades e faturamento técnico.",
+    number: "Número",
+    client: "Cliente",
+    dueDate: "Vencimento",
+    total: "Total",
+    status: "Status",
+    details: "Ver Detalhes",
+    newInvoice: "Nova Fatura Comercial",
+  },
+  serviceOrders: {
+    title: "Ordens de Serviço (O.S.)",
+    subtitle: "Gerencie atendimentos em campo, visitas presenciais e relatórios de execução técnica.",
+    number: "Número",
+    client: "Cliente",
+    status: "Status",
+    details: "Ver Detalhes",
+    newSO: "Nova O.S.",
+  },
 };
 
 export type Dictionary = typeof ptBR;

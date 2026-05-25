@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../../lib/api';
 import { Button } from '@peanut/ui';
 import { useRouter, useParams } from 'next/navigation';
+import ClientContextTabs from '../../../../../components/layout/ClientContextTabs';
 
 export default function ClientTicketsPage() {
   const router = useRouter();
@@ -126,6 +127,10 @@ export default function ClientTicketsPage() {
           + Novo Chamado
         </Button>
       </header>
+
+      <div className="mb-lg select-text select-none">
+        <ClientContextTabs clientId={clientId} />
+      </div>
 
       {/* Filters & Search */}
       <div style={styles.filtersBar}>

@@ -11,6 +11,7 @@ import Select from '../../../../../components/ui/Select';
 import DataTable from '../../../../../components/ui/DataTable';
 import EmptyState from '../../../../../components/ui/EmptyState';
 import ErrorState from '../../../../../components/ui/ErrorState';
+import ClientContextTabs from '../../../../../components/layout/ClientContextTabs';
 
 export default function ClientUsersPage() {
   const params = useParams();
@@ -332,11 +333,7 @@ export default function ClientUsersPage() {
       </header>
 
       {/* Navigation tabs */}
-      <div className="border-b border-outline-variant/30 flex gap-sm overflow-x-auto">
-        <span onClick={() => router.push(`/dashboard/clients/${clientId}`)} className="py-2 px-md cursor-pointer border-b-2 border-transparent text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap">Geral / Contatos</span>
-        <span onClick={() => router.push(`/dashboard/clients/${clientId}/inventory`)} className="py-2 px-md cursor-pointer border-b-2 border-transparent text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap">Inventário</span>
-        <span className="py-2 px-md cursor-pointer border-b-2 border-primary text-sm font-semibold text-primary whitespace-nowrap">Usuários Finais</span>
-      </div>
+      <ClientContextTabs clientId={clientId} />
 
       {/* Filters & Search */}
       <div className="flex flex-col md:flex-row gap-md justify-between items-stretch md:items-center bg-surface border border-outline-variant p-md rounded-xl shadow-lg">

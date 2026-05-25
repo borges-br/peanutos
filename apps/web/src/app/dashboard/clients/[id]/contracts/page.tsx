@@ -5,6 +5,7 @@ import { apiRequest } from '../../../../../lib/api';
 import { Button } from '@peanut/ui';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '../../../../../context/AuthContext';
+import ClientContextTabs from '../../../../../components/layout/ClientContextTabs';
 
 export default function ClientContractsPage() {
   const router = useRouter();
@@ -117,6 +118,10 @@ export default function ClientContractsPage() {
           )}
         </div>
       </header>
+
+      <div className="mb-lg select-text select-none">
+        <ClientContextTabs clientId={id} />
+      </div>
 
       {contracts.length === 0 ? (
         <div style={styles.emptyState}>

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../../lib/api';
 import { Button } from '@peanut/ui';
 import { useParams, useRouter } from 'next/navigation';
+import ClientContextTabs from '../../../../../components/layout/ClientContextTabs';
 
 export default function ClientInventoryPage() {
   const params = useParams();
@@ -288,10 +289,8 @@ export default function ClientInventoryPage() {
       </header>
 
       {/* Navigation tabs */}
-      <div style={styles.tabsRow}>
-        <span onClick={() => router.push(`/dashboard/clients/${clientId}`)} style={styles.tab}>Geral / Contatos</span>
-        <span style={{ ...styles.tab, ...styles.activeTab }}>Inventário</span>
-        <span onClick={() => router.push(`/dashboard/clients/${clientId}/users`)} style={styles.tab}>Usuários Finais</span>
+      <div className="mb-lg select-text select-none">
+        <ClientContextTabs clientId={clientId} />
       </div>
 
       {/* Filters & Search */}
