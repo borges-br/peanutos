@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { apiRequest } from '../../../../../lib/api';
-import { useParams, useRouter } from 'next/navigation';
 import { useI18n } from '../../../../../i18n/useI18n';
 import Button from '../../../../../components/ui/Button';
 import Badge from '../../../../../components/ui/Badge';
@@ -12,18 +12,17 @@ import DataTable from '../../../../../components/ui/DataTable';
 import EmptyState from '../../../../../components/ui/EmptyState';
 import ErrorState from '../../../../../components/ui/ErrorState';
 import ClientContextTabs from '../../../../../components/layout/ClientContextTabs';
+import ClientPageHeader from '../../../../../components/layout/ClientPageHeader';
 
 export default function ClientUsersPage() {
   const params = useParams();
-  const router = useRouter();
   const { t } = useI18n();
   const clientId = params.id as string;
 
   const [client, setClient] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [meta, setMeta] = useState<any>({ page: 1, totalPages: 1, total: 0 });
-  
-  // Search & filters
+
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
@@ -31,12 +30,10 @@ export default function ClientUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Form modal state
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  
-  // Form fields
+
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -44,7 +41,7 @@ export default function ClientUsersPage() {
   const [jobTitle, setJobTitle] = useState('');
   const [formStatus, setFormStatus] = useState('ACTIVE');
   const [notes, setNotes] = useState('');
-  
+
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
 
@@ -63,7 +60,7 @@ export default function ClientUsersPage() {
     try {
       const statusParam = status ? `&status=${status}` : '';
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-      
+
       const response = await apiRequest(
         `/clients/${clientId}/users?page=${page}&limit=10${statusParam}${searchParam}`
       );
@@ -126,7 +123,6 @@ export default function ClientUsersPage() {
     setFormSubmitting(true);
     setFormError(null);
 
-    // Basic Validation
     if (!fullName.trim() || fullName.trim().length < 2) {
       setFormError('Nome completo é obrigatório (mínimo 2 caracteres)');
       setFormSubmitting(false);
@@ -193,15 +189,18 @@ export default function ClientUsersPage() {
 
   const getStatusVariant = (st: string) => {
     switch (st) {
-      case 'ACTIVE': return 'success';
-      case 'INACTIVE': return 'error';
+      case 'ACTIVE':
+        return 'success';
+      case 'INACTIVE':
+        return 'error';
       case 'ON_LEAVE':
-      case 'PENDING_REVIEW': return 'warning';
-      default: return 'neutral';
+      case 'PENDING_REVIEW':
+        return 'warning';
+      default:
+        return 'neutral';
     }
   };
 
-  // DataTable columns definition
   const columns = [
     {
       header: t.clientUsers.userCol,
@@ -252,48 +251,39 @@ export default function ClientUsersPage() {
     },
     {
       header: t.clientUsers.actionsCol,
-      className: "text-right",
+      className: 'text-right',
       render: (clientUser: any) => (
-        <Button
-          variant="outline"
-          onClick={() => openEditModal(clientUser)}
-          className="py-1 px-3 text-xs"
-        >
+        <Button variant="outline" onClick={() => openEditModal(clientUser)} className="py-1 px-3 text-xs">
           {t.common.edit}
         </Button>
       ),
     },
   ];
 
-  // Mobile rendering
   const renderMobileCard = (clientUser: any) => {
     const badgeLabel = clientUserStatuses.find(s => s.value === clientUser.status)?.label || clientUser.status;
 
     return (
       <div className="flex flex-col gap-sm">
-        <div className="flex justify-between items-start">
-          <div className="flex flex-col max-w-[70%]">
-            <span className="font-bold text-on-surface">{clientUser.fullName}</span>
+        <div className="flex justify-between items-start gap-sm">
+          <div className="flex min-w-0 flex-col">
+            <span className="font-bold text-on-surface truncate">{clientUser.fullName}</span>
             {clientUser.jobTitle && <span className="text-[11px] text-on-surface-variant/70">{clientUser.jobTitle}</span>}
           </div>
           <Badge variant={getStatusVariant(clientUser.status)}>{badgeLabel}</Badge>
         </div>
-        <div className="h-[1px] bg-outline-variant/30 my-xs"></div>
+        <div className="h-[1px] bg-outline-variant/30 my-xs" />
         <div className="grid grid-cols-2 gap-xs text-[12px]">
-          <div className="flex flex-col">
+          <div className="flex min-w-0 flex-col">
             <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Contato</span>
             <span className="truncate mt-0.5 font-mono">{clientUser.email || '--'}</span>
           </div>
-          <div className="flex flex-col">
+          <div className="flex min-w-0 flex-col">
             <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Setor</span>
             <span className="truncate mt-0.5 text-on-surface">{clientUser.department || '--'}</span>
           </div>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => openEditModal(clientUser)}
-          className="w-full mt-sm justify-center py-2"
-        >
+        <Button variant="outline" onClick={() => openEditModal(clientUser)} className="w-full mt-sm justify-center py-2">
           {t.common.edit}
         </Button>
       </div>
@@ -302,42 +292,32 @@ export default function ClientUsersPage() {
 
   const statusOptions = [
     { value: '', label: 'Todos os status' },
-    ...clientUserStatuses.map(s => ({ value: s.value, label: s.label }))
+    ...clientUserStatuses.map(s => ({ value: s.value, label: s.label })),
+  ];
+  const clientName = client?.tradeName || client?.legalName || t.clients.title;
+  const breadcrumbs = [
+    { label: t.clients.title, href: '/dashboard/clients' },
+    { label: clientName, href: `/dashboard/clients/${clientId}` },
+    { label: t.clients.tabs.users },
   ];
 
   return (
     <div className="flex flex-col gap-lg select-none">
-      {/* Page Header */}
-      <header className="flex justify-between items-center w-full">
-        <div className="flex flex-col gap-xs">
-          <div className="flex items-center gap-xs text-[12px] text-on-surface-variant">
-            <span onClick={() => router.push('/dashboard/clients')} className="cursor-pointer text-primary hover:underline font-medium">Clientes</span>
-            <span>/</span>
-            <span onClick={() => router.push(`/dashboard/clients/${clientId}`)} className="cursor-pointer text-primary hover:underline font-medium">
-              {client?.tradeName || 'Dossiê'}
-            </span>
-            <span>/</span>
-            <span className="text-on-surface-variant/70">Usuários Finais</span>
-          </div>
-          <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight mt-1">
-            {t.clientUsers.title}
-          </h2>
-          <p className="text-[14px] text-on-surface-variant">
-            {t.clientUsers.subtitle.replace('{name}', client?.tradeName || '...')}
-          </p>
-        </div>
-        <Button variant="primary" onClick={openCreateModal}>
-          <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">person_add</span>
-          Novo Usuário Final
-        </Button>
-      </header>
+      <ClientPageHeader
+        breadcrumbs={breadcrumbs}
+        title={t.clients.pages.usersTitle}
+        description={t.clients.pages.usersDescription.replace('{name}', clientName)}
+        primaryActions={
+          <Button variant="primary" onClick={openCreateModal}>
+            <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">person_add</span>
+            {t.clients.actions.newUser}
+          </Button>
+        }
+        tabs={<ClientContextTabs clientId={clientId} />}
+      />
 
-      {/* Navigation tabs */}
-      <ClientContextTabs clientId={clientId} />
-
-      {/* Filters & Search */}
       <div className="flex flex-col md:flex-row gap-md justify-between items-stretch md:items-center bg-surface border border-outline-variant p-md rounded-xl shadow-lg">
-        <form onSubmit={handleSearchSubmit} className="flex gap-sm flex-1 max-w-xl">
+        <form onSubmit={handleSearchSubmit} className="flex flex-col gap-sm flex-1 sm:flex-row sm:max-w-xl">
           <Input
             type="text"
             placeholder="Buscar por nome, e-mail, departamento ou cargo..."
@@ -346,11 +326,11 @@ export default function ClientUsersPage() {
             className="flex-1"
           />
           <Button type="submit" variant="secondary" className="px-5">
-            Buscar
+            {t.common.searchAction}
           </Button>
         </form>
 
-        <div className="flex gap-sm items-center">
+        <div className="flex flex-col gap-sm sm:flex-row sm:items-center">
           <Select
             value={status}
             onChange={(e) => {
@@ -370,7 +350,6 @@ export default function ClientUsersPage() {
 
       {error && <ErrorState onRetry={fetchUsers} />}
 
-      {/* Data table canvas */}
       {!error && (
         loading ? (
           <div className="flex flex-col gap-sm">
@@ -384,7 +363,7 @@ export default function ClientUsersPage() {
             description={t.states.emptyDescription}
             action={
               <Button variant="outline" onClick={openCreateModal}>
-                Cadastrar primeiro usuário
+                {t.clients.actions.firstUser}
               </Button>
             }
           />
@@ -397,7 +376,6 @@ export default function ClientUsersPage() {
               rowKey={(user) => user.id}
             />
 
-            {/* Pagination Controls */}
             <div className="flex flex-col sm:flex-row justify-between items-center gap-md border-t border-outline-variant/30 pt-md px-md">
               <span className="text-[13px] text-on-surface-variant font-mono">
                 Mostrando {users.length} de {meta.total} usuários (Pág. {meta.page} de {meta.totalPages})
@@ -409,7 +387,7 @@ export default function ClientUsersPage() {
                   onClick={() => setPage((p) => p - 1)}
                   className="py-1 px-4 text-xs"
                 >
-                  Anterior
+                  {t.common.previous}
                 </Button>
                 <Button
                   variant="outline"
@@ -417,7 +395,7 @@ export default function ClientUsersPage() {
                   onClick={() => setPage((p) => p + 1)}
                   className="py-1 px-4 text-xs"
                 >
-                  Próximo
+                  {t.common.next}
                 </Button>
               </div>
             </div>
@@ -425,20 +403,21 @@ export default function ClientUsersPage() {
         )
       )}
 
-      {/* Creating / Editing Modal Dialog */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-all duration-200">
-          <div className="bg-surface border border-outline-variant rounded-2xl w-full max-w-xl p-lg shadow-2xl relative flex flex-col gap-md animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-all duration-200 p-md">
+          <div className="bg-surface border border-outline-variant rounded-2xl w-full max-w-xl p-lg shadow-2xl relative flex flex-col gap-md animate-in fade-in duration-200 max-h-[90vh] overflow-y-auto">
             <header className="flex justify-between items-center w-full border-b border-outline-variant/30 pb-sm">
               <h3 className="font-title-sm text-sm font-bold text-on-surface">
-                {isEditing ? 'Editar Usuário Final' : 'Novo Usuário Final'}
+                {isEditing ? t.clientUsers.editTitle : t.clientUsers.newTitle}
               </h3>
-              <button
+              <Button
+                type="button"
+                variant="ghost"
                 onClick={() => setShowModal(false)}
-                className="text-on-surface-variant hover:text-on-surface text-2xl font-light cursor-pointer select-none leading-none"
+                className="h-8 w-8 px-0 py-0 text-xl leading-none"
               >
                 &times;
-              </button>
+              </Button>
             </header>
 
             <form onSubmit={handleFormSubmit} className="flex flex-col gap-md">
@@ -449,65 +428,48 @@ export default function ClientUsersPage() {
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                <div className="flex flex-col gap-xs">
-                  <label className="text-[12px] font-semibold text-on-surface-variant">Nome Completo *</label>
-                  <Input
-                    type="text"
-                    required
-                    placeholder="Ex: Maria Souza"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-xs">
-                  <label className="text-[12px] font-semibold text-on-surface-variant">E-mail</label>
-                  <Input
-                    type="email"
-                    placeholder="Ex: maria.souza@acme.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-xs">
-                  <label className="text-[12px] font-semibold text-on-surface-variant">Telefone</label>
-                  <Input
-                    type="text"
-                    placeholder="Ex: (11) 98888-8888"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-xs">
-                  <label className="text-[12px] font-semibold text-on-surface-variant">Departamento</label>
-                  <Input
-                    type="text"
-                    placeholder="Ex: Financeiro"
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-xs">
-                  <label className="text-[12px] font-semibold text-on-surface-variant">Cargo / Função</label>
-                  <Input
-                    type="text"
-                    placeholder="Ex: Analista Fiscal"
-                    value={jobTitle}
-                    onChange={(e) => setJobTitle(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-xs">
-                  <label className="text-[12px] font-semibold text-on-surface-variant">Status</label>
-                  <Select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value)}
-                    options={clientUserStatuses}
-                  />
-                </div>
+                <Input
+                  label="Nome Completo *"
+                  type="text"
+                  required
+                  placeholder="Ex: Maria Souza"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+                <Input
+                  label="E-mail"
+                  type="email"
+                  placeholder="Ex: maria.souza@acme.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <Input
+                  label="Telefone"
+                  type="text"
+                  placeholder="Ex: (11) 98888-8888"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+                <Input
+                  label="Departamento"
+                  type="text"
+                  placeholder="Ex: Financeiro"
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                />
+                <Input
+                  label="Cargo / Função"
+                  type="text"
+                  placeholder="Ex: Analista Fiscal"
+                  value={jobTitle}
+                  onChange={(e) => setJobTitle(e.target.value)}
+                />
+                <Select
+                  label="Status"
+                  value={formStatus}
+                  onChange={(e) => setFormStatus(e.target.value)}
+                  options={clientUserStatuses}
+                />
               </div>
 
               <div className="flex flex-col gap-xs">
@@ -522,10 +484,10 @@ export default function ClientUsersPage() {
 
               <footer className="flex justify-end gap-sm border-t border-outline-variant/30 pt-md mt-sm">
                 <Button type="button" variant="outline" onClick={() => setShowModal(false)}>
-                  Cancelar
+                  {t.common.cancel}
                 </Button>
                 <Button type="submit" variant="primary" disabled={formSubmitting}>
-                  {formSubmitting ? 'Salvando...' : 'Salvar'}
+                  {formSubmitting ? t.common.saving : t.common.save}
                 </Button>
               </footer>
             </form>

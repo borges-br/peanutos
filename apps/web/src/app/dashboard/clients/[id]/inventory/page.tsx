@@ -1,22 +1,31 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { apiRequest } from '../../../../../lib/api';
-import { Button } from '@peanut/ui';
+import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { apiRequest } from '../../../../../lib/api';
+import { useI18n } from '../../../../../i18n/useI18n';
+import Button from '../../../../../components/ui/Button';
+import Badge from '../../../../../components/ui/Badge';
+import Input from '../../../../../components/ui/Input';
+import Select from '../../../../../components/ui/Select';
+import DataTable from '../../../../../components/ui/DataTable';
+import EmptyState from '../../../../../components/ui/EmptyState';
 import ClientContextTabs from '../../../../../components/layout/ClientContextTabs';
+import ClientPageHeader from '../../../../../components/layout/ClientPageHeader';
+
+type BadgeVariant = 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'purple';
 
 export default function ClientInventoryPage() {
   const params = useParams();
   const router = useRouter();
+  const { t } = useI18n();
   const clientId = params.id as string;
 
   const [client, setClient] = useState<any>(null);
   const [clientUsers, setClientUsers] = useState<any[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
   const [meta, setMeta] = useState<any>({ page: 1, totalPages: 1, total: 0 });
-  
-  // Search & filters
+
   const [search, setSearch] = useState('');
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');
@@ -25,12 +34,10 @@ export default function ClientInventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Form modal state
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
-  
-  // Form fields
+
   const [name, setName] = useState('');
   const [assetType, setAssetType] = useState('WORKSTATION');
   const [assetStatus, setAssetStatus] = useState('OPERATIONAL');
@@ -50,6 +57,43 @@ export default function ClientInventoryPage() {
 
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
+
+  const assetTypes = [
+    { value: 'WORKSTATION', label: 'Estação de Trabalho' },
+    { value: 'NOTEBOOK', label: 'Notebook' },
+    { value: 'SERVER', label: 'Servidor' },
+    { value: 'PRINTER', label: 'Impressora' },
+    { value: 'ROUTER', label: 'Roteador' },
+    { value: 'SWITCH', label: 'Switch' },
+    { value: 'ACCESS_POINT', label: 'Access Point' },
+    { value: 'FIREWALL', label: 'Firewall' },
+    { value: 'CAMERA', label: 'Câmera IP' },
+    { value: 'NVR', label: 'NVR / DVR' },
+    { value: 'UPS', label: 'Nobreak (UPS)' },
+    { value: 'RACK', label: 'Rack' },
+    { value: 'NAS', label: 'Storage NAS' },
+    { value: 'MOBILE_DEVICE', label: 'Dispositivo Móvel' },
+    { value: 'VIRTUAL_MACHINE', label: 'Máquina Virtual' },
+    { value: 'CLOUD_SERVICE', label: 'Serviço em Nuvem' },
+    { value: 'LICENSE', label: 'Licença Geral' },
+    { value: 'SOFTWARE_LICENSE', label: 'Licença de Software' },
+    { value: 'VPN', label: 'Túnel VPN' },
+    { value: 'STORAGE', label: 'Armazenamento' },
+    { value: 'OTHER', label: 'Outro' },
+  ];
+
+  const assetStatuses = [
+    { value: 'OPERATIONAL', label: 'Operacional' },
+    { value: 'MAINTENANCE', label: 'Em Manutenção' },
+    { value: 'OUT_OF_STANDARD', label: 'Fora de Padrão' },
+    { value: 'STOCK', label: 'Em Estoque' },
+    { value: 'IN_STOCK', label: 'Em Estoque (Novo)' },
+    { value: 'RETIRED', label: 'Aposentado' },
+    { value: 'SCRAPPED', label: 'Sucateado' },
+    { value: 'LOST', label: 'Extraviado' },
+    { value: 'PENDING_VALIDATION', label: 'Pendente Homologação' },
+    { value: 'PENDING_REVIEW', label: 'Em Revisão' },
+  ];
 
   const fetchClientDetails = async () => {
     try {
@@ -76,7 +120,7 @@ export default function ClientInventoryPage() {
       const typeParam = type ? `&type=${type}` : '';
       const statusParam = status ? `&status=${status}` : '';
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-      
+
       const response = await apiRequest(
         `/clients/${clientId}/assets?page=${page}&limit=10${typeParam}${statusParam}${searchParam}`
       );
@@ -140,7 +184,7 @@ export default function ClientInventoryPage() {
     setOperatingSystem(asset.operatingSystem || '');
     setLocation(asset.location || '');
     setRemoteAccessId(asset.remoteAccessId || '');
-    setSensitiveDataEncrypted(''); // Never populate sensitives in standard editing form!
+    setSensitiveDataEncrypted('');
     setNotes(asset.notes || '');
     setAssignedClientUserId(asset.assignedClientUserId || '');
     setFormError(null);
@@ -152,7 +196,6 @@ export default function ClientInventoryPage() {
     setFormSubmitting(true);
     setFormError(null);
 
-    // Validation
     if (!name.trim() || name.trim().length < 2) {
       setFormError('Nome do ativo é obrigatório (mínimo 2 caracteres)');
       setFormSubmitting(false);
@@ -228,480 +271,338 @@ export default function ClientInventoryPage() {
     }
   };
 
-  const assetTypes = [
-    { value: 'WORKSTATION', label: 'Estação de Trabalho' },
-    { value: 'NOTEBOOK', label: 'Notebook' },
-    { value: 'SERVER', label: 'Servidor' },
-    { value: 'PRINTER', label: 'Impressora' },
-    { value: 'ROUTER', label: 'Roteador' },
-    { value: 'SWITCH', label: 'Switch' },
-    { value: 'ACCESS_POINT', label: 'Access Point' },
-    { value: 'FIREWALL', label: 'Firewall' },
-    { value: 'CAMERA', label: 'Câmera IP' },
-    { value: 'NVR', label: 'NVR / DVR' },
-    { value: 'UPS', label: 'Nobreak (UPS)' },
-    { value: 'RACK', label: 'Rack' },
-    { value: 'NAS', label: 'Storage NAS' },
-    { value: 'MOBILE_DEVICE', label: 'Dispositivo Móvel' },
-    { value: 'VIRTUAL_MACHINE', label: 'Máquina Virtual' },
-    { value: 'CLOUD_SERVICE', label: 'Serviço em Nuvem' },
-    { value: 'LICENSE', label: 'Licença Geral' },
-    { value: 'SOFTWARE_LICENSE', label: 'Licença de Software' },
-    { value: 'VPN', label: 'Túnel VPN' },
-    { value: 'STORAGE', label: 'Armazenamento' },
-    { value: 'OTHER', label: 'Outro' },
+  const getAssetStatusVariant = (assetStatusValue: string): BadgeVariant => {
+    switch (assetStatusValue) {
+      case 'OPERATIONAL':
+        return 'success';
+      case 'MAINTENANCE':
+      case 'PENDING_VALIDATION':
+      case 'PENDING_REVIEW':
+        return 'warning';
+      case 'OUT_OF_STANDARD':
+      case 'SCRAPPED':
+      case 'LOST':
+        return 'error';
+      case 'STOCK':
+      case 'IN_STOCK':
+        return 'info';
+      default:
+        return 'neutral';
+    }
+  };
+
+  const getAssetStatusLabel = (assetStatusValue: string) =>
+    assetStatuses.find(s => s.value === assetStatusValue)?.label || assetStatusValue;
+
+  const getAssetTypeLabel = (assetTypeValue: string) =>
+    assetTypes.find(item => item.value === assetTypeValue)?.label || assetTypeValue;
+
+  const assetColumns = [
+    {
+      header: 'Ativo / Hostname',
+      render: (asset: any) => (
+        <div className="flex flex-col py-0.5">
+          <span className="font-semibold text-on-surface">{asset.name}</span>
+          {asset.hostname && <span className="mt-0.5 font-mono text-[11px] text-on-surface-variant/70">{asset.hostname}</span>}
+        </div>
+      ),
+    },
+    {
+      header: t.inventory.type,
+      render: (asset: any) => <Badge variant="neutral">{getAssetTypeLabel(asset.type)}</Badge>,
+    },
+    {
+      header: t.common.status,
+      render: (asset: any) => (
+        <Badge variant={getAssetStatusVariant(asset.status)}>{getAssetStatusLabel(asset.status)}</Badge>
+      ),
+    },
+    {
+      header: t.inventory.assignedUser,
+      render: (asset: any) => (
+        asset.assignedClientUser ? (
+          <span className="font-medium text-on-surface">{asset.assignedClientUser.fullName}</span>
+        ) : (
+          <span className="text-[12px] italic text-on-surface-variant/60">{t.common.notAssigned}</span>
+        )
+      ),
+    },
+    {
+      header: t.inventory.serialAssetTag,
+      render: (asset: any) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono text-[12px] text-on-surface">{asset.serialNumber || '--'}</span>
+          {asset.assetTag && <span className="w-fit rounded bg-surface-container-highest px-1.5 py-0.5 text-[11px] text-on-surface-variant">{asset.assetTag}</span>}
+        </div>
+      ),
+    },
+    {
+      header: t.inventory.location,
+      render: (asset: any) => <span className="text-on-surface-variant">{asset.location || '--'}</span>,
+    },
+    {
+      header: t.common.actions,
+      className: 'text-right',
+      render: (asset: any) => (
+        <div className="flex flex-wrap justify-end gap-sm">
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/dashboard/clients/${clientId}/assets/${asset.id}`)}
+            className="py-1 px-3 text-xs"
+          >
+            {t.common.details}
+          </Button>
+          <Button variant="outline" onClick={() => openEditModal(asset)} className="py-1 px-3 text-xs">
+            {t.common.edit}
+          </Button>
+          {asset.status !== 'RETIRED' && (
+            <Button variant="danger" onClick={() => handleArchiveAsset(asset)} className="py-1 px-3 text-xs">
+              {t.common.archive}
+            </Button>
+          )}
+        </div>
+      ),
+    },
   ];
 
-  const assetStatuses = [
-    { value: 'OPERATIONAL', label: 'Operacional', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
-    { value: 'MAINTENANCE', label: 'Em Manutenção', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
-    { value: 'OUT_OF_STANDARD', label: 'Fora de Padrão', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },
-    { value: 'STOCK', label: 'Em Estoque', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
-    { value: 'IN_STOCK', label: 'Em Estoque (Novo)', color: '#60a5fa', bg: 'rgba(96, 165, 250, 0.1)' },
-    { value: 'RETIRED', label: 'Aposentado', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)' },
-    { value: 'SCRAPPED', label: 'Sucateado', color: '#dc2626', bg: 'rgba(220, 38, 38, 0.1)' },
-    { value: 'LOST', label: 'Extraviado', color: '#7c3aed', bg: 'rgba(124, 58, 237, 0.1)' },
-    { value: 'PENDING_VALIDATION', label: 'Pendente Homologação', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
-    { value: 'PENDING_REVIEW', label: 'Em Revisão', color: '#fb7185', bg: 'rgba(251, 113, 133, 0.1)' },
+  const renderMobileAsset = (asset: any) => (
+    <div className="flex flex-col gap-sm">
+      <div className="flex items-start justify-between gap-sm">
+        <div className="min-w-0">
+          <span className="block truncate font-bold text-on-surface">{asset.name}</span>
+          {asset.hostname && <span className="font-mono text-[11px] text-on-surface-variant/70">{asset.hostname}</span>}
+        </div>
+        <Badge variant={getAssetStatusVariant(asset.status)}>{getAssetStatusLabel(asset.status)}</Badge>
+      </div>
+      <div className="grid grid-cols-2 gap-xs border-y border-outline-variant/30 py-sm text-[12px]">
+        <div className="flex min-w-0 flex-col">
+          <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Tipo</span>
+          <span className="truncate text-on-surface">{getAssetTypeLabel(asset.type)}</span>
+        </div>
+        <div className="flex min-w-0 flex-col">
+          <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Usuário</span>
+          <span className="truncate text-on-surface">{asset.assignedClientUser?.fullName || t.common.notAssigned}</span>
+        </div>
+        <div className="flex min-w-0 flex-col">
+          <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Serial</span>
+          <span className="truncate font-mono text-on-surface">{asset.serialNumber || '--'}</span>
+        </div>
+        <div className="flex min-w-0 flex-col">
+          <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Local</span>
+          <span className="truncate text-on-surface">{asset.location || '--'}</span>
+        </div>
+      </div>
+      <div className="flex flex-col gap-sm sm:flex-row">
+        <Button
+          variant="outline"
+          onClick={() => router.push(`/dashboard/clients/${clientId}/assets/${asset.id}`)}
+          className="w-full py-2"
+        >
+          {t.common.details}
+        </Button>
+        <Button variant="outline" onClick={() => openEditModal(asset)} className="w-full py-2">
+          {t.common.edit}
+        </Button>
+      </div>
+    </div>
+  );
+
+  const clientName = client?.tradeName || client?.legalName || t.clients.title;
+  const breadcrumbs = [
+    { label: t.clients.title, href: '/dashboard/clients' },
+    { label: clientName, href: `/dashboard/clients/${clientId}` },
+    { label: t.clients.tabs.inventory },
   ];
 
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <div style={styles.headerTitleArea}>
-          <div style={styles.breadcrumbs}>
-            <span onClick={() => router.push('/dashboard/clients')} style={styles.breadcrumbLink}>Clientes</span>
-            <span style={{ color: '#6b7280' }}>/</span>
-            <span onClick={() => router.push(`/dashboard/clients/${clientId}`)} style={styles.breadcrumbLink}>
-              {client?.tradeName || 'Detalhes'}
-            </span>
-            <span style={{ color: '#6b7280' }}>/</span>
-            <span style={{ color: '#9ca3af' }}>Inventário</span>
-          </div>
-          <h1 style={styles.title}>Inventário do Cliente</h1>
-          <p style={styles.subtitle}>
-            Gerencie e organize a estrutura de hardware, ativos lógicos e licenças para <strong>{client?.tradeName || '...'}</strong>.
-          </p>
-        </div>
-        <Button variant="primary" onClick={openCreateModal}>
-          + Novo Ativo
-        </Button>
-      </header>
+    <div className="flex flex-col gap-lg select-none">
+      <ClientPageHeader
+        breadcrumbs={breadcrumbs}
+        title={t.clients.pages.inventoryTitle}
+        description={t.clients.pages.inventoryDescription.replace('{name}', clientName)}
+        primaryActions={
+          <Button variant="primary" onClick={openCreateModal}>
+            <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">add_circle</span>
+            {t.clients.actions.newAsset}
+          </Button>
+        }
+        tabs={<ClientContextTabs clientId={clientId} />}
+      />
 
-      {/* Navigation tabs */}
-      <div className="mb-lg select-text select-none">
-        <ClientContextTabs clientId={clientId} />
-      </div>
-
-      {/* Filters & Search */}
-      <div style={styles.filtersBar}>
-        <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
-          <input
+      <div className="flex flex-col gap-md rounded-xl border border-outline-variant bg-surface p-md shadow-lg md:flex-row md:items-center md:justify-between">
+        <form onSubmit={handleSearchSubmit} className="flex flex-1 flex-col gap-sm sm:flex-row md:max-w-2xl">
+          <Input
             type="text"
             placeholder="Buscar por nome, host, série, patrimônio ou local..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={styles.searchInput}
+            className="flex-1"
           />
-          <Button type="submit" variant="secondary" style={styles.searchBtn}>
-            Buscar
+          <Button type="submit" variant="secondary" className="px-5">
+            {t.common.searchAction}
           </Button>
         </form>
 
-        <div style={styles.filtersSelects}>
-          <select
+        <div className="flex flex-col gap-sm sm:flex-row">
+          <Select
             value={type}
             onChange={(e) => {
               setType(e.target.value);
               setPage(1);
             }}
-            style={styles.filterSelect}
-          >
-            <option value="">Todos os tipos</option>
-            {assetTypes.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
-
-          <select
+            options={[{ value: '', label: 'Todos os tipos' }, ...assetTypes]}
+            className="min-w-[170px]"
+          />
+          <Select
             value={status}
             onChange={(e) => {
               setStatus(e.target.value);
               setPage(1);
             }}
-            style={styles.filterSelect}
-          >
-            <option value="">Todos os status</option>
-            {assetStatuses.map(s => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
+            options={[{ value: '', label: 'Todos os status' }, ...assetStatuses]}
+            className="min-w-[170px]"
+          />
         </div>
       </div>
 
-      {error && <div style={styles.errorAlert}>{error}</div>}
-
-      {/* Table */}
-      {loading ? (
-        <div style={styles.loadingArea}>
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} style={styles.skeletonRow} />
-          ))}
-        </div>
-      ) : assets.length === 0 ? (
-        <div style={styles.emptyState}>
-          <p style={styles.emptyText}>Nenhum equipamento ou licença cadastrado ou encontrado para este cliente.</p>
-          <Button variant="outline" onClick={openCreateModal}>
-            Cadastrar primeiro ativo
-          </Button>
-        </div>
-      ) : (
-        <div style={styles.tableWrapper}>
-          <table style={styles.table}>
-            <thead>
-              <tr style={styles.thRow}>
-                <th style={styles.th}>Ativo / Hostname</th>
-                <th style={styles.th}>Tipo</th>
-                <th style={styles.th}>Status</th>
-                <th style={styles.th}>Usuário Vinculado</th>
-                <th style={styles.th}>Nº Série / Tag</th>
-                <th style={styles.th}>Localização</th>
-                <th style={styles.th}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map((asset) => {
-                const typeObj = assetTypes.find(t => t.value === asset.type);
-                const statusObj = assetStatuses.find(s => s.value === asset.status);
-
-                return (
-                  <tr key={asset.id} style={styles.tr}>
-                    <td style={styles.td}>
-                      <div style={styles.assetNameArea}>
-                        <span
-                          onClick={() => router.push(`/dashboard/clients/${clientId}/assets/${asset.id}`)}
-                          style={styles.assetLink}
-                        >
-                          {asset.name}
-                        </span>
-                        {asset.hostname && <span style={styles.assetHost}>{asset.hostname}</span>}
-                      </div>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={styles.typeBadge}>{typeObj?.label || asset.type}</span>
-                    </td>
-                    <td style={styles.td}>
-                      <span
-                        style={{
-                          ...styles.statusBadge,
-                          backgroundColor: statusObj?.bg || 'rgba(255, 255, 255, 0.05)',
-                          color: statusObj?.color || '#f9fafb',
-                          borderColor: statusObj?.bg || 'transparent',
-                        }}
-                      >
-                        {statusObj?.label || asset.status}
-                      </span>
-                    </td>
-                    <td style={styles.td}>
-                      {asset.assignedClientUser ? (
-                        <span style={styles.assignedUser}>{asset.assignedClientUser.fullName}</span>
-                      ) : (
-                        <span style={styles.unassignedUser}>Não atribuído</span>
-                      )}
-                    </td>
-                    <td style={styles.td}>
-                      <div style={styles.serialTagArea}>
-                        {asset.serialNumber ? (
-                          <span style={styles.serial}>{asset.serialNumber}</span>
-                        ) : (
-                          <span style={styles.emptyTextField}>Sem serial</span>
-                        )}
-                        {asset.assetTag && <span style={styles.tag}>{asset.assetTag}</span>}
-                      </div>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={{ color: '#9ca3af' }}>{asset.location || '-'}</span>
-                    </td>
-                    <td style={styles.td}>
-                      <div style={styles.actionBtns}>
-                        <Button
-                          variant="outline"
-                          onClick={() => router.push(`/dashboard/clients/${clientId}/assets/${asset.id}`)}
-                          style={{ padding: '6px 12px', fontSize: '12px' }}
-                        >
-                          Detalhes
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => openEditModal(asset)}
-                          style={{ padding: '6px 12px', fontSize: '12px' }}
-                        >
-                          Editar
-                        </Button>
-                        {asset.status !== 'RETIRED' && (
-                          <Button
-                            variant="outline"
-                            onClick={() => handleArchiveAsset(asset)}
-                            style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.2)', color: '#fca5a5' }}
-                          >
-                            Arquivar
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {/* Pagination */}
-          <div style={styles.pagination}>
-            <span style={styles.pageInfo}>
-              Mostrando {assets.length} de {meta.total} ativos (Pág. {meta.page} de {meta.totalPages})
-            </span>
-            <div style={styles.paginationBtns}>
-              <Button
-                variant="outline"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                style={styles.pageBtn}
-              >
-                Anterior
-              </Button>
-              <Button
-                variant="outline"
-                disabled={page >= meta.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                style={styles.pageBtn}
-              >
-                Próximo
-              </Button>
-            </div>
-          </div>
+      {error && (
+        <div className="rounded-xl border border-error-container/20 bg-error-container/10 p-md text-sm text-error">
+          {error}
         </div>
       )}
 
-      {/* Creating / Editing Modal */}
-      {showModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>
-                {isEditing ? 'Editar Ativo' : 'Novo Ativo'}
-              </h3>
-              <button onClick={() => setShowModal(false)} style={styles.closeBtn}>×</button>
+      {!error && (
+        loading ? (
+          <div className="flex flex-col gap-sm">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-12 animate-pulse rounded-xl border border-outline-variant/30 bg-surface-container-low" />
+            ))}
+          </div>
+        ) : assets.length === 0 ? (
+          <EmptyState
+            title={t.clients.empty.inventory}
+            description={t.states.emptyDescription}
+            action={
+              <Button variant="outline" onClick={openCreateModal}>
+                {t.clients.actions.firstAsset}
+              </Button>
+            }
+          />
+        ) : (
+          <div className="flex flex-col gap-md">
+            <DataTable
+              columns={assetColumns}
+              data={assets}
+              mobileRender={renderMobileAsset}
+              rowKey={(asset) => asset.id}
+            />
+
+            <div className="flex flex-col items-center justify-between gap-md border-t border-outline-variant/30 px-md pt-md sm:flex-row">
+              <span className="text-[13px] text-on-surface-variant font-mono">
+                Mostrando {assets.length} de {meta.total} ativos (Pág. {meta.page} de {meta.totalPages})
+              </span>
+              <div className="flex gap-sm">
+                <Button
+                  variant="outline"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  className="py-1 px-4 text-xs"
+                >
+                  {t.common.previous}
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={page >= meta.totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="py-1 px-4 text-xs"
+                >
+                  {t.common.next}
+                </Button>
+              </div>
             </div>
-            
-            <form onSubmit={handleFormSubmit} style={styles.modalForm}>
-              {formError && <div style={styles.errorAlert}>{formError}</div>}
+          </div>
+        )
+      )}
 
-              <div style={styles.formRow}>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Nome do Ativo *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: NB-FIN-003 ou Licença Office365"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-md backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col gap-md overflow-y-auto rounded-2xl border border-outline-variant bg-surface p-lg shadow-2xl animate-in fade-in duration-200">
+            <header className="flex items-center justify-between border-b border-outline-variant/30 pb-sm">
+              <h3 className="font-title-sm text-sm font-bold text-on-surface">
+                {isEditing ? 'Editar Ativo' : t.clients.actions.newAsset}
+              </h3>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowModal(false)}
+                className="h-8 w-8 px-0 py-0 text-xl leading-none"
+              >
+                &times;
+              </Button>
+            </header>
 
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Hostname</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: nb-acme-financeiro"
-                    value={hostname}
-                    onChange={(e) => setHostname(e.target.value)}
-                    style={styles.input}
-                  />
+            <form onSubmit={handleFormSubmit} className="flex flex-col gap-md">
+              {formError && (
+                <div className="rounded-xl border border-error-container/20 bg-error-container/10 p-sm text-xs font-semibold text-error">
+                  {formError}
                 </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-md md:grid-cols-2">
+                <Input label="Nome do Ativo *" required placeholder="Ex: NB-FIN-003 ou Licença Office365" value={name} onChange={(e) => setName(e.target.value)} />
+                <Input label={t.inventory.hostname} placeholder="Ex: nb-acme-financeiro" value={hostname} onChange={(e) => setHostname(e.target.value)} />
+                <Select label="Tipo de Ativo *" value={assetType} onChange={(e) => setAssetType(e.target.value)} options={assetTypes} />
+                <Select label="Status *" value={assetStatus} onChange={(e) => setAssetStatus(e.target.value)} options={assetStatuses} />
+                <Input label="Fabricante" placeholder="Ex: Dell" value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} />
+                <Input label="Modelo" placeholder="Ex: Latitude 3420" value={model} onChange={(e) => setModel(e.target.value)} />
+                <Input label="Número de Série" placeholder="Ex: 8XF8SD2" value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} />
+                <Input label="Patrimônio / Asset Tag" placeholder="Ex: ACME-0023" value={assetTag} onChange={(e) => setAssetTag(e.target.value)} />
+                <Input label="Endereço IP" placeholder="Ex: 192.168.1.50" value={ipAddress} onChange={(e) => setIpAddress(e.target.value)} />
+                <Input label="Endereço MAC" placeholder="Ex: AA:BB:CC:DD:EE:FF" value={macAddress} onChange={(e) => setMacAddress(e.target.value)} />
+                <Input label="Sistema Operacional" placeholder="Ex: Windows 11 Pro" value={operatingSystem} onChange={(e) => setOperatingSystem(e.target.value)} />
+                <Input label="Localização / Setor" placeholder="Ex: Recepção ou Prédio A - Sala 3" value={location} onChange={(e) => setLocation(e.target.value)} />
+                <Input label="ID Acesso Remoto (RustDesk/AnyDesk)" placeholder="Ex: RustDesk ID: 482 199 432" value={remoteAccessId} onChange={(e) => setRemoteAccessId(e.target.value)} />
+                <Select
+                  label="Atribuir a Usuário"
+                  value={assignedClientUserId}
+                  onChange={(e) => setAssignedClientUserId(e.target.value)}
+                  options={[
+                    { value: '', label: t.common.notAssigned },
+                    ...clientUsers.map(u => ({ value: u.id, label: u.fullName })),
+                  ]}
+                />
               </div>
 
-              <div style={styles.formRow}>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Tipo de Ativo *</label>
-                  <select
-                    value={assetType}
-                    onChange={(e) => setAssetType(e.target.value)}
-                    style={styles.select}
-                  >
-                    {assetTypes.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Status *</label>
-                  <select
-                    value={assetStatus}
-                    onChange={(e) => setAssetStatus(e.target.value)}
-                    style={styles.select}
-                  >
-                    {assetStatuses.map(s => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div style={styles.formRow}>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Fabricante</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Dell"
-                    value={manufacturer}
-                    onChange={(e) => setManufacturer(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Modelo</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Latitude 3420"
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-              </div>
-
-              <div style={styles.formRow}>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Número de Série</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: 8XF8SD2"
-                    value={serialNumber}
-                    onChange={(e) => setSerialNumber(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Patrimônio / Asset Tag</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: ACME-0023"
-                    value={assetTag}
-                    onChange={(e) => setAssetTag(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-              </div>
-
-              <div style={styles.formRow}>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Endereço IP</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: 192.168.1.50"
-                    value={ipAddress}
-                    onChange={(e) => setIpAddress(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Endereço MAC</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: AA:BB:CC:DD:EE:FF"
-                    value={macAddress}
-                    onChange={(e) => setMacAddress(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-              </div>
-
-              <div style={styles.formRow}>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Sistema Operacional</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Windows 11 Pro"
-                    value={operatingSystem}
-                    onChange={(e) => setOperatingSystem(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Localização / Setor</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Recepção ou Prédio A - Sala 3"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-              </div>
-
-              <div style={styles.formRow}>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>ID Acesso Remoto (RustDesk/AnyDesk)</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: RustDesk ID: 482 199 432"
-                    value={remoteAccessId}
-                    onChange={(e) => setRemoteAccessId(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Atribuir a Usuário Final</label>
-                  <select
-                    value={assignedClientUserId}
-                    onChange={(e) => setAssignedClientUserId(e.target.value)}
-                    style={styles.select}
-                  >
-                    <option value="">Não atribuído</option>
-                    {clientUsers.map(u => (
-                      <option key={u.id} value={u.id}>{u.fullName}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.label}>
+              <div className="flex flex-col gap-xs">
+                <label className="text-[12px] font-semibold text-on-surface-variant">
                   Dados Sensíveis Criptografados (Senhas, VPN, URLs de administração)
                 </label>
                 <textarea
                   placeholder="Credenciais de administração do switch, dados de conexão VPN ou chaves de licença confidenciais. Salvo sob criptografia AES-256-GCM real no servidor."
                   value={sensitiveDataEncrypted}
                   onChange={(e) => setSensitiveDataEncrypted(e.target.value)}
-                  style={styles.textarea}
+                  className="min-h-[80px] resize-y rounded-lg border border-outline-variant bg-surface-container-lowest px-4 py-2 text-body-sm text-on-surface outline-none transition-all duration-200 focus:border-primary"
                 />
               </div>
 
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Observações Gerais</label>
+              <div className="flex flex-col gap-xs">
+                <label className="text-[12px] font-semibold text-on-surface-variant">Observações Gerais</label>
                 <textarea
                   placeholder="Outras especificações técnicas não sigilosas."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  style={styles.textarea}
+                  className="min-h-[80px] resize-y rounded-lg border border-outline-variant bg-surface-container-lowest px-4 py-2 text-body-sm text-on-surface outline-none transition-all duration-200 focus:border-primary"
                 />
               </div>
 
-              <div style={styles.modalActions}>
+              <footer className="mt-sm flex justify-end gap-sm border-t border-outline-variant/30 pt-md">
                 <Button type="button" variant="outline" onClick={() => setShowModal(false)}>
-                  Cancelar
+                  {t.common.cancel}
                 </Button>
                 <Button type="submit" variant="primary" disabled={formSubmitting}>
-                  {formSubmitting ? 'Salvando...' : 'Salvar'}
+                  {formSubmitting ? t.common.saving : t.common.save}
                 </Button>
-              </div>
+              </footer>
             </form>
           </div>
         </div>
@@ -709,360 +610,3 @@ export default function ClientInventoryPage() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitleArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  breadcrumbs: {
-    display: 'flex',
-    gap: '8px',
-    fontSize: '12px',
-    color: '#9ca3af',
-    marginBottom: '4px',
-  },
-  breadcrumbLink: {
-    cursor: 'pointer',
-    color: '#3b82f6',
-    transition: 'color 0.2s',
-    fontWeight: 500,
-  },
-  title: {
-    fontSize: '28px',
-    fontWeight: 800,
-    letterSpacing: '-0.5px',
-  },
-  subtitle: {
-    fontSize: '14px',
-    color: '#9ca3af',
-  },
-  tabsRow: {
-    display: 'flex',
-    gap: '4px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    paddingBottom: '2px',
-  },
-  tab: {
-    padding: '8px 16px',
-    fontSize: '14px',
-    fontWeight: 500,
-    color: '#9ca3af',
-    cursor: 'pointer',
-    borderRadius: '6px 6px 0 0',
-    transition: 'all 0.2s',
-  },
-  activeTab: {
-    color: '#3b82f6',
-    backgroundColor: 'rgba(59, 130, 246, 0.08)',
-    borderBottom: '2px solid #3b82f6',
-    fontWeight: 600,
-  },
-  filtersBar: {
-    display: 'flex',
-    gap: '16px',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: 'rgba(17, 24, 39, 0.5)',
-    padding: '16px',
-    borderRadius: '12px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-  },
-  searchForm: {
-    display: 'flex',
-    gap: '8px',
-    flexGrow: 1,
-    maxWidth: '600px',
-  },
-  searchInput: {
-    flexGrow: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '8px 12px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-  },
-  searchBtn: {
-    padding: '8px 16px',
-    fontSize: '14px',
-  },
-  filtersSelects: {
-    display: 'flex',
-    gap: '8px',
-  },
-  filterSelect: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '8px 16px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  tableWrapper: {
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
-    overflow: 'hidden',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    textAlign: 'left',
-  },
-  thRow: {
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-  },
-  th: {
-    padding: '16px 24px',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#d1d5db',
-  },
-  tr: {
-    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
-    transition: 'all 0.2s',
-  },
-  td: {
-    padding: '16px 24px',
-    fontSize: '14px',
-    verticalAlign: 'middle',
-  },
-  assetNameArea: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  assetLink: {
-    fontWeight: 600,
-    color: '#3b82f6',
-    cursor: 'pointer',
-    textDecoration: 'none',
-    transition: 'color 0.2s',
-  },
-  assetHost: {
-    fontSize: '12px',
-    color: '#9ca3af',
-    fontFamily: 'monospace',
-    marginTop: '2px',
-  },
-  typeBadge: {
-    fontSize: '12px',
-    color: '#9ca3af',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    padding: '3px 8px',
-    borderRadius: '4px',
-  },
-  statusBadge: {
-    padding: '4px 10px',
-    borderRadius: '6px',
-    fontSize: '12px',
-    fontWeight: 500,
-    border: '1px solid',
-    display: 'inline-block',
-  },
-  assignedUser: {
-    fontWeight: 500,
-    color: '#f3f4f6',
-  },
-  unassignedUser: {
-    fontSize: '12px',
-    color: '#6b7280',
-    fontStyle: 'italic',
-  },
-  serialTagArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  serial: {
-    fontFamily: 'monospace',
-    fontSize: '12px',
-    color: '#f3f4f6',
-  },
-  tag: {
-    fontSize: '11px',
-    color: '#9ca3af',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    padding: '1px 4px',
-    borderRadius: '2px',
-    width: 'fit-content',
-  },
-  emptyTextField: {
-    fontSize: '12px',
-    color: '#6b7280',
-  },
-  actionBtns: {
-    display: 'flex',
-    gap: '8px',
-  },
-  pagination: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '16px 24px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-  },
-  pageInfo: {
-    fontSize: '13px',
-    color: '#9ca3af',
-  },
-  paginationBtns: {
-    display: 'flex',
-    gap: '8px',
-  },
-  pageBtn: {
-    padding: '6px 12px',
-    fontSize: '12px',
-  },
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '80px 24px',
-    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-    borderRadius: '12px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    gap: '16px',
-  },
-  emptyText: {
-    color: '#9ca3af',
-    fontSize: '15px',
-  },
-  errorAlert: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    color: '#fca5a5',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    fontSize: '13px',
-    marginBottom: '16px',
-  },
-  loadingArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  skeletonRow: {
-    height: '60px',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
-    borderRadius: '12px',
-    animation: 'pulse 1.5s infinite ease-in-out',
-  },
-  modalOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    backdropFilter: 'blur(4px)',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  modalCard: {
-    backgroundColor: 'rgba(17, 24, 39, 0.98)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '16px',
-    width: '100%',
-    maxWidth: '700px',
-    padding: '32px',
-    maxHeight: '90vh',
-    overflowY: 'auto',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-  },
-  modalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '24px',
-  },
-  modalTitle: {
-    fontSize: '20px',
-    fontWeight: 700,
-    color: '#f9fafb',
-  },
-  closeBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#9ca3af',
-    fontSize: '28px',
-    cursor: 'pointer',
-  },
-  modalForm: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  formRow: {
-    display: 'flex',
-    gap: '16px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    flexGrow: 1,
-    width: '50%',
-  },
-  label: {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#d1d5db',
-  },
-  input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-  },
-  select: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  textarea: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '10px 14px',
-    fontSize: '14px',
-    color: '#f9fafb',
-    outline: 'none',
-    minHeight: '80px',
-    resize: 'vertical',
-  },
-  modalActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '12px',
-    marginTop: '12px',
-  },
-};
