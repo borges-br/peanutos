@@ -133,13 +133,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
           </div>
         </div>
 
+        {/* Documentos */}
+        <div>
+          <p className="px-md mb-xs font-label-caps text-label-caps uppercase text-on-surface-variant opacity-60">
+            {t.navigation.documents}
+          </p>
+          <div className="space-y-base">
+            {renderNavItem(t.navigation.centralDocuments, 'folder_shared', '/dashboard/documentos')}
+            {renderNavItem(t.navigation.templatesA4, 'grid_view', '/dashboard/templates-a4')}
+          </div>
+        </div>
+
         {/* Automação */}
         <div>
           <p className="px-md mb-xs font-label-caps text-label-caps uppercase text-on-surface-variant opacity-60">
             {t.navigation.automation}
           </p>
           <div className="space-y-base">
-            {renderPlannedItem(t.navigation.webhooks, 'webhook')}
+            {renderNavItem(t.navigation.webhooks, 'webhook', '/dashboard/webhooks')}
           </div>
         </div>
 
@@ -149,8 +160,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
             {t.navigation.system}
           </p>
           <div className="space-y-base">
-            {renderPlannedItem(t.navigation.audit, 'history_edu')}
-            {renderPlannedItem(t.navigation.settings, 'settings')}
+            {renderNavItem(t.navigation.audit, 'history_edu', '/dashboard/auditoria')}
+            {renderNavItem(t.navigation.settings, 'settings', '/dashboard/configuracoes')}
           </div>
         </div>
       </nav>
