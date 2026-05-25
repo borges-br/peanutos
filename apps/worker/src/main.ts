@@ -94,6 +94,341 @@ function workerSanitize(obj: unknown): unknown {
   return result;
 }
 
+function formatDateInTz(date: Date): string {
+  const tz = process.env.WEBHOOK_SCHEDULER_TIMEZONE || 'America/Sao_Paulo';
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(date);
+  const year = parts.find(p => p.type === 'year')?.value || '1970';
+  const month = parts.find(p => p.type === 'month')?.value || '01';
+  const day = parts.find(p => p.type === 'day')?.value || '01';
+  return `${year}-${month}-${day}`;
+}
+
+async function emitUniqueWebhook(params: {
+  workspaceId: string;
+  eventType: string;
+  entityType: string;
+  entityId: string;
+  periodKey: string;
+  data: Record<string, unknown>;
+}) {
+  try {
+    // Check uniqueness/idempotency
+    const existing = await prisma.webhookEventLog.findUnique({
+      where: {
+        workspaceId_eventType_entityType_entityId_periodKey: {
+          workspaceId: params.workspaceId,
+          eventType: params.eventType,
+          entityType: params.entityType,
+          entityId: params.entityId,
+          periodKey: params.periodKey,
+        },
+      },
+    });
+
+    if (existing) {
+      return; // Already emitted in this period/safeguard
+    }
+
+    // Build complete standardized payload
+    const nowStr = new Date().toISOString();
+    const ws = await prisma.workspace.findUnique({
+      where: { id: params.workspaceId },
+      select: { name: true },
+    });
+    const workspaceName = ws?.name || 'Peanut OS Workspace';
+
+    const payload = {
+      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      type: params.eventType,
+      category: params.eventType.startsWith('ticket.') || params.eventType.startsWith('client.') || params.eventType.startsWith('document.') ? 'OPERATION' : 'COMMERCIAL',
+      schemaVersion: '2026-05-01',
+      createdAt: nowStr,
+      triggeredAt: nowStr,
+      workspace: {
+        id: params.workspaceId,
+        name: workspaceName,
+      },
+      entity: {
+        type: params.entityType,
+        id: params.entityId,
+        number: (params.data.number || params.data.tradeName || null) as string | null,
+      },
+      actor: null,
+      source: {
+        kind: 'scheduler',
+        name: 'Peanut OS',
+      },
+      data: workerSanitize(params.data),
+      links: {},
+      metadata: {},
+    };
+
+    // Save log record first to prevent race condition before sending!
+    const log = await prisma.webhookEventLog.create({
+      data: {
+        workspaceId: params.workspaceId,
+        eventType: params.eventType,
+        entityType: params.entityType,
+        entityId: params.entityId,
+        periodKey: params.periodKey,
+        payload: payload as any,
+      },
+    });
+
+    // Write audit log
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: params.workspaceId,
+        actorUserId: null,
+        action: 'webhook.scheduled_event_emitted',
+        entityType: 'WEBHOOK_EVENT_LOG',
+        entityId: log.id,
+        afterJson: JSON.stringify({
+          eventType: params.eventType,
+          entityType: params.entityType,
+          entityId: params.entityId,
+          periodKey: params.periodKey,
+        }),
+        severity: 'INFO',
+      },
+    });
+
+    // Find active endpoints
+    const endpoints = await prisma.webhookEndpoint.findMany({
+      where: {
+        workspaceId: params.workspaceId,
+        isActive: true,
+        events: { has: params.eventType },
+      },
+      select: { id: true },
+    });
+
+    if (endpoints.length === 0) return;
+
+    const webhookDispatchQueue = new Queue('webhook-dispatch', { connection });
+    for (const endpoint of endpoints) {
+      try {
+        const delivery = await prisma.webhookDelivery.create({
+          data: {
+            workspaceId: params.workspaceId,
+            webhookId: endpoint.id,
+            eventType: params.eventType,
+            payload: payload as any,
+            status: 'PENDING',
+            maxAttempts: 5,
+            nextAttemptAt: new Date(),
+          },
+        });
+
+        await webhookDispatchQueue.add('webhook-dispatch', { deliveryId: delivery.id }, {
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: 100,
+          removeOnFail: 200,
+        }).catch((err: Error) => {
+          console.warn(`[Worker WebhookEmit] Redis unavailable for delivery ${delivery.id}:`, err.message);
+        });
+      } catch (err: any) {
+        console.error(`[Worker WebhookEmit] Failed for endpoint ${endpoint.id}:`, err.message);
+      }
+    }
+  } catch (err: any) {
+    console.error(`[Webhook Scheduler] emitUniqueWebhook failed for ${params.eventType}:`, err.message);
+  }
+}
+
+async function sweepInvoices() {
+  const today = new Date();
+  const todayStr = formatDateInTz(today);
+
+  const dueSoonDays = parseInt(process.env.WEBHOOK_INVOICE_DUE_SOON_DAYS || '3', 10);
+  const dueSoonTargetStr = formatDateInTz(new Date(today.getTime() + dueSoonDays * 24 * 60 * 60 * 1000));
+
+  console.log(`[Webhook Invoice Sweep] Today: ${todayStr}, Due Soon Target: ${dueSoonTargetStr}`);
+
+  // Fetch all pending/issued/overdue invoices
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      status: { in: ['ISSUED', 'OVERDUE'] },
+    },
+  });
+
+  for (const inv of invoices) {
+    const dueDateStr = formatDateInTz(inv.dueDate);
+
+    // A. invoice.due_today
+    if (dueDateStr === todayStr) {
+      const periodKey = `${todayStr}:dueToday`;
+      await emitUniqueWebhook({
+        workspaceId: inv.workspaceId,
+        eventType: 'invoice.due_today',
+        entityType: 'INVOICE',
+        entityId: inv.id,
+        periodKey,
+        data: {
+          invoiceId: inv.id,
+          number: inv.number,
+          dueDate: inv.dueDate.toISOString(),
+        },
+      });
+    }
+
+    // B. invoice.due_soon
+    if (dueDateStr === dueSoonTargetStr) {
+      const periodKey = `${todayStr}:dueSoon`;
+      await emitUniqueWebhook({
+        workspaceId: inv.workspaceId,
+        eventType: 'invoice.due_soon',
+        entityType: 'INVOICE',
+        entityId: inv.id,
+        periodKey,
+        data: {
+          invoiceId: inv.id,
+          number: inv.number,
+          dueDate: inv.dueDate.toISOString(),
+          daysRemaining: dueSoonDays,
+        },
+      });
+    }
+
+    // C. invoice.overdue
+    if (dueDateStr < todayStr && inv.status !== 'PAID' && inv.status !== 'CANCELLED') {
+      const periodKey = `${todayStr}:overdue`;
+      await emitUniqueWebhook({
+        workspaceId: inv.workspaceId,
+        eventType: 'invoice.overdue',
+        entityType: 'INVOICE',
+        entityId: inv.id,
+        periodKey,
+        data: {
+          invoiceId: inv.id,
+          number: inv.number,
+          dueDate: inv.dueDate.toISOString(),
+        },
+      });
+    }
+  }
+}
+
+async function sweepContracts() {
+  const today = new Date();
+  const todayStr = formatDateInTz(today);
+
+  const endingSoonDays = parseInt(process.env.WEBHOOK_CONTRACT_ENDING_SOON_DAYS || '15', 10);
+  const endingSoonTargetStr = formatDateInTz(new Date(today.getTime() + endingSoonDays * 24 * 60 * 60 * 1000));
+
+  const contracts = await prisma.contract.findMany({
+    where: {
+      status: 'ACTIVE',
+    },
+  });
+
+  for (const ctr of contracts) {
+    if (ctr.endDate) {
+      const endDateStr = formatDateInTz(ctr.endDate);
+
+      // A. cycle_ending_soon
+      if (endDateStr === endingSoonTargetStr) {
+        const periodKey = `${todayStr}:cycleEndingSoon`;
+        await emitUniqueWebhook({
+          workspaceId: ctr.workspaceId,
+          eventType: 'contract.cycle_ending_soon',
+          entityType: 'CONTRACT',
+          entityId: ctr.id,
+          periodKey,
+          data: {
+            contractId: ctr.id,
+            number: ctr.number,
+            title: ctr.title,
+            endDate: ctr.endDate.toISOString(),
+            daysRemaining: endingSoonDays,
+          },
+        });
+      }
+
+      // B. cycle_ended
+      if (endDateStr < todayStr) {
+        const periodKey = `${todayStr}:cycleEnded`;
+        await emitUniqueWebhook({
+          workspaceId: ctr.workspaceId,
+          eventType: 'contract.cycle_ended',
+          entityType: 'CONTRACT',
+          entityId: ctr.id,
+          periodKey,
+          data: {
+            contractId: ctr.id,
+            number: ctr.number,
+            title: ctr.title,
+            endDate: ctr.endDate.toISOString(),
+          },
+        });
+      }
+    }
+
+    // C. renewal_due
+    const tz = process.env.WEBHOOK_SCHEDULER_TIMEZONE || 'America/Sao_Paulo';
+    const dayOfMonth = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: tz, day: 'numeric' }).format(today), 10);
+    if (ctr.billingDay === dayOfMonth) {
+      const periodKey = `${todayStr}:renewalDue`;
+      await emitUniqueWebhook({
+        workspaceId: ctr.workspaceId,
+        eventType: 'contract.renewal_due',
+        entityType: 'CONTRACT',
+        entityId: ctr.id,
+        periodKey,
+        data: {
+          contractId: ctr.id,
+          number: ctr.number,
+          title: ctr.title,
+          billingDay: ctr.billingDay,
+          monthlyAmountCents: ctr.monthlyAmountCents,
+        },
+      });
+    }
+  }
+}
+
+async function sweepTicketsFeedback() {
+  const feedbackHours = parseInt(process.env.WEBHOOK_TICKET_FEEDBACK_HOURS_AFTER_RESOLVED || '24', 10);
+  const targetTime = new Date(Date.now() - feedbackHours * 60 * 60 * 1000);
+
+  const tickets = await prisma.ticket.findMany({
+    where: {
+      status: { in: ['RESOLVED', 'CLOSED'] },
+      resolvedAt: { lte: targetTime },
+    },
+  });
+
+  for (const tkt of tickets) {
+    await emitUniqueWebhook({
+      workspaceId: tkt.workspaceId,
+      eventType: 'ticket.feedback_due',
+      entityType: 'TICKET',
+      entityId: tkt.id,
+      periodKey: 'feedbackDue',
+      data: {
+        ticketId: tkt.id,
+        number: tkt.number,
+        title: tkt.title,
+        resolvedAt: tkt.resolvedAt?.toISOString(),
+      },
+    });
+  }
+}
+
+async function runDailyWebhookSweeps() {
+  console.log('[Webhook Scheduler] Running daily webhook sweeps...');
+  await sweepInvoices();
+  await sweepContracts();
+  await sweepTicketsFeedback();
+}
+
 async function emitWebhookEventFromWorker(event: {
   workspaceId: string;
   eventType: string;
@@ -107,15 +442,44 @@ async function emitWebhookEventFromWorker(event: {
     });
     if (endpoints.length === 0) return;
 
-    const webhookDispatchQueue = new Queue('webhook-dispatch', { connection });
+    // Resolve category/type
+    const category = event.eventType.startsWith('ticket.') || event.eventType.startsWith('client.') || event.eventType.startsWith('document.') ? 'OPERATION' : 'COMMERCIAL';
+    const entityType = event.eventType.split('.')[0]?.toUpperCase() || 'UNKNOWN';
+
+    const ws = await prisma.workspace.findUnique({
+      where: { id: event.workspaceId },
+      select: { name: true },
+    });
+    const workspaceName = ws?.name || 'Peanut OS Workspace';
+
+    const nowStr = new Date().toISOString();
     const payload = {
       id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: event.eventType,
-      createdAt: new Date().toISOString(),
-      workspaceId: event.workspaceId,
+      category,
+      schemaVersion: '2026-05-01',
+      createdAt: nowStr,
+      triggeredAt: nowStr,
+      workspace: {
+        id: event.workspaceId,
+        name: workspaceName,
+      },
+      entity: {
+        type: entityType,
+        id: event.entityId,
+        number: (event.data.number || event.data.tradeName || null) as string | null,
+      },
+      actor: null,
+      source: {
+        kind: 'worker',
+        name: 'Peanut OS',
+      },
       data: workerSanitize(event.data),
+      links: {},
+      metadata: {},
     };
 
+    const webhookDispatchQueue = new Queue('webhook-dispatch', { connection });
     for (const endpoint of endpoints) {
       try {
         const delivery = await prisma.webhookDelivery.create({
@@ -832,11 +1196,39 @@ const slaMonitorWorker = new Worker(
           const due = new Date(ticket.slaDueFirstResponseAt);
           if (now > due) {
             console.warn(`[SLA Monitor Worker] BREACHED: Ticket ${ticket.number} ("${ticket.title}") has breached its First Response SLA.`);
+            await emitUniqueWebhook({
+              workspaceId: ticket.workspaceId,
+              eventType: 'ticket.sla_breached',
+              entityType: 'TICKET',
+              entityId: ticket.id,
+              periodKey: 'slaFirstResponseBreached',
+              data: {
+                ticketId: ticket.id,
+                number: ticket.number,
+                title: ticket.title,
+                slaType: 'FIRST_RESPONSE',
+                slaDueAt: ticket.slaDueFirstResponseAt.toISOString(),
+              },
+            }).catch(() => {});
           } else {
             const diffMs = due.getTime() - now.getTime();
             const diffMin = Math.floor(diffMs / 60000);
             if (diffMin <= 30) {
               console.log(`[SLA Monitor Worker] WARNING: Ticket ${ticket.number} is within ${diffMin} minutes of first response breach.`);
+              await emitUniqueWebhook({
+                workspaceId: ticket.workspaceId,
+                eventType: 'ticket.sla_first_response_due_soon',
+                entityType: 'TICKET',
+                entityId: ticket.id,
+                periodKey: 'slaFirstResponseDueSoon',
+                data: {
+                  ticketId: ticket.id,
+                  number: ticket.number,
+                  title: ticket.title,
+                  slaDueFirstResponseAt: ticket.slaDueFirstResponseAt.toISOString(),
+                  remainingMinutes: diffMin,
+                },
+              }).catch(() => {});
             }
           }
         }
@@ -846,11 +1238,39 @@ const slaMonitorWorker = new Worker(
           const due = new Date(ticket.slaDueResolutionAt);
           if (now > due) {
             console.warn(`[SLA Monitor Worker] BREACHED: Ticket ${ticket.number} ("${ticket.title}") has breached its Resolution SLA.`);
+            await emitUniqueWebhook({
+              workspaceId: ticket.workspaceId,
+              eventType: 'ticket.sla_breached',
+              entityType: 'TICKET',
+              entityId: ticket.id,
+              periodKey: 'slaResolutionBreached',
+              data: {
+                ticketId: ticket.id,
+                number: ticket.number,
+                title: ticket.title,
+                slaType: 'RESOLUTION',
+                slaDueAt: ticket.slaDueResolutionAt.toISOString(),
+              },
+            }).catch(() => {});
           } else {
             const diffMs = due.getTime() - now.getTime();
             const diffMin = Math.floor(diffMs / 60000);
             if (diffMin <= 60) {
               console.log(`[SLA Monitor Worker] WARNING: Ticket ${ticket.number} is within ${diffMin} minutes of resolution breach.`);
+              await emitUniqueWebhook({
+                workspaceId: ticket.workspaceId,
+                eventType: 'ticket.sla_resolution_due_soon',
+                entityType: 'TICKET',
+                entityId: ticket.id,
+                periodKey: 'slaResolutionDueSoon',
+                data: {
+                  ticketId: ticket.id,
+                  number: ticket.number,
+                  title: ticket.title,
+                  slaDueResolutionAt: ticket.slaDueResolutionAt.toISOString(),
+                  remainingMinutes: diffMin,
+                },
+              }).catch(() => {});
             }
           }
         }
@@ -944,6 +1364,12 @@ const billingSchedulerWorker = new Worker(
       }
 
       console.log(`[Billing Scheduler Worker] Finished sweep. Created: ${processedCount}, Skipped: ${skippedCount}`);
+      
+      // Trigger the daily commercial and operational scheduled webhook sweeps
+      await runDailyWebhookSweeps().catch(err => {
+        console.error('[Billing Scheduler Worker] Scheduled webhook sweeps failed:', err.message);
+      });
+
       return { processedCount, skippedCount };
     } catch (err) {
       console.error('[Billing Scheduler Worker] Error processing recurring billing sweep:', err);

@@ -47,6 +47,115 @@ interface TemplateSetting {
   blockOrder: Block[];
 }
 
+interface MockItem {
+  desc: string;
+  qty: number | string;
+  value: number | string;
+}
+
+interface MockData {
+  documentNumber: string;
+  dateValue: string;
+  clientName: string;
+  clientDocument: string;
+  clientEmail: string;
+  items: MockItem[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  paymentInfo: string;
+  terms: string;
+  observations: string;
+}
+
+const MOCK_DATA_MAP: Record<DocumentType, MockData> = {
+  INVOICE: {
+    documentNumber: "FT-2026-0891",
+    dateValue: "25/05/2026",
+    clientName: "Acme Corporation Ltda",
+    clientDocument: "12.345.678/0001-99",
+    clientEmail: "financeiro@acme.com",
+    items: [
+      { desc: "Consultoria de Infraestrutura e DevOps Cloud (Horas)", qty: 40, value: 150.00 },
+      { desc: "Licenciamento Mensal de Workspace SaaS Enterprise", qty: 1, value: 1200.00 }
+    ],
+    subtotal: 7200.00,
+    tax: 576.00,
+    total: 7776.00,
+    paymentInfo: "Banco Cora (0403) · Agência 0001 · C/C 987654-3 · Chave PIX: financeiro@peanutos.com.br",
+    terms: "Vencimento em 5 dias. Multa de 2% após o vencimento e juros de 1% ao mês.",
+    observations: "Fatura gerada referente aos serviços prestados na competência de Maio/2026."
+  },
+  QUOTE: {
+    documentNumber: "OR-2026-034",
+    dateValue: "25/05/2026",
+    clientName: "Galeria de Arte São Paulo",
+    clientDocument: "98.765.432/0001-10",
+    clientEmail: "contato@galeriasp.art.br",
+    items: [
+      { desc: "Implantação de Cabeamento Estruturado e Rede Wi-Fi 6", qty: 1, value: 4500.00 },
+      { desc: "Configuração de Firewall Fortinet + Switch Gerenciável Ubiquiti", qty: 1, value: 2200.00 }
+    ],
+    subtotal: 6700.00,
+    tax: 0.00,
+    total: 6700.00,
+    paymentInfo: "50% de sinal no aceite e 50% na entrega e homologação dos serviços.",
+    terms: "Proposta válida por 10 dias úteis. Prazo de entrega estimado: 5 dias após o aceite.",
+    observations: "Garantia de integridade do cabeamento de 1 ano. Equipamentos com garantia do fabricante."
+  },
+  SERVICE_ORDER: {
+    documentNumber: "OS-2026-1049",
+    dateValue: "25/05/2026",
+    clientName: "Padaria Bella Vista Ltda",
+    clientDocument: "55.444.333/0001-22",
+    clientEmail: "suporte@bellavista.com.br",
+    items: [
+      { desc: "Manutenção Preventiva de Servidor e Backup Local", qty: 2, value: 250.00 },
+      { desc: "Substituição de SSD 480GB e Instalação de Sistema Operacional", qty: 1, value: 450.00 }
+    ],
+    subtotal: 950.00,
+    tax: 45.00,
+    total: 995.00,
+    paymentInfo: "Técnico responsável: Bruno Souza. OS aprovada pelo gerente no local.",
+    terms: "Garantia de 90 dias sobre as peças substituídas e 30 dias sobre a mão de obra.",
+    observations: "Backup executado com sucesso em mídia local e sincronizado com nuvem corporativa."
+  },
+  CONTRACT: {
+    documentNumber: "CT-2026-012",
+    dateValue: "25/05/2026",
+    clientName: "Logística Avançada Rápida S.A.",
+    clientDocument: "44.333.222/0001-88",
+    clientEmail: "juridico@rapidolog.com.br",
+    items: [
+      { desc: "Suporte de TI Mensal Platinum - Franquia de 30 Horas/mês", qty: 12, value: 3500.00 },
+      { desc: "Serviço de Monitoramento de Rede e Servidores 24x7", qty: 12, value: 800.00 }
+    ],
+    subtotal: 51600.00,
+    tax: 4128.00,
+    total: 55728.00,
+    paymentInfo: "Pagamento mensal recorrente no valor de R$ 4.300,00 via boleto bancário todo dia 10.",
+    terms: "Vigência mínima de 12 meses. Rescisão sem multa mediante aviso prévio de 30 dias.",
+    observations: "Contrato abrange suporte remoto ilimitado e visitas presençais agendadas em horário comercial."
+  },
+  REPORT: {
+    documentNumber: "RL-2026-004",
+    dateValue: "25/05/2026",
+    clientName: "Clínica Médica Viver Bem",
+    clientDocument: "22.111.000/0001-55",
+    clientEmail: "diretoria@clinicaviverbem.com.br",
+    items: [
+      { desc: "Auditoria de Vulnerabilidades de Segurança em Sistemas de Prontuário", qty: 1, value: 5000.00 },
+      { desc: "Análise de Desempenho de Servidor SQL Server Local", qty: 1, value: 1800.00 }
+    ],
+    subtotal: 6800.00,
+    tax: 544.00,
+    total: 7344.00,
+    paymentInfo: "Relatório de Auditoria Técnica de TI compilado e assinado digitalmente.",
+    terms: "Classificação da informação: CONFIDENCIAL. Destinado apenas para uso interno.",
+    observations: "Identificados 3 pontos críticos de correção imediata no acesso externo ao banco de dados."
+  }
+};
+
 export default function TemplatesA4Page() {
   const [activeType, setActiveType] = useState<DocumentType>('INVOICE');
   const [settings, setSettings] = useState<Partial<Record<DocumentType, TemplateSetting>>>({});
@@ -58,6 +167,7 @@ export default function TemplatesA4Page() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [dirtyTypes, setDirtyTypes] = useState<Set<DocumentType>>(new Set());
+  const [useMockData, setUseMockData] = useState(false);
 
   useEffect(() => {
     apiRequest('/settings/brand')
@@ -169,6 +279,7 @@ export default function TemplatesA4Page() {
 
   const isDirty = dirtyTypes.has(activeType);
   const activeLabel = DOC_TYPES.find(d => d.id === activeType)?.label || activeType;
+  const activeMockData = MOCK_DATA_MAP[activeType];
 
   return (
     <main className="max-w-7xl mx-auto p-md space-y-lg animate-fade-in pb-xl">
@@ -298,12 +409,12 @@ export default function TemplatesA4Page() {
             title={`Template — ${activeLabel}`}
             subtitle="Prévia conceitual dos blocos habilitados. O PDF gerado reflete a configuração salva."
             documentType={activeLabel}
-            documentNumber="••••••••••••"
+            documentNumber={useMockData ? activeMockData.documentNumber : "••••••••••••"}
             dateLabel="Data"
-            dateValue="--/--/----"
-            clientName="Cliente Exemplo"
-            clientDocument="Dado protegido"
-            clientEmail="--"
+            dateValue={useMockData ? activeMockData.dateValue : "--/--/----"}
+            clientName={useMockData ? activeMockData.clientName : "Cliente Exemplo"}
+            clientDocument={useMockData ? activeMockData.clientDocument : "Dado protegido"}
+            clientEmail={useMockData ? activeMockData.clientEmail : "--"}
             backPath="/dashboard"
             companyName={brandSettings?.brandName}
             companySub={brandSettings?.brandSubtitle}
@@ -312,12 +423,27 @@ export default function TemplatesA4Page() {
             documentFooterText={brandSettings?.documentFooterText}
             signatureName={brandSettings?.signatureName}
             primaryColorHex={brandSettings?.primaryColorHex}
+            documentActions={[
+              {
+                label: useMockData ? "Limpar dados fictícios" : "Usar dados fictícios",
+                icon: useMockData ? "clear_all" : "dynamic_feed",
+                variant: useMockData ? "outline" : "primary",
+                onClick: () => setUseMockData(!useMockData)
+              }
+            ]}
           >
             <div className="flex flex-col gap-xs flex-1">
               {currentSetting ? (
                 currentSetting.blockOrder
                   .filter(b => currentSetting.enabledBlocks[b])
-                  .map(block => <BlockPreview key={block} block={block} />)
+                  .map(block => (
+                    <BlockPreview
+                      key={block}
+                      block={block}
+                      useMockData={useMockData}
+                      mockData={activeMockData}
+                    />
+                  ))
               ) : (
                 <div className="flex items-center justify-center flex-1 text-black/30 text-xs">
                   Carregando configuração...
@@ -331,7 +457,15 @@ export default function TemplatesA4Page() {
   );
 }
 
-function BlockPreview({ block }: { block: Block }) {
+function BlockPreview({
+  block,
+  useMockData,
+  mockData,
+}: {
+  block: Block;
+  useMockData: boolean;
+  mockData: MockData;
+}) {
   switch (block) {
     case 'header':
       return <div className="h-7 bg-black/5 rounded flex items-center px-sm text-[10px] text-black/40 uppercase font-bold tracking-wider">Cabeçalho</div>;
@@ -348,60 +482,97 @@ function BlockPreview({ block }: { block: Block }) {
       return (
         <div className="h-14 bg-black/[0.03] border border-black/10 rounded flex flex-col justify-center px-sm gap-0.5">
           <span className="text-[9px] text-black/30 uppercase font-bold">Destinatário</span>
-          <span className="text-[10px] text-black/50 font-bold">Cliente Exemplo</span>
-          <span className="text-[9px] text-black/30 font-mono">CNPJ: --</span>
+          <span className="text-[10px] text-black/50 font-bold">{useMockData ? mockData.clientName : "Cliente Exemplo"}</span>
+          <span className="text-[9px] text-black/30 font-mono">
+            {useMockData ? `CNPJ/CPF: ${mockData.clientDocument}` : "CNPJ: --"}
+          </span>
         </div>
       );
     case 'documentTitle':
       return <div className="h-7 flex items-center"><span className="font-bold text-sm text-black/70 uppercase">Título do Documento</span></div>;
-    case 'itemsTable':
+    case 'itemsTable': {
+      const items = useMockData ? mockData.items : [
+        { desc: 'Item 1', qty: '--', value: '--' },
+        { desc: 'Item 2', qty: '--', value: '--' }
+      ];
       return (
         <div className="border border-black/10 rounded overflow-hidden">
           <div className="bg-black/10 h-6 flex items-center px-sm gap-lg">
             <span className="text-[9px] text-black/50 font-bold flex-1">Descrição</span>
-            <span className="text-[9px] text-black/50 font-bold w-8 text-center">Qtd</span>
-            <span className="text-[9px] text-black/50 font-bold w-12 text-right">Valor</span>
+            <span className="text-[9px] text-black/50 font-bold w-12 text-center">Qtd</span>
+            <span className="text-[9px] text-black/50 font-bold w-20 text-right">Valor Unitário</span>
           </div>
-          {[1, 2].map(i => (
-            <div key={i} className="h-5 flex items-center px-sm gap-lg border-t border-black/5">
-              <span className="flex-1 text-[9px] text-black/30">Item {i}</span>
-              <span className="text-[9px] text-black/30 w-8 text-center">--</span>
-              <span className="text-[9px] text-black/30 w-12 text-right">--</span>
-            </div>
-          ))}
+          {items.map((item, i) => {
+            const valStr = typeof item.value === 'number' ? `R$ ${item.value.toFixed(2)}` : item.value;
+            return (
+              <div key={i} className="h-7 flex items-center px-sm gap-lg border-t border-black/5">
+                <span className="flex-1 text-[9px] text-black/70 font-semibold truncate">{item.desc}</span>
+                <span className="text-[9px] text-black/60 w-12 text-center">{item.qty}</span>
+                <span className="text-[9px] text-black/60 w-20 text-right font-mono">{valStr}</span>
+              </div>
+            );
+          })}
         </div>
       );
-    case 'financialSummary':
+    }
+    case 'financialSummary': {
+      const subtotalStr = useMockData ? `R$ ${mockData.subtotal.toFixed(2)}` : '--';
+      const taxStr = useMockData ? `R$ ${mockData.tax.toFixed(2)}` : '--';
+      const totalStr = useMockData ? `R$ ${mockData.total.toFixed(2)}` : '--';
       return (
         <div className="flex justify-end">
-          <div className="space-y-0.5 text-[10px] w-36">
-            <div className="flex justify-between text-black/40"><span>Subtotal</span><span>--</span></div>
-            <div className="flex justify-between text-black/40"><span>Impostos</span><span>--</span></div>
-            <div className="flex justify-between font-bold text-black/70 border-t border-black/10 pt-0.5"><span>Total</span><span>--</span></div>
+          <div className="space-y-0.5 text-[10px] w-48 font-mono">
+            <div className="flex justify-between text-black/50"><span>Subtotal:</span><span>{subtotalStr}</span></div>
+            <div className="flex justify-between text-black/50"><span>Impostos:</span><span>{taxStr}</span></div>
+            <div className="flex justify-between font-bold text-black/80 border-t border-black/10 pt-0.5 text-[11px]">
+              <span>Total Geral:</span><span>{totalStr}</span>
+            </div>
           </div>
         </div>
       );
+    }
     case 'paymentInfo':
-      return <div className="h-8 bg-black/5 rounded flex items-center px-sm text-[10px] text-black/40">Dados bancários / Chave PIX</div>;
+      return (
+        <div className="p-sm bg-black/[0.02] border border-black/5 rounded flex flex-col gap-0.5">
+          <span className="text-[8px] uppercase font-bold text-black/40">Informações de Cobrança / Pagamento</span>
+          <span className="text-[9px] text-black/60 font-mono whitespace-pre-line leading-relaxed">
+            {useMockData ? mockData.paymentInfo : 'Dados bancários / Chave PIX'}
+          </span>
+        </div>
+      );
     case 'terms':
-      return <div className="h-10 bg-black/5 rounded flex items-center px-sm text-[10px] text-black/40 leading-relaxed italic">Termos e condições (texto configurável)</div>;
+      return (
+        <div className="p-sm bg-black/[0.02] border border-black/5 rounded flex flex-col gap-0.5">
+          <span className="text-[8px] uppercase font-bold text-black/40">Termos e Condições</span>
+          <span className="text-[9px] text-black/50 italic leading-relaxed">
+            {useMockData ? mockData.terms : 'Termos e condições (texto configurável)'}
+          </span>
+        </div>
+      );
     case 'observations':
-      return <div className="h-8 bg-black/5 rounded flex items-center px-sm text-[10px] text-black/40 italic">Observações adicionais</div>;
+      return (
+        <div className="p-sm bg-black/[0.02] border border-black/5 rounded flex flex-col gap-0.5">
+          <span className="text-[8px] uppercase font-bold text-black/40">Observações</span>
+          <span className="text-[9px] text-black/50 italic leading-relaxed">
+            {useMockData ? mockData.observations : 'Observações adicionais'}
+          </span>
+        </div>
+      );
     case 'responsibleSignature':
       return (
         <div className="flex justify-start">
-          <div className="flex flex-col items-center w-36">
+          <div className="flex flex-col items-center w-40">
             <div className="w-full border-t border-black/30 mb-0.5" />
-            <span className="text-[9px] font-bold text-black/50">Responsável Autorizado</span>
+            <span className="text-[8px] font-bold text-black/50">Responsável Autorizado</span>
           </div>
         </div>
       );
     case 'clientSignature':
       return (
         <div className="flex justify-end">
-          <div className="flex flex-col items-center w-36">
+          <div className="flex flex-col items-center w-40">
             <div className="w-full border-t border-black/30 mb-0.5" />
-            <span className="text-[9px] font-bold text-black/50">Assinatura do Cliente</span>
+            <span className="text-[8px] font-bold text-black/50">Assinatura do Cliente</span>
           </div>
         </div>
       );
@@ -414,7 +585,7 @@ function BlockPreview({ block }: { block: Block }) {
     case 'footer':
       return (
         <div className="h-6 border-t border-black/10 flex items-center justify-between px-xs text-[9px] text-black/30">
-          <span>Gerado automaticamente</span>
+          <span>Gerado automaticamente pelo Peanut OS</span>
           <span>Pág. 1 / 1</span>
         </div>
       );

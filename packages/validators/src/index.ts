@@ -524,20 +524,681 @@ export type UpdateDocumentTemplateSettingInput = z.infer<typeof updateDocumentTe
 // --- WEBHOOK VALIDATORS ---
 
 export const WEBHOOK_EVENTS = [
-  'invoice.created',
-  'invoice.status_changed',
-  'document.generated',
-  'ticket.created',
-  'ticket.status_changed',
+  // AUDIT
+  'audit.log_created',
+  'audit.security_alert',
   'user.created',
   'user.role_changed',
+  'user.deactivated',
+  'user.reactivated',
+  'brand.updated',
+  'document_template.updated',
+
+  // OPERATION
+  'ticket.created',
+  'ticket.status_changed',
+  'ticket.assigned',
+  'ticket.comment_added',
+  'ticket.sla_first_response_due_soon',
+  'ticket.sla_resolution_due_soon',
+  'ticket.sla_breached',
+  'ticket.feedback_due',
+  'document.generated',
   'client.created',
   'client.updated',
+
+  // COMMERCIAL
+  'invoice.created',
+  'invoice.status_changed',
+  'invoice.due_soon',
+  'invoice.due_today',
+  'invoice.overdue',
+  'invoice.paid',
   'contract.created',
   'contract.status_changed',
+  'contract.cycle_ending_soon',
+  'contract.cycle_ended',
+  'contract.renewal_due',
+  'billing.event_created',
+  'billing.event_skipped',
 ] as const;
 
 export type WebhookEventType = typeof WEBHOOK_EVENTS[number];
+
+export interface WebhookCatalogEntry {
+  type: string;
+  category: 'AUDIT' | 'OPERATION' | 'COMMERCIAL';
+  label: string;
+  description: string;
+  entityType: string;
+  lifecycle: 'realtime' | 'scheduled' | 'inbound' | 'future';
+  status: 'active' | 'planned';
+  payloadExample: Record<string, any>;
+  requiredFeature?: string;
+}
+
+export const WEBHOOK_EVENT_CATALOG: WebhookCatalogEntry[] = [
+  // --- AUDITORIA ---
+  {
+    type: 'audit.log_created',
+    category: 'AUDIT',
+    label: 'Log de Auditoria Criado',
+    description: 'Disparado quando qualquer ação auditável ocorre no sistema.',
+    entityType: 'AUDIT_LOG',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      action: 'user.login',
+      entityType: 'USER',
+      entityId: 'usr_123456',
+      severity: 'INFO',
+      details: { ip: '127.0.0.1' }
+    }
+  },
+  {
+    type: 'audit.security_alert',
+    category: 'AUDIT',
+    label: 'Alerta de Segurança',
+    description: 'Disparado quando ocorre um evento crítico de segurança (ex: bootstrap de admin, tentativas falhas).',
+    entityType: 'AUDIT_LOG',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      action: 'security.brute_force',
+      entityType: 'AUTH',
+      entityId: 'auth_session',
+      severity: 'SECURITY_ALERT',
+      details: { reason: 'Tentativas repetidas de login' }
+    }
+  },
+  {
+    type: 'user.created',
+    category: 'AUDIT',
+    label: 'Usuário Criado',
+    description: 'Disparado quando um novo usuário/técnico/financeiro é criado no workspace.',
+    entityType: 'USER',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      userId: 'usr_abc123',
+      name: 'João Técnico',
+      email: 'joao@empresa.com',
+      role: 'TECHNICIAN'
+    }
+  },
+  {
+    type: 'user.role_changed',
+    category: 'AUDIT',
+    label: 'Papel de Usuário Alterado',
+    description: 'Disparado quando a função/nível de acesso de um usuário é modificada.',
+    entityType: 'USER',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      userId: 'usr_abc123',
+      oldRole: 'READ_ONLY',
+      newRole: 'ADMIN'
+    }
+  },
+  {
+    type: 'user.deactivated',
+    category: 'AUDIT',
+    label: 'Usuário Desativado',
+    description: 'Disparado quando a conta de um usuário é temporariamente ou permanentemente desativada.',
+    entityType: 'USER',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      userId: 'usr_abc123',
+      status: 'INACTIVE'
+    }
+  },
+  {
+    type: 'user.reactivated',
+    category: 'AUDIT',
+    label: 'Usuário Reativado',
+    description: 'Disparado quando a conta de um usuário é reativada.',
+    entityType: 'USER',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      userId: 'usr_abc123',
+      status: 'ACTIVE'
+    }
+  },
+  {
+    type: 'brand.updated',
+    category: 'AUDIT',
+    label: 'Marca/Identidade Atualizada',
+    description: 'Disparado quando as configurações globais de marca do workspace (white-label) são atualizadas.',
+    entityType: 'WORKSPACE',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      brandName: 'Peanut Central',
+      primaryColorHex: '#1d4ed8'
+    }
+  },
+  {
+    type: 'document_template.updated',
+    category: 'AUDIT',
+    label: 'Template de Documento Atualizado',
+    description: 'Disparado quando a disposição ou blocos de um template A4 são configurados.',
+    entityType: 'DOCUMENT_TEMPLATE_SETTING',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      documentType: 'INVOICE',
+      templateKey: 'modern',
+      layoutVariant: 'compact'
+    }
+  },
+
+  // --- OPERAÇÃO ---
+  {
+    type: 'ticket.created',
+    category: 'OPERATION',
+    label: 'Chamado Criado',
+    description: 'Disparado quando um novo chamado técnico é aberto na plataforma.',
+    entityType: 'TICKET',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      ticketId: 'tkt_881729',
+      number: 'TKT-2026-0045',
+      title: 'Queda de conexão no switch principal',
+      status: 'OPEN',
+      priority: 'HIGH',
+      clientId: 'cli_981273'
+    }
+  },
+  {
+    type: 'ticket.status_changed',
+    category: 'OPERATION',
+    label: 'Status do Chamado Alterado',
+    description: 'Disparado quando um chamado muda de estado (ex: Aberto para Em Progresso).',
+    entityType: 'TICKET',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      ticketId: 'tkt_881729',
+      number: 'TKT-2026-0045',
+      oldStatus: 'OPEN',
+      newStatus: 'IN_PROGRESS'
+    }
+  },
+  {
+    type: 'ticket.assigned',
+    category: 'OPERATION',
+    label: 'Chamado Designado',
+    description: 'Disparado quando um técnico ou administrador é designado para atuar no chamado.',
+    entityType: 'TICKET',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      ticketId: 'tkt_881729',
+      number: 'TKT-2026-0045',
+      assignedToId: 'usr_abc123'
+    }
+  },
+  {
+    type: 'ticket.comment_added',
+    category: 'OPERATION',
+    label: 'Comentário Adicionado',
+    description: 'Disparado quando um novo comentário (técnico ou visível) é registrado no chamado.',
+    entityType: 'TICKET_COMMENT',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      commentId: 'cmt_998127',
+      ticketId: 'tkt_881729',
+      isInternal: true,
+      content: 'Identificamos que o firmware do switch estava desatualizado.'
+    }
+  },
+  {
+    type: 'ticket.sla_first_response_due_soon',
+    category: 'OPERATION',
+    label: 'SLA de Resposta Próximo do Vencimento',
+    description: 'Disparado pelo scheduler quando o chamado está a menos de 30 minutos de violar o SLA de primeira resposta.',
+    entityType: 'TICKET',
+    lifecycle: 'scheduled',
+    status: 'active',
+    payloadExample: {
+      ticketId: 'tkt_881729',
+      number: 'TKT-2026-0045',
+      slaDueFirstResponseAt: '2026-05-25T19:30:00Z',
+      remainingMinutes: 28
+    }
+  },
+  {
+    type: 'ticket.sla_resolution_due_soon',
+    category: 'OPERATION',
+    label: 'SLA de Resolução Próximo do Vencimento',
+    description: 'Disparado pelo scheduler quando o chamado está a menos de 60 minutos de violar o SLA de resolução.',
+    entityType: 'TICKET',
+    lifecycle: 'scheduled',
+    status: 'active',
+    payloadExample: {
+      ticketId: 'tkt_881729',
+      number: 'TKT-2026-0045',
+      slaDueResolutionAt: '2026-05-25T20:00:00Z',
+      remainingMinutes: 52
+    }
+  },
+  {
+    type: 'ticket.sla_breached',
+    category: 'OPERATION',
+    label: 'SLA de Chamado Estourado / Violado',
+    description: 'Disparado imediatamente quando o prazo de primeira resposta ou resolução do chamado expira sem ação cabível.',
+    entityType: 'TICKET',
+    lifecycle: 'scheduled',
+    status: 'active',
+    payloadExample: {
+      ticketId: 'tkt_881729',
+      number: 'TKT-2026-0045',
+      slaType: 'RESOLUTION',
+      slaDueAt: '2026-05-25T14:00:00Z',
+      breachedAt: '2026-05-25T14:01:00Z'
+    }
+  },
+  {
+    type: 'ticket.feedback_due',
+    category: 'OPERATION',
+    label: 'Pesquisa de Satisfação Pendente',
+    description: 'Disparado X horas após a resolução/fechamento do chamado para coleta de feedback.',
+    entityType: 'TICKET',
+    lifecycle: 'scheduled',
+    status: 'active',
+    payloadExample: {
+      ticketId: 'tkt_881729',
+      number: 'TKT-2026-0045',
+      resolvedAt: '2026-05-24T15:00:00Z',
+      feedbackUrl: 'https://peanut.os/feedback/tkt_881729'
+    }
+  },
+  {
+    type: 'document.generated',
+    category: 'OPERATION',
+    label: 'Documento PDF Gerado',
+    description: 'Disparado quando um documento oficial (Fatura, Orçamento, Contrato, OS) é compilado em PDF.',
+    entityType: 'GENERATED_DOCUMENT',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      documentId: 'doc_289123',
+      entityType: 'INVOICE',
+      entityId: 'inv_82718',
+      version: 1,
+      originalFilename: 'fatura-FAT-2026-1029-v1.pdf'
+    }
+  },
+  {
+    type: 'client.created',
+    category: 'OPERATION',
+    label: 'Cliente Criado',
+    description: 'Disparado quando um novo cliente corporativo ou pessoa física é cadastrado.',
+    entityType: 'CLIENT',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      clientId: 'cli_981273',
+      legalName: 'Acme Corporation Ltda',
+      tradeName: 'Acme Corp',
+      document: '12.345.678/0001-90'
+    }
+  },
+  {
+    type: 'client.updated',
+    category: 'OPERATION',
+    label: 'Cliente Atualizado',
+    description: 'Disparado quando os dados cadastrais do cliente são editados.',
+    entityType: 'CLIENT',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      clientId: 'cli_981273',
+      tradeName: 'Acme Enterprise',
+      email: 'contato@acme.com'
+    }
+  },
+  {
+    type: 'ticket.scheduled_due_soon',
+    category: 'OPERATION',
+    label: 'Chamado Agendado Próximo (Planejado)',
+    description: 'Disparado antes da data/hora de agendamento de um chamado planejado.',
+    entityType: 'TICKET',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'ticket.scheduled_due_today',
+    category: 'OPERATION',
+    label: 'Chamado Agendado para Hoje (Planejado)',
+    description: 'Disparado no dia inicial do agendamento de rotina técnica.',
+    entityType: 'TICKET',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'service_order.created',
+    category: 'OPERATION',
+    label: 'Ordem de Serviço Criada (Planejado)',
+    description: 'Disparado quando uma OS técnica for criada após a implantação do módulo.',
+    entityType: 'SERVICE_ORDER',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'service_order.status_changed',
+    category: 'OPERATION',
+    label: 'Status da OS Alterado (Planejado)',
+    description: 'Disparado na mudança de status técnico da Ordem de Serviço.',
+    entityType: 'SERVICE_ORDER',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'service_order.due_today',
+    category: 'OPERATION',
+    label: 'OS Vencendo Hoje (Planejado)',
+    description: 'Disparado no dia do vencimento da Ordem de Serviço.',
+    entityType: 'SERVICE_ORDER',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'service_order.feedback_due',
+    category: 'OPERATION',
+    label: 'Satisfação de OS Pendente (Planejado)',
+    description: 'Solicita avaliação do cliente após a conclusão da Ordem de Serviço.',
+    entityType: 'SERVICE_ORDER',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+
+  // --- COMERCIAL ---
+  {
+    type: 'invoice.created',
+    category: 'COMMERCIAL',
+    label: 'Fatura Criada',
+    description: 'Disparado quando uma nova fatura financeira/mensalidade é criada.',
+    entityType: 'INVOICE',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      invoiceId: 'inv_82718',
+      number: 'FAT-2026-9817',
+      status: 'DRAFT',
+      totalAmount: 6500.00,
+      dueDate: '2026-05-30T03:00:00.000Z'
+    }
+  },
+  {
+    type: 'invoice.status_changed',
+    category: 'COMMERCIAL',
+    label: 'Status de Fatura Alterado',
+    description: 'Disparado quando a fatura é emitida, cancelada ou atualizada.',
+    entityType: 'INVOICE',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      invoiceId: 'inv_82718',
+      number: 'FAT-2026-9817',
+      oldStatus: 'DRAFT',
+      newStatus: 'ISSUED'
+    }
+  },
+  {
+    type: 'invoice.due_soon',
+    category: 'COMMERCIAL',
+    label: 'Fatura Vence em Breve',
+    description: 'Disparado X dias antes do vencimento da fatura ativa.',
+    entityType: 'INVOICE',
+    lifecycle: 'scheduled',
+    status: 'active',
+    payloadExample: {
+      invoiceId: 'inv_82718',
+      number: 'FAT-2026-9817',
+      dueDate: '2026-05-30T03:00:00.000Z',
+      daysRemaining: 3
+    }
+  },
+  {
+    type: 'invoice.due_today',
+    category: 'COMMERCIAL',
+    label: 'Fatura Vence Hoje',
+    description: 'Disparado na manhã do dia de vencimento da fatura.',
+    entityType: 'INVOICE',
+    lifecycle: 'scheduled',
+    status: 'active',
+    payloadExample: {
+      invoiceId: 'inv_82718',
+      number: 'FAT-2026-9817',
+      dueDate: '2026-05-25T03:00:00.000Z'
+    }
+  },
+  {
+    type: 'invoice.overdue',
+    category: 'COMMERCIAL',
+    label: 'Fatura Vencida / Atrasada',
+    description: 'Disparado diariamente enquanto a fatura continuar inadimplente após o vencimento.',
+    entityType: 'INVOICE',
+    lifecycle: 'scheduled',
+    status: 'active',
+    payloadExample: {
+      invoiceId: 'inv_82718',
+      number: 'FAT-2026-9817',
+      dueDate: '2026-05-24T03:00:00.000Z',
+      daysOverdue: 1
+    }
+  },
+  {
+    type: 'invoice.paid',
+    category: 'COMMERCIAL',
+    label: 'Fatura Paga',
+    description: 'Disparado no momento exato em que a baixa de pagamento da fatura é concluída.',
+    entityType: 'INVOICE',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      invoiceId: 'inv_82718',
+      number: 'FAT-2026-9817',
+      paidAt: '2026-05-25T15:30:00Z',
+      paymentMethod: 'PIX'
+    }
+  },
+  {
+    type: 'contract.created',
+    category: 'COMMERCIAL',
+    label: 'Contrato Criado',
+    description: 'Disparado na criação de um novo contrato de suporte ou licenças.',
+    entityType: 'CONTRACT',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      contractId: 'ctr_009812',
+      number: 'CTR-2026-0045',
+      title: 'Contrato Mensal de Suporte TI',
+      startDate: '2026-06-01T03:00:00.000Z',
+      billingDay: 5
+    }
+  },
+  {
+    type: 'contract.status_changed',
+    category: 'COMMERCIAL',
+    label: 'Status do Contrato Alterado',
+    description: 'Disparado na ativação, suspensão ou encerramento de um contrato.',
+    entityType: 'CONTRACT',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      contractId: 'ctr_009812',
+      number: 'CTR-2026-0045',
+      oldStatus: 'DRAFT',
+      newStatus: 'ACTIVE'
+    }
+  },
+  {
+    type: 'contract.cycle_ending_soon',
+    category: 'COMMERCIAL',
+    label: 'Ciclo do Contrato Terminando',
+    description: 'Disparado X dias antes do término de vigência do contrato comercial.',
+    entityType: 'CONTRACT',
+    lifecycle: 'scheduled',
+    status: 'active',
+    payloadExample: {
+      contractId: 'ctr_009812',
+      number: 'CTR-2026-0045',
+      endDate: '2026-06-09T03:00:00.000Z',
+      daysRemaining: 15
+    }
+  },
+  {
+    type: 'contract.cycle_ended',
+    category: 'COMMERCIAL',
+    label: 'Vigência de Contrato Encerrada',
+    description: 'Disparado no dia após o encerramento do contrato (endDate ultrapassada).',
+    entityType: 'CONTRACT',
+    lifecycle: 'scheduled',
+    status: 'active',
+    payloadExample: {
+      contractId: 'ctr_009812',
+      number: 'CTR-2026-0045',
+      endDate: '2026-05-24T03:00:00.000Z'
+    }
+  },
+  {
+    type: 'contract.renewal_due',
+    category: 'COMMERCIAL',
+    label: 'Renovação de Contrato Pendente',
+    description: 'Alerta que o contrato atingiu a data ideal de renovação.',
+    entityType: 'CONTRACT',
+    lifecycle: 'scheduled',
+    status: 'active',
+    payloadExample: {
+      contractId: 'ctr_009812',
+      number: 'CTR-2026-0045',
+      renewalMode: 'MONTHLY'
+    }
+  },
+  {
+    type: 'billing.event_created',
+    category: 'COMMERCIAL',
+    label: 'Evento de Faturamento Gerado',
+    description: 'Disparado quando o scheduler cria um evento mensal de faturamento para um contrato ativo.',
+    entityType: 'BILLING_SCHEDULE_EVENT',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      eventId: 'evt_bill_991823',
+      contractId: 'ctr_009812',
+      amountCents: 450000,
+      periodKey: '2026-06'
+    }
+  },
+  {
+    type: 'billing.event_skipped',
+    category: 'COMMERCIAL',
+    label: 'Evento de Faturamento Ignorado',
+    description: 'Disparado se o faturamento periódico for pulado por duplicidade ou regras internas.',
+    entityType: 'BILLING_SCHEDULE_EVENT',
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      contractId: 'ctr_009812',
+      periodKey: '2026-06',
+      reason: 'duplicate_period'
+    }
+  },
+  {
+    type: 'contract.auto_renewed',
+    category: 'COMMERCIAL',
+    label: 'Contrato Auto Renovado (Planejado)',
+    description: 'Disparado após renovação de ciclo automática.',
+    entityType: 'CONTRACT',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'quote.created',
+    category: 'COMMERCIAL',
+    label: 'Orçamento Criado (Planejado)',
+    description: 'Disparado na criação de uma nova cotação.',
+    entityType: 'QUOTE',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'quote.status_changed',
+    category: 'COMMERCIAL',
+    label: 'Status do Orçamento Alterado (Planejado)',
+    description: 'Disparado no envio, expiração ou alteração da proposta.',
+    entityType: 'QUOTE',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'quote.expiring_soon',
+    category: 'COMMERCIAL',
+    label: 'Orçamento Expirando em Breve (Planejado)',
+    description: 'Gatilho de contagem regressiva antes da validade final.',
+    entityType: 'QUOTE',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'quote.expired',
+    category: 'COMMERCIAL',
+    label: 'Orçamento Expirado (Planejado)',
+    description: 'Orçamento excedeu data limite sem aprovação.',
+    entityType: 'QUOTE',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'quote.accepted',
+    category: 'COMMERCIAL',
+    label: 'Orçamento Aprovado (Planejado)',
+    description: 'Assinatura e aprovação formal do cliente recebida.',
+    entityType: 'QUOTE',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  },
+  {
+    type: 'quote.rejected',
+    category: 'COMMERCIAL',
+    label: 'Orçamento Recusado (Planejado)',
+    description: 'Proposta recusada formalmente pelo destinatário.',
+    entityType: 'QUOTE',
+    lifecycle: 'future',
+    status: 'planned',
+    payloadExample: {}
+  }
+];
+
+export const WEBHOOK_EVENTS_BY_CATEGORY = {
+  AUDIT: WEBHOOK_EVENT_CATALOG.filter(e => e.category === 'AUDIT'),
+  OPERATION: WEBHOOK_EVENT_CATALOG.filter(e => e.category === 'OPERATION'),
+  COMMERCIAL: WEBHOOK_EVENT_CATALOG.filter(e => e.category === 'COMMERCIAL'),
+} as const;
+
+export const WEBHOOK_EVENT_TYPES = WEBHOOK_EVENTS;
+
+export const webhookEventTypeSchema = z.enum(WEBHOOK_EVENTS);
+export const webhookCategorySchema = z.enum(['AUDIT', 'OPERATION', 'COMMERCIAL']);
 
 const isPrivateHost = (url: string): boolean => {
   try {
@@ -572,8 +1233,10 @@ export const createWebhookEndpointSchema = z.object({
       message: 'URL aponta para rede privada ou local (não permitido em produção)',
     }),
   events: z
-    .array(z.enum(WEBHOOK_EVENTS))
-    .min(1, { message: 'Selecione ao menos um evento' }),
+    .array(z.enum(WEBHOOK_EVENTS, {
+      errorMap: () => ({ message: 'Apenas eventos ativos podem ser assinados. Eventos planejados não estão disponíveis no momento.' })
+    }))
+    .min(1, { message: 'Selecione ao menos um evento ativo' }),
   isActive: z.boolean().default(true),
 });
 
@@ -667,6 +1330,27 @@ export const documentQuerySchema = z.object({
 });
 
 export type DocumentQueryInput = z.infer<typeof documentQuerySchema>;
+
+// --- INBOUND WEBHOOK VALIDATORS ---
+
+export const INBOUND_ACTIONS = [
+  'ticket.update_status',
+  'ticket.add_comment',
+  'ticket.assign',
+  'contract.update_status',
+] as const;
+
+export const createInboundWebhookSchema = z.object({
+  name: z.string().min(2, { message: 'O nome do endpoint de entrada é obrigatório' }).max(150),
+  allowedActions: z.array(z.enum(INBOUND_ACTIONS)).min(1, { message: 'Selecione ao menos uma ação permitida' }),
+  isActive: z.boolean().default(true),
+});
+
+export type CreateInboundWebhookInput = z.infer<typeof createInboundWebhookSchema>;
+
+export const updateInboundWebhookSchema = createInboundWebhookSchema.partial();
+
+export type UpdateInboundWebhookInput = z.infer<typeof updateInboundWebhookSchema>;
 
 
 

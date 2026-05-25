@@ -204,6 +204,8 @@ model Workspace {
   outboxEvents        OutboxEvent[]
   webhookEndpoints         WebhookEndpoint[]
   webhookDeliveries        WebhookDelivery[]
+  webhookEventLogs         WebhookEventLog[]
+  inboundWebhookEndpoints  InboundWebhookEndpoint[]
   auditLogs                AuditLog[]
   ticketComments           TicketComment[]
   ticketHistories          TicketHistory[]
@@ -758,6 +760,40 @@ model WebhookDelivery {
   @@index([workspaceId])
   @@index([webhookId])
   @@map("webhook_deliveries")
+}
+
+model WebhookEventLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  eventType   String   @db.VarChar(100)
+  entityType  String   @db.VarChar(50)
+  entityId    String   @db.Uuid
+  periodKey   String?  @db.VarChar(50)
+  emittedAt   DateTime @default(now())
+  payload     Json?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, eventType, entityType, entityId, periodKey])
+  @@index([workspaceId, eventType])
+  @@map("webhook_event_logs")
+}
+
+model InboundWebhookEndpoint {
+  id              String   @id @default(uuid()) @db.Uuid
+  workspaceId     String   @db.Uuid
+  name            String   @db.VarChar(150)
+  encryptedSecret String?  @db.Text
+  allowedActions  String[]
+  isActive        Boolean  @default(true)
+  createdById     String?  @db.Uuid
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("inbound_webhook_endpoints")
 }
 
 model AuditLog {

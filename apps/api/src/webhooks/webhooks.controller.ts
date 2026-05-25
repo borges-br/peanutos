@@ -20,6 +20,8 @@ import {
   createWebhookEndpointSchema,
   updateWebhookEndpointSchema,
   webhookDeliveryQuerySchema,
+  createInboundWebhookSchema,
+  updateInboundWebhookSchema,
 } from '@peanut/validators';
 
 @UseGuards(AuthGuard, RolesGuard)
@@ -175,6 +177,108 @@ export class WebhooksController {
       user.workspaceId,
       validation.data,
       user.role,
+    );
+  }
+
+  // ============================================================================
+  // INBOUND WEBHOOK ENDPOINTS CRUD
+  // ============================================================================
+
+  @Get('inbound-webhooks')
+  @Roles('OWNER', 'ADMIN', 'READ_ONLY')
+  async listInbound(@CurrentUser() user: any) {
+    return this.webhooksService.listInbound(user.workspaceId, user.role);
+  }
+
+  @Get('inbound-webhooks/:id')
+  @Roles('OWNER', 'ADMIN', 'READ_ONLY')
+  async getInboundById(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.webhooksService.getInboundById(id, user.workspaceId, user.role);
+  }
+
+  @Post('inbound-webhooks')
+  @Roles('OWNER', 'ADMIN')
+  async createInbound(@Body() body: any, @CurrentUser() user: any, @Req() req: any) {
+    const validation = createInboundWebhookSchema.safeParse(body);
+    if (!validation.success) {
+      throw new BadRequestException(
+        validation.error.errors.map((e) => e.message).join(', '),
+      );
+    }
+    const ip = req.ip || req.headers?.['x-forwarded-for'] || '127.0.0.1';
+    const ua = req.headers?.['user-agent'] || 'Unknown';
+    return this.webhooksService.createInbound(
+      validation.data,
+      user.workspaceId,
+      user.id,
+      user.role,
+      ip,
+      ua,
+    );
+  }
+
+  @Patch('inbound-webhooks/:id')
+  @Roles('OWNER', 'ADMIN')
+  async updateInbound(
+    @Param('id') id: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const validation = updateInboundWebhookSchema.safeParse(body);
+    if (!validation.success) {
+      throw new BadRequestException(
+        validation.error.errors.map((e) => e.message).join(', '),
+      );
+    }
+    const ip = req.ip || req.headers?.['x-forwarded-for'] || '127.0.0.1';
+    const ua = req.headers?.['user-agent'] || 'Unknown';
+    return this.webhooksService.updateInbound(
+      id,
+      validation.data,
+      user.workspaceId,
+      user.id,
+      user.role,
+      ip,
+      ua,
+    );
+  }
+
+  @Delete('inbound-webhooks/:id')
+  @Roles('OWNER', 'ADMIN')
+  async deleteInbound(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const ip = req.ip || req.headers?.['x-forwarded-for'] || '127.0.0.1';
+    const ua = req.headers?.['user-agent'] || 'Unknown';
+    return this.webhooksService.deleteInbound(
+      id,
+      user.workspaceId,
+      user.id,
+      user.role,
+      ip,
+      ua,
+    );
+  }
+
+  @Post('inbound-webhooks/:id/rotate-secret')
+  @Roles('OWNER', 'ADMIN')
+  async rotateInboundSecret(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const ip = req.ip || req.headers?.['x-forwarded-for'] || '127.0.0.1';
+    const ua = req.headers?.['user-agent'] || 'Unknown';
+    return this.webhooksService.rotateInboundSecret(
+      id,
+      user.workspaceId,
+      user.id,
+      user.role,
+      ip,
+      ua,
     );
   }
 

@@ -526,11 +526,15 @@ export default function SettingsPage() {
   const renderIntegracoes = () => (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-md animate-fade-in">
       {[
-        { title: 'Diretório Azure AD', desc: 'Sincronização de operadores.', status: 'ATIVO', active: true, icon: 'hub' },
-        { title: 'Serviço de Envio SMTP', desc: 'Disparo de emails operacionais.', status: 'Previsto', active: false, icon: 'mail' },
-        { title: 'Disparador de Webhooks', desc: 'Integrações JSON em tempo real.', status: 'Previsto', active: false, icon: 'api' },
-      ].map(({ title, desc, status, active, icon }) => (
-        <div key={title} className={`bg-surface border border-outline-variant p-md rounded-xl flex items-center gap-md shadow ${!active ? 'opacity-60' : ''}`}>
+        { title: 'Diretório Azure AD', desc: 'Sincronização de operadores.', status: 'ATIVO', active: true, icon: 'hub', path: '' },
+        { title: 'Serviço de Envio SMTP', desc: 'Disparo de emails operacionais.', status: 'Previsto', active: false, icon: 'mail', path: '' },
+        { title: 'Disparador de Webhooks', desc: 'Integrações JSON em tempo real.', status: 'ATIVO', active: true, icon: 'api', path: '/dashboard/configuracoes/webhooks' },
+      ].map(({ title, desc, status, active, icon, path }) => (
+        <div
+          key={title}
+          onClick={() => path && router.push(path)}
+          className={`bg-surface border border-outline-variant p-md rounded-xl flex items-center gap-md shadow transition-colors ${!active ? 'opacity-60' : 'cursor-pointer hover:border-primary/40'}`}
+        >
           <div className="w-12 h-12 bg-surface-container-high rounded-lg flex items-center justify-center shrink-0">
             <span className={`material-symbols-outlined text-primary text-3xl`}>{icon}</span>
           </div>
