@@ -18,6 +18,10 @@ interface A4PreviewShellProps {
   statusBadge?: React.ReactNode;
   backPath: string;
   children: React.ReactNode;
+  companyName?: string;
+  companySub?: string;
+  companyDocument?: string;
+  companyEmail?: string;
 }
 
 export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
@@ -33,9 +37,18 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
   statusBadge,
   backPath,
   children,
+  companyName,
+  companySub,
+  companyDocument,
+  companyEmail,
 }) => {
   const router = useRouter();
   const { t } = useI18n();
+
+  const displayCompanyName = companyName || "Dados da empresa configuráveis";
+  const displayCompanySub = companySub || "Configuração de marca pendente";
+  const displayCompanyDocument = companyDocument ? `CNPJ: ${companyDocument}` : "CNPJ não configurado";
+  const displayCompanyEmail = companyEmail || "E-mail não configurado";
 
   return (
     <div className="flex flex-col gap-lg select-none">
@@ -80,15 +93,15 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
           {/* Header A4 */}
           <div className="flex justify-between items-start border-b-2 border-black pb-md mb-md">
             <div className="flex flex-col gap-1">
-              <span className="text-xl font-bold tracking-tight text-black">Peanut OS</span>
+              <span className="text-xl font-bold tracking-tight text-black">{displayCompanyName}</span>
               <span className="text-[10px] uppercase font-bold tracking-widest text-black/60">
-                Central de TI
+                {displayCompanySub}
               </span>
               <span className="text-[11px] text-black/70 font-mono mt-xs leading-none">
-                CNPJ: 48.232.109/0001-99
+                {displayCompanyDocument}
               </span>
               <span className="text-[11px] text-black/70 font-mono leading-none">
-                suporte@peanut.os.br
+                {displayCompanyEmail}
               </span>
             </div>
 

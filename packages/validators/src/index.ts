@@ -392,4 +392,52 @@ export const auditLogQuerySchema = z.object({
 
 export type AuditLogQueryInput = z.infer<typeof auditLogQuerySchema>;
 
+// --- INVOICES VALIDATORS ---
+
+export const invoiceStatusEnum = z.enum(["DRAFT", "ISSUED", "PAID", "OVERDUE", "CANCELLED"]);
+export type InvoiceStatus = z.infer<typeof invoiceStatusEnum>;
+
+export const invoiceItemTypeEnum = z.enum(["SERVICE", "MATERIAL"]);
+export type InvoiceItemType = z.infer<typeof invoiceItemTypeEnum>;
+
+export const invoiceQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  search: z.string().optional().nullable(),
+  status: invoiceStatusEnum.optional().nullable(),
+  clientId: z.string().uuid({ message: 'ID do cliente inválido' }).optional().nullable(),
+});
+export type InvoiceQueryInput = z.infer<typeof invoiceQuerySchema>;
+
+export const invoiceItemCreateSchema = z.object({
+  type: invoiceItemTypeEnum.default("SERVICE"),
+  description: z.string().min(2, { message: 'A descrição deve ter pelo menos 2 caracteres' }),
+  quantity: z.coerce.number().positive({ message: 'A quantidade deve ser positiva' }),
+  unit: z.string().min(1).max(20).default("UN"),
+  unitPrice: z.coerce.number().min(0, { message: 'O valor unitário deve ser maior ou igual a zero' }),
+  totalPrice: z.coerce.number().min(0).optional().nullable(),
+});
+export type InvoiceItemCreateInput = z.infer<typeof invoiceItemCreateSchema>;
+
+export const invoiceCreateSchema = z.object({
+  clientId: z.string().uuid({ message: 'ID do cliente inválido' }),
+  quoteId: z.string().uuid().optional().nullable(),
+  contractId: z.string().uuid().optional().nullable(),
+  ticketId: z.string().uuid().optional().nullable(),
+  number: z.string().optional().nullable(),
+  status: invoiceStatusEnum.default("DRAFT"),
+  issueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de emissão inválida' }).optional().nullable(),
+  dueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de vencimento inválida' }),
+  paymentMethod: z.enum(["PIX", "TRANSFER", "CASH", "OTHER"]).default("PIX"),
+  pixKey: z.string().optional().nullable(),
+  items: z.array(invoiceItemCreateSchema).min(1, { message: 'A fatura deve ter pelo menos 1 item' }),
+});
+export type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
+
+export const invoiceStatusUpdateSchema = z.object({
+  status: invoiceStatusEnum,
+});
+export type InvoiceStatusUpdateInput = z.infer<typeof invoiceStatusUpdateSchema>;
+
+
 

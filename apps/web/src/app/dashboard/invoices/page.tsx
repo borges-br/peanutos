@@ -64,7 +64,9 @@ export default function InvoicesPage() {
   };
 
   const formatCurrency = (amount: any) => {
-    if (!hasFinancialPrivilege) return 'Valor protegido';
+    if (amount === null || amount === undefined) {
+      return t.invoices.protectedValue || 'Valor protegido';
+    }
     const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numericAmount);
   };
@@ -72,21 +74,23 @@ export default function InvoicesPage() {
   const getStatusBadge = (statusValue: string) => {
     switch (statusValue) {
       case 'PAID':
-        return <Badge variant="success">Pago</Badge>;
+        return <Badge variant="success">{t.invoices.statuses.PAID}</Badge>;
       case 'OVERDUE':
-        return <Badge variant="error">Atrasado</Badge>;
+        return <Badge variant="error">{t.invoices.statuses.OVERDUE}</Badge>;
       case 'ISSUED':
-        return <Badge variant="info">Emitido</Badge>;
+        return <Badge variant="info">{t.invoices.statuses.ISSUED}</Badge>;
+      case 'CANCELLED':
+        return <Badge variant="neutral">{t.invoices.statuses.CANCELLED}</Badge>;
       case 'DRAFT':
-        default:
-          return <Badge variant="neutral">Rascunho</Badge>;
+      default:
+        return <Badge variant="neutral">{t.invoices.statuses.DRAFT}</Badge>;
     }
   };
 
   // DataTable column definitions
   const columns = [
     {
-      header: 'Número / Fatura',
+      header: t.invoices.number || 'Número / Fatura',
       render: (invoice: any) => (
         <div className="flex flex-col py-0.5">
           <span className="font-semibold text-on-surface">{invoice.number}</span>
@@ -95,7 +99,7 @@ export default function InvoicesPage() {
       ),
     },
     {
-      header: 'Cliente',
+      header: t.invoices.client || 'Cliente',
       render: (invoice: any) => (
         <span className="text-on-surface font-medium">
           {invoice.client?.tradeName || '--'}
@@ -103,7 +107,7 @@ export default function InvoicesPage() {
       ),
     },
     {
-      header: 'Vencimento',
+      header: t.invoices.dueDate || 'Vencimento',
       render: (invoice: any) => (
         <span className="font-mono text-on-surface-variant">
           {new Date(invoice.dueDate).toLocaleDateString('pt-BR')}
@@ -111,15 +115,15 @@ export default function InvoicesPage() {
       ),
     },
     {
-      header: 'Total',
+      header: t.invoices.total || 'Total',
       render: (invoice: any) => (
-        <span className={`font-mono font-semibold ${hasFinancialPrivilege ? 'text-primary' : 'text-on-surface-variant/60'}`}>
+        <span className={`font-mono font-semibold ${invoice.totalAmount !== null && invoice.totalAmount !== undefined ? 'text-primary' : 'text-on-surface-variant/60'}`}>
           {formatCurrency(invoice.totalAmount)}
         </span>
       ),
     },
     {
-      header: t.common.status,
+      header: t.invoices.status || t.common.status,
       render: (invoice: any) => getStatusBadge(invoice.status),
     },
     {
@@ -150,12 +154,12 @@ export default function InvoicesPage() {
       <div className="h-[1px] bg-outline-variant/30 my-xs"></div>
       <div className="grid grid-cols-2 gap-xs text-[12px] font-mono">
         <div className="flex flex-col">
-          <span className="text-on-surface-variant/70 uppercase text-[9px] font-sans font-bold">Vencimento</span>
+          <span className="text-on-surface-variant/70 uppercase text-[9px] font-sans font-bold">{t.invoices.dueDate || 'Vencimento'}</span>
           <span className="mt-0.5 text-on-surface">{new Date(invoice.dueDate).toLocaleDateString('pt-BR')}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-on-surface-variant/70 uppercase text-[9px] font-sans font-bold">Total</span>
-          <span className={`mt-0.5 font-bold ${hasFinancialPrivilege ? 'text-primary' : 'text-on-surface-variant/60'}`}>
+          <span className="text-on-surface-variant/70 uppercase text-[9px] font-sans font-bold">{t.invoices.total || 'Total'}</span>
+          <span className={`mt-0.5 font-bold ${invoice.totalAmount !== null && invoice.totalAmount !== undefined ? 'text-primary' : 'text-on-surface-variant/60'}`}>
             {formatCurrency(invoice.totalAmount)}
           </span>
         </div>
@@ -171,11 +175,12 @@ export default function InvoicesPage() {
   );
 
   const statusOptions = [
-    { value: '', label: 'Todos os status' },
-    { value: 'DRAFT', label: 'Rascunho' },
-    { value: 'ISSUED', label: 'Emitido' },
-    { value: 'PAID', label: 'Pago' },
-    { value: 'OVERDUE', label: 'Atrasado' },
+    { value: '', label: t.invoices.allStatuses || 'Todos os status' },
+    { value: 'DRAFT', label: t.invoices.statuses.DRAFT },
+    { value: 'ISSUED', label: t.invoices.statuses.ISSUED },
+    { value: 'PAID', label: t.invoices.statuses.PAID },
+    { value: 'OVERDUE', label: t.invoices.statuses.OVERDUE },
+    { value: 'CANCELLED', label: t.invoices.statuses.CANCELLED },
   ];
 
   return (
@@ -184,16 +189,16 @@ export default function InvoicesPage() {
       <header className="flex justify-between items-center w-full">
         <div className="flex flex-col gap-xs">
           <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
-            Faturas Comerciais
+            {t.invoices.title}
           </h2>
           <p className="text-[14px] text-on-surface-variant">
-            Gerencie cobranças de serviços de TI, mensalidades e notas de faturamento técnico.
+            {t.invoices.subtitle}
           </p>
         </div>
         {hasFinancialPrivilege && (
           <Button variant="primary" onClick={() => router.push('/dashboard/invoices/new')}>
             <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">add_circle</span>
-            Nova Fatura
+            {t.invoices.newInvoice}
           </Button>
         )}
       </header>
@@ -203,13 +208,13 @@ export default function InvoicesPage() {
         <form onSubmit={handleSearchSubmit} className="flex gap-sm flex-1 max-w-xl">
           <Input
             type="text"
-            placeholder="Buscar por número ou cliente..."
+            placeholder={t.invoices.searchPlaceholder || "Buscar por número ou cliente..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1"
           />
           <Button type="submit" variant="secondary" className="px-5">
-            Buscar
+            {t.common.searchAction || 'Buscar'}
           </Button>
         </form>
 
@@ -221,11 +226,11 @@ export default function InvoicesPage() {
               setPage(1);
             }}
             options={statusOptions}
-            className="min-w-[160px]"
+            className="min-w-[180px]"
           />
           {(search || status) && (
             <Button variant="ghost" onClick={handleClearFilters} className="text-error/80 hover:text-error py-1">
-              {t.common.clearFilters}
+              {t.invoices.clearFilters || t.common.clearFilters}
             </Button>
           )}
         </div>
@@ -243,12 +248,12 @@ export default function InvoicesPage() {
           </div>
         ) : invoices.length === 0 ? (
           <EmptyState
-            title="Nenhuma fatura encontrada."
-            description="Quando houver faturas geradas no workspace, elas aparecerão aqui."
+            title={t.invoices.emptyTitle}
+            description={t.invoices.emptyDescription}
             action={
               hasFinancialPrivilege && (
                 <Button variant="outline" onClick={() => router.push('/dashboard/invoices/new')}>
-                  Criar Primeira Fatura
+                  {t.invoices.createFirst}
                 </Button>
               )
             }
@@ -274,7 +279,7 @@ export default function InvoicesPage() {
                   onClick={() => setPage((p) => p - 1)}
                   className="py-1 px-4 text-xs"
                 >
-                  Anterior
+                  {t.common.previous || 'Anterior'}
                 </Button>
                 <Button
                   variant="outline"
@@ -282,7 +287,7 @@ export default function InvoicesPage() {
                   onClick={() => setPage((p) => p + 1)}
                   className="py-1 px-4 text-xs"
                 >
-                  Próximo
+                  {t.common.next || 'Próximo'}
                 </Button>
               </div>
             </div>
@@ -292,3 +297,4 @@ export default function InvoicesPage() {
     </div>
   );
 }
+

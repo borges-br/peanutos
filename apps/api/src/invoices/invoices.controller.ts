@@ -8,13 +8,18 @@ import {
   Query,
   UseGuards,
   Req,
+  BadRequestException,
 } from "@nestjs/common";
 import { InvoicesService } from "./invoices.service";
 import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { prisma } from "@peanut/db";
+import {
+  invoiceQuerySchema,
+  invoiceCreateSchema,
+  invoiceStatusUpdateSchema,
+} from "@peanut/validators";
 
 @UseGuards(AuthGuard, RolesGuard)
 @Controller()
@@ -23,45 +28,31 @@ export class InvoicesController {
 
   @Get("invoices")
   @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
-  async list(
-    @Query("page") page: number,
-    @Query("limit") limit: number,
-    @Query("search") search: string,
-    @Query("status") status: string,
-    @Query("clientId") clientId: string,
-    @CurrentUser() user: any,
-  ) {
-    const result = await this.invoicesService.list(user.workspaceId, {
-      page,
-      limit,
-      search,
-      status,
-      clientId,
-    });
-
-    // Sanitization: hide financial values from technicians/read-only roles
-    const hasFinancialPrivilege = ["OWNER", "ADMIN", "FINANCIAL"].includes(user.role);
-    if (!hasFinancialPrivilege) {
-      result.data = result.data.map((inv: any) => ({
-        ...inv,
-        totalAmount: 0, // This tells the client to show "Valor protegido"
-      }));
+  async list(@Query() query: any, @CurrentUser() user: any) {
+    const validation = invoiceQuerySchema.safeParse(query);
+    if (!validation.success) {
+      const messages = validation.error.errors.map((e) => e.message).join(", ");
+      throw new BadRequestException(messages);
     }
 
-    return result;
+    return this.invoicesService.list(user.workspaceId, validation.data, user.role);
   }
 
   @Get("clients/:clientId/invoices")
   @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
   async listClientInvoices(
     @Param("clientId") clientId: string,
-    @Query("page") page: number,
-    @Query("limit") limit: number,
-    @Query("search") search: string,
-    @Query("status") status: string,
+    @Query() query: any,
     @CurrentUser() user: any,
   ) {
-    return this.list(page, limit, search, status, clientId, user);
+    // Inject clientId into query to let it be parsed properly
+    const validation = invoiceQuerySchema.safeParse({ ...query, clientId });
+    if (!validation.success) {
+      const messages = validation.error.errors.map((e) => e.message).join(", ");
+      throw new BadRequestException(messages);
+    }
+
+    return this.invoicesService.list(user.workspaceId, validation.data, user.role);
   }
 
   @Get("invoices/:invoiceId")
@@ -70,32 +61,23 @@ export class InvoicesController {
     @Param("invoiceId") invoiceId: string,
     @CurrentUser() user: any,
   ) {
-    const invoice = await this.invoicesService.getById(invoiceId, user.workspaceId);
-
-    // Sanitization: hide values from non-privileged roles
-    const hasFinancialPrivilege = ["OWNER", "ADMIN", "FINANCIAL"].includes(user.role);
-    if (!hasFinancialPrivilege) {
-      invoice.totalAmount = 0 as any;
-      if (invoice.items) {
-        invoice.items = invoice.items.map((item: any) => ({
-          ...item,
-          unitPrice: 0,
-          totalPrice: 0,
-        }));
-      }
-    }
-
-    return invoice;
+    return this.invoicesService.getById(invoiceId, user.workspaceId, user.role);
   }
 
   @Post("invoices")
   @Roles("OWNER", "ADMIN", "FINANCIAL")
   async create(@Body() body: any, @CurrentUser() user: any, @Req() req: any) {
+    const validation = invoiceCreateSchema.safeParse(body);
+    if (!validation.success) {
+      const messages = validation.error.errors.map((e) => e.message).join(", ");
+      throw new BadRequestException(messages);
+    }
+
     const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
 
     return this.invoicesService.create(
-      body,
+      validation.data,
       user.workspaceId,
       user.id,
       ipAddress,
@@ -107,13 +89,28 @@ export class InvoicesController {
   @Roles("OWNER", "ADMIN", "FINANCIAL")
   async updateStatus(
     @Param("invoiceId") invoiceId: string,
-    @Body() body: { status: string },
+    @Body() body: any,
     @CurrentUser() user: any,
+    @Req() req: any,
   ) {
-    const updated = await prisma.invoice.update({
-      where: { id: invoiceId, workspaceId: user.workspaceId },
-      data: { status: body.status },
-    });
-    return updated;
+    const validation = invoiceStatusUpdateSchema.safeParse(body);
+    if (!validation.success) {
+      const messages = validation.error.errors.map((e) => e.message).join(", ");
+      throw new BadRequestException(messages);
+    }
+
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+
+    return this.invoicesService.updateStatus(
+      invoiceId,
+      validation.data,
+      user.workspaceId,
+      user.id,
+      user.role,
+      ipAddress,
+      userAgent,
+    );
   }
 }
+

@@ -26,9 +26,9 @@ export default function NewInvoicePage() {
   const [clientId, setClientId] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('PIX');
-  const [pixKey, setPixKey] = useState('financeiro@peanut.os.br');
+  const [pixKey, setPixKey] = useState('');
   const [items, setItems] = useState<InvoiceItemInput[]>([
-    { type: 'SERVICE', description: 'Suporte Técnico Mensal TI', quantity: 1, unit: 'UN', unitPrice: 1500 },
+    { type: 'SERVICE', description: '', quantity: 1, unit: 'UN', unitPrice: 0 },
   ]);
 
   const [loading, setLoading] = useState(false);
@@ -43,7 +43,7 @@ export default function NewInvoicePage() {
         const res = await apiRequest<unknown>('/clients?limit=100');
         setClients(extractArray(res));
       } catch (err: any) {
-        setError('Falha ao carregar lista de clientes.');
+        setError(t.invoices.errorCreate || 'Falha ao carregar lista de clientes.');
       } finally {
         setLoading(false);
       }
@@ -93,15 +93,15 @@ export default function NewInvoicePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientId) {
-      setError('Selecione um cliente.');
+      setError(t.invoices.errorSelectClient || 'Selecione um cliente.');
       return;
     }
     if (!dueDate) {
-      setError('Selecione uma data de vencimento.');
+      setError(t.invoices.errorSelectDueDate || 'Selecione uma data de vencimento.');
       return;
     }
-    if (items.some((item) => !item.description.trim() || item.unitPrice <= 0 || item.quantity <= 0)) {
-      setError('Preencha todos os campos dos itens com valores maiores que zero.');
+    if (items.some((item) => !item.description.trim() || item.unitPrice < 0 || item.quantity <= 0)) {
+      setError(t.invoices.errorFillItems || 'Preencha todos os campos dos itens com valores maiores que zero.');
       return;
     }
 
@@ -112,40 +112,44 @@ export default function NewInvoicePage() {
       clientId,
       dueDate: new Date(dueDate).toISOString(),
       paymentMethod,
-      pixKey: paymentMethod === 'PIX' ? pixKey : undefined,
-      totalAmount: grandTotal,
+      pixKey: paymentMethod === 'PIX' && pixKey.trim() !== '' ? pixKey : undefined,
       items: items.map((item) => ({
         type: item.type,
         description: item.description,
         quantity: item.quantity,
         unit: item.unit,
         unitPrice: item.unitPrice,
-        totalPrice: item.quantity * item.unitPrice,
       })),
     };
 
     try {
-      await apiRequest('/invoices', {
+      const response = await apiRequest<any>('/invoices', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      router.push('/dashboard/invoices');
+      if (response && response.id) {
+        router.push(`/dashboard/invoices/${response.id}`);
+      } else {
+        router.push('/dashboard/invoices');
+      }
     } catch (err: any) {
-      setError(err.message || 'Falha ao emitir fatura.');
+      setError(err.message || t.invoices.errorCreate || 'Falha ao emitir fatura.');
     } finally {
       setSaving(false);
     }
   };
 
   const clientOptions = [
-    { value: '', label: 'Selecione um cliente...' },
+    { value: '', label: t.invoices.selectClient || 'Selecione um cliente...' },
     ...clients.map((c) => ({ value: c.id, label: c.tradeName })),
   ];
 
   const methodOptions = [
-    { value: 'PIX', label: 'PIX (Chave Pix)' },
-    { value: 'BOLETO', label: 'Boleto Bancário (Simulado)' },
-    { value: 'TRANSFER', label: 'Transferência Bancária (TED/DOC)' },
+    { value: 'PIX', label: t.invoices.paymentMethods.PIX || 'PIX (Chave Pix)' },
+    { value: 'TRANSFER', label: t.invoices.paymentMethods.TRANSFER || 'Transferência Bancária (TED/DOC)' },
+    { value: 'CASH', label: t.invoices.paymentMethods.CASH || 'Dinheiro / Espécie' },
+    { value: 'OTHER', label: t.invoices.paymentMethods.OTHER || 'Outros' },
+    { value: 'BOLETO', label: 'Boleto Bancário (Planejado)', disabled: true }
   ];
 
   return (
@@ -154,15 +158,15 @@ export default function NewInvoicePage() {
       <header className="flex justify-between items-center w-full border-b border-outline-variant/30 pb-md">
         <div className="flex flex-col gap-xs">
           <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
-            Nova Fatura Comercial
+            {t.invoices.newInvoice}
           </h2>
           <p className="text-[14px] text-on-surface-variant">
-            Preencha os dados operacionais para gerar um faturamento no sistema.
+            {t.invoices.newInvoiceSubtitle}
           </p>
         </div>
         <Button variant="outline" onClick={() => router.push('/dashboard/invoices')}>
           <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">arrow_back</span>
-          {t.common.back}
+          {t.invoices.backBtn || t.common.back}
         </Button>
       </header>
 
@@ -174,10 +178,10 @@ export default function NewInvoicePage() {
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-lg">
         {/* Basic settings */}
-        <Card title="Identificação & Datas">
+        <Card title={t.clients.contextSections.cadastralData || "Identificação & Datas"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
             <Select
-              label="Cliente *"
+              label={t.invoices.clientLabel || "Cliente *"}
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
               options={clientOptions}
@@ -186,7 +190,7 @@ export default function NewInvoicePage() {
             />
 
             <Input
-              label="Data de Vencimento *"
+              label={t.invoices.dueDateLabel || "Data de Vencimento *"}
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
@@ -195,7 +199,7 @@ export default function NewInvoicePage() {
             />
 
             <Select
-              label="Método de Pagamento principal *"
+              label={t.invoices.paymentMethodLabel || "Método de Pagamento principal *"}
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
               options={methodOptions}
@@ -205,12 +209,12 @@ export default function NewInvoicePage() {
 
             {paymentMethod === 'PIX' && (
               <Input
-                label="Chave Pix para recebimento"
+                label={t.invoices.pixKeyLabel || "Chave Pix para recebimento"}
                 type="text"
                 value={pixKey}
                 onChange={(e) => setPixKey(e.target.value)}
                 disabled={saving}
-                placeholder="Ex: CNPJ ou E-mail"
+                placeholder={t.invoices.pixKeyPlaceholder || "Ex: CNPJ ou E-mail"}
               />
             )}
           </div>
@@ -218,10 +222,10 @@ export default function NewInvoicePage() {
 
         {/* Dynamic Items Table */}
         <Card
-          title="Itens da Fatura"
+          title={t.invoices.itemsSection || "Itens da Fatura"}
           headerAction={
             <Button variant="secondary" type="button" onClick={handleAddItem} disabled={saving} className="py-1">
-              + Adicionar Item
+              {t.invoices.addItemBtn || '+ Adicionar Item'}
             </Button>
           }
         >
@@ -234,7 +238,7 @@ export default function NewInvoicePage() {
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-sm w-full">
                   <div className="md:col-span-2">
                     <Select
-                      label="Tipo"
+                      label={t.invoices.itemTypeLabel || "Tipo"}
                       value={item.type}
                       onChange={(e) => handleItemChange(index, 'type', e.target.value)}
                       options={[
@@ -247,10 +251,10 @@ export default function NewInvoicePage() {
 
                   <div className="md:col-span-5">
                     <Input
-                      label="Descrição do item *"
+                      label={t.invoices.itemDescriptionLabel || "Descrição do item *"}
                       value={item.description}
                       onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                      placeholder="Ex: Licença mensal Office 365 ou horas de consultoria"
+                      placeholder={t.invoices.itemDescriptionPlaceholder || "Ex: Licença mensal Office 365 ou horas de consultoria"}
                       disabled={saving}
                       required
                     />
@@ -258,7 +262,7 @@ export default function NewInvoicePage() {
 
                   <div className="md:col-span-1">
                     <Input
-                      label="Qtd"
+                      label={t.invoices.itemQuantityLabel || "Qtd"}
                       type="number"
                       min="1"
                       value={item.quantity}
@@ -270,7 +274,7 @@ export default function NewInvoicePage() {
 
                   <div className="md:col-span-1">
                     <Input
-                      label="Un."
+                      label={t.invoices.itemUnitLabel || "Un."}
                       value={item.unit}
                       onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
                       disabled={saving}
@@ -280,10 +284,10 @@ export default function NewInvoicePage() {
 
                   <div className="md:col-span-3">
                     <Input
-                      label="Unit. (R$) *"
+                      label={t.invoices.itemPriceLabel || "Unit. (R$) *"}
                       type="number"
                       step="0.01"
-                      min="0.01"
+                      min="0.00"
                       value={item.unitPrice}
                       onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)}
                       disabled={saving}
@@ -312,19 +316,19 @@ export default function NewInvoicePage() {
         {/* Totalizing block */}
         <div className="flex flex-col md:flex-row gap-md justify-between items-start md:items-center bg-surface border border-outline-variant p-lg rounded-xl shadow-xl">
           <div className="flex flex-col gap-xs font-mono text-xs text-on-surface-variant">
-            <span>Serviços: R$ {servicesSubtotal.toFixed(2)}</span>
-            <span>Materiais: R$ {materialsSubtotal.toFixed(2)}</span>
+            <span>{t.invoices.servicesSubtotal || "Serviços"}: R$ {servicesSubtotal.toFixed(2)}</span>
+            <span>{t.invoices.materialsSubtotal || "Materiais"}: R$ {materialsSubtotal.toFixed(2)}</span>
             <span className="text-sm font-bold text-primary mt-1 border-t border-outline-variant/35 pt-1">
-              Valor Total Geral: R$ {grandTotal.toFixed(2)}
+              {t.invoices.grandTotal || "Valor Total Geral"}: R$ {grandTotal.toFixed(2)}
             </span>
           </div>
 
           <div className="flex gap-sm self-end md:self-center">
             <Button variant="outline" type="button" onClick={() => router.push('/dashboard/invoices')} disabled={saving}>
-              {t.common.cancel}
+              {t.invoices.cancelBtn || t.common.cancel}
             </Button>
             <Button variant="primary" type="submit" loading={saving}>
-              Emitir Fatura
+              {t.invoices.createBtn || "Emitir Fatura"}
             </Button>
           </div>
         </div>
@@ -332,3 +336,4 @@ export default function NewInvoicePage() {
     </div>
   );
 }
+

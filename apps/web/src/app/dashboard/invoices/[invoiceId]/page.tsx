@@ -22,6 +22,8 @@ export default function InvoiceDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'summary' | 'items' | 'totals' | 'history'>('summary');
   const [statusSaving, setStatusSaving] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const hasFinancialPrivilege = user ? ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role) : false;
 
@@ -32,39 +34,92 @@ export default function InvoiceDetailPage() {
       const data = await apiRequest(`/invoices/${invoiceId}`);
       setInvoice(data);
     } catch (err: any) {
-      setError(err.message || 'Fatura não encontrada.');
+      setError(err.message || t.invoices.notFound || 'Fatura não encontrada.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const data = await apiRequest<any>(`/audit-logs?search=${invoiceId}&entityType=INVOICE`);
+      if (data && data.data) {
+        setHistory(data.data);
+      }
+    } catch (err) {
+      console.error('Falha ao carregar histórico real da fatura:', err);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
   useEffect(() => {
     if (invoiceId) {
       fetchInvoice();
+      fetchHistory();
     }
   }, [invoiceId]);
 
   const handleStatusChange = async (newStatus: string) => {
     if (!hasFinancialPrivilege) return;
+
+    let confirmMsg = '';
+    if (newStatus === 'PAID') {
+      confirmMsg = t.invoices.confirmPaidText || 'Deseja realmente marcar esta fatura como PAGA?';
+    } else if (newStatus === 'OVERDUE') {
+      confirmMsg = t.invoices.confirmOverdueText || 'Tem certeza que deseja marcar esta fatura como ATRASADA?';
+    } else if (newStatus === 'CANCELLED') {
+      confirmMsg = t.invoices.confirmCancelText || 'ATENÇÃO: Deseja realmente CANCELAR esta fatura?';
+    }
+
+    if (confirmMsg && !window.confirm(confirmMsg)) {
+      return;
+    }
+
     setStatusSaving(true);
     try {
-      const updated = await apiRequest(`/invoices/${invoiceId}/status`, {
+      const updated = await apiRequest<any>(`/invoices/${invoiceId}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       });
       setInvoice((prev: any) => ({ ...prev, status: updated.status }));
+      fetchHistory();
     } catch (err: any) {
-      alert(err.message || 'Falha ao alterar status da fatura.');
+      alert(err.message || t.invoices.errorStatusChange || 'Falha ao alterar status da fatura.');
     } finally {
       setStatusSaving(false);
     }
+  };
+
+  const isTransitionDisabled = (targetStatus: string) => {
+    if (statusSaving || !invoice) return true;
+    const currentStatus = invoice.status;
+    if (currentStatus === targetStatus) return true;
+
+    if (currentStatus === 'CANCELLED') return true;
+
+    if (currentStatus === 'DRAFT') {
+      return !['ISSUED', 'CANCELLED'].includes(targetStatus);
+    }
+    if (currentStatus === 'ISSUED') {
+      return !['PAID', 'OVERDUE', 'CANCELLED'].includes(targetStatus);
+    }
+    if (currentStatus === 'OVERDUE') {
+      return !['PAID', 'CANCELLED'].includes(targetStatus);
+    }
+    if (currentStatus === 'PAID') {
+      return targetStatus !== 'CANCELLED' || !['OWNER', 'ADMIN'].includes(user?.role || '');
+    }
+
+    return true;
   };
 
   if (loading) {
     return (
       <div className="flex flex-col justify-center items-center min-h-[200px] gap-sm text-on-surface-variant font-body-sm">
         <div className="w-8 h-8 rounded-full border-3 border-primary/10 border-t-primary animate-spin" />
-        <p>Carregando fatura...</p>
+        <p>{t.invoices.loadingDetails || 'Carregando fatura...'}</p>
       </div>
     );
   }
@@ -73,17 +128,19 @@ export default function InvoiceDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center p-xl text-center gap-md">
         <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-md rounded-lg text-body-sm">
-          {error || 'Fatura não encontrada'}
+          {error || t.invoices.notFound || 'Fatura não encontrada'}
         </div>
         <Button variant="primary" onClick={() => router.push('/dashboard/invoices')}>
-          Voltar para Lista
+          {t.invoices.backToList || 'Voltar para Lista'}
         </Button>
       </div>
     );
   }
 
   const formatCurrency = (amount: any) => {
-    if (!hasFinancialPrivilege) return 'Valor protegido';
+    if (amount === null || amount === undefined) {
+      return t.invoices.protectedValue || 'Valor protegido';
+    }
     const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numericAmount);
   };
@@ -98,12 +155,8 @@ export default function InvoiceDetailPage() {
   };
 
   const getStatusLabel = (statusValue: string) => {
-    switch (statusValue) {
-      case 'PAID': return 'Pago';
-      case 'OVERDUE': return 'Atrasado';
-      case 'ISSUED': return 'Emitido';
-      default: return 'Rascunho';
-    }
+    const statuses = (t.invoices.statuses || {}) as Record<string, string>;
+    return statuses[statusValue] || statusValue;
   };
 
   return (
@@ -113,21 +166,21 @@ export default function InvoiceDetailPage() {
         <div className="flex flex-col gap-xs">
           <div className="flex items-center gap-sm">
             <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight">
-              Fatura {invoice.number}
+              {t.invoices.title.replace('s Comerciais', '')} {invoice.number}
             </h2>
             <Badge variant={getStatusBadgeVariant(invoice.status)}>
               {getStatusLabel(invoice.status)}
             </Badge>
           </div>
           <p className="text-[12px] text-on-surface-variant font-mono">
-            Cliente: {invoice.client?.tradeName} &bull; Emissão: {new Date(invoice.issueDate).toLocaleDateString('pt-BR')}
+            {t.invoices.client}: {invoice.client?.tradeName} &bull; {t.invoices.issueDate || 'Emissão'}: {new Date(invoice.issueDate).toLocaleDateString('pt-BR')}
           </p>
         </div>
         
         <div className="flex gap-sm">
           <Button variant="outline" onClick={() => router.push('/dashboard/invoices')}>
             <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">arrow_back</span>
-            {t.common.back}
+            {t.invoices.backBtn || t.common.back}
           </Button>
 
           <Button
@@ -135,7 +188,7 @@ export default function InvoiceDetailPage() {
             onClick={() => router.push(`/dashboard/invoices/${invoiceId}/preview`)}
           >
             <span className="material-symbols-outlined text-[16px] mr-1.5">visibility</span>
-            Visualizar A4
+            {t.invoices.visualizeA4 || 'Visualizar A4'}
           </Button>
         </div>
       </header>
@@ -150,7 +203,7 @@ export default function InvoiceDetailPage() {
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:border-outline-variant/40'
           }`}
         >
-          Resumo
+          {t.invoices.tabSummary || 'Resumo'}
         </button>
         <button
           onClick={() => setActiveTab('items')}
@@ -160,7 +213,7 @@ export default function InvoiceDetailPage() {
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:border-outline-variant/40'
           }`}
         >
-          Itens
+          {t.invoices.tabItems || 'Itens'}
         </button>
         <button
           onClick={() => setActiveTab('totals')}
@@ -170,7 +223,7 @@ export default function InvoiceDetailPage() {
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:border-outline-variant/40'
           }`}
         >
-          Totais
+          {t.invoices.tabTotals || 'Totais'}
         </button>
         <button
           onClick={() => setActiveTab('history')}
@@ -180,7 +233,7 @@ export default function InvoiceDetailPage() {
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:border-outline-variant/40'
           }`}
         >
-          Histórico
+          {t.invoices.tabHistory || 'Histórico'}
         </button>
       </div>
 
@@ -190,48 +243,48 @@ export default function InvoiceDetailPage() {
           <Card title="Resumo do Faturamento">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-md text-[13px] text-on-surface">
               <div className="flex flex-col gap-xs">
-                <span className="text-[10px] uppercase font-bold text-on-surface-variant opacity-60">Cliente</span>
+                <span className="text-[10px] uppercase font-bold text-on-surface-variant opacity-60">{t.invoices.client}</span>
                 <span className="font-semibold text-on-surface">{invoice.client?.tradeName}</span>
                 <span className="text-[11px] text-on-surface-variant/70 font-mono">{invoice.client?.legalName}</span>
               </div>
               <div className="flex flex-col gap-xs">
-                <span className="text-[10px] uppercase font-bold text-on-surface-variant opacity-60">Vencimento</span>
+                <span className="text-[10px] uppercase font-bold text-on-surface-variant opacity-60">{t.invoices.dueDate}</span>
                 <span className="font-semibold text-on-surface font-mono">{new Date(invoice.dueDate).toLocaleDateString('pt-BR')}</span>
               </div>
               <div className="flex flex-col gap-xs">
                 <span className="text-[10px] uppercase font-bold text-on-surface-variant opacity-60">Método de Recebimento</span>
-                <span className="font-semibold text-on-surface">{invoice.paymentMethod}</span>
+                <span className="font-semibold text-on-surface">{((t.invoices.paymentMethods || {}) as Record<string, string>)[invoice.paymentMethod] || invoice.paymentMethod}</span>
                 {invoice.pixKey && <span className="text-[11px] text-on-surface-variant/70 font-mono">Pix: {invoice.pixKey}</span>}
               </div>
             </div>
           </Card>
 
           {hasFinancialPrivilege && (
-            <Card title="Ações de Status Financeiro">
+            <Card title={t.invoices.actionsSection || 'Ações de Status Financeiro'}>
               <div className="flex flex-wrap gap-sm">
                 <Button
                   variant="primary"
                   onClick={() => handleStatusChange('PAID')}
-                  disabled={statusSaving || invoice.status === 'PAID'}
+                  disabled={isTransitionDisabled('PAID')}
                   className="px-5 py-2"
                 >
-                  Confirmar Pagamento (Pago)
+                  {t.invoices.confirmPaidBtn || 'Confirmar Pagamento (Pago)'}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => handleStatusChange('OVERDUE')}
-                  disabled={statusSaving || invoice.status === 'OVERDUE'}
+                  disabled={isTransitionDisabled('OVERDUE')}
                   className="px-5 py-2"
                 >
-                  Marcar como Atrasado
+                  {t.invoices.markOverdueBtn || 'Marcar como Atrasado'}
                 </Button>
                 <Button
                   variant="danger"
                   onClick={() => handleStatusChange('CANCELLED')}
-                  disabled={statusSaving || invoice.status === 'CANCELLED'}
+                  disabled={isTransitionDisabled('CANCELLED')}
                   className="px-5 py-2"
                 >
-                  Cancelar Fatura
+                  {t.invoices.cancelInvoiceBtn || 'Cancelar Fatura'}
                 </Button>
               </div>
             </Card>
@@ -286,27 +339,27 @@ export default function InvoiceDetailPage() {
             <Card title="Resumo de Valores da Cobrança">
               <div className="flex flex-col gap-sm max-w-md font-mono text-sm text-on-surface mt-sm">
                 <div className="flex justify-between items-center py-2 border-b border-outline-variant/10">
-                  <span className="text-on-surface-variant font-sans">Subtotal de Serviços:</span>
+                  <span className="text-on-surface-variant font-sans">{t.invoices.servicesSubtotal}:</span>
                   <span className="font-semibold">
                     {formatCurrency(
                       (invoice.items || [])
                         .filter((i: any) => i.type === 'SERVICE')
-                        .reduce((sum: number, i: any) => sum + parseFloat(i.totalPrice), 0)
+                        .reduce((sum: number, i: any) => sum + parseFloat(i.totalPrice || 0), 0)
                     )}
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-outline-variant/10">
-                  <span className="text-on-surface-variant font-sans">Subtotal de Materiais:</span>
+                  <span className="text-on-surface-variant font-sans">{t.invoices.materialsSubtotal}:</span>
                   <span className="font-semibold">
                     {formatCurrency(
                       (invoice.items || [])
                         .filter((i: any) => i.type === 'MATERIAL')
-                        .reduce((sum: number, i: any) => sum + parseFloat(i.totalPrice), 0)
+                        .reduce((sum: number, i: any) => sum + parseFloat(i.totalPrice || 0), 0)
                     )}
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-3 text-lg font-bold text-primary border-t-2 border-outline-variant mt-sm">
-                  <span className="font-sans">Valor Total Geral:</span>
+                  <span className="font-sans">{t.invoices.grandTotal}:</span>
                   <span>{formatCurrency(invoice.totalAmount)}</span>
                 </div>
               </div>
@@ -319,42 +372,43 @@ export default function InvoiceDetailPage() {
         <div className="flex flex-col gap-md animate-in fade-in duration-150">
           <Card title="Histórico de Auditoria & Alterações">
             <div className="flex flex-col gap-sm mt-sm">
-              <div className="p-md bg-surface-container-low border border-outline-variant/30 rounded-xl flex items-center justify-between text-[12px] text-on-surface-variant font-mono">
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-semibold text-on-surface">Fatura criada no sistema</span>
-                  <span>Por: {user?.name || 'Administrador'}</span>
+              {loadingHistory ? (
+                <div className="flex justify-center items-center py-4 text-xs font-mono text-on-surface-variant animate-pulse">
+                  Carregando histórico real...
                 </div>
-                <span>{new Date(invoice.createdAt).toLocaleString('pt-BR')}</span>
-              </div>
-              
-              {invoice.status === 'PAID' && (
-                <div className="p-md bg-green-500/5 border border-green-500/10 rounded-xl flex items-center justify-between text-[12px] text-green-400 font-mono">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-semibold">Pagamento confirmado (Fatura liquidada)</span>
-                    <span>Status atualizado para PAGO</span>
-                  </div>
-                  <span>{new Date(invoice.updatedAt).toLocaleString('pt-BR')}</span>
+              ) : history.length === 0 ? (
+                <div className="p-md bg-surface-container-low border border-outline-variant/30 rounded-xl flex items-center justify-between text-[12px] text-on-surface-variant font-mono">
+                  <span>Sem dados no histórico da fatura.</span>
                 </div>
-              )}
+              ) : (
+                history.map((log: any) => {
+                  let eventLabel = log.action === 'invoice.created' ? (t.invoices.historyCreated || 'Fatura criada no sistema') : '';
+                  
+                  if (log.action === 'invoice.status_changed') {
+                    const nextStatus = log.afterJson?.status;
+                    if (nextStatus === 'PAID') {
+                      eventLabel = t.invoices.historyPaid || 'Pagamento confirmado (Fatura liquidada)';
+                    } else if (nextStatus === 'OVERDUE') {
+                      eventLabel = t.invoices.historyOverdue || 'Status de atraso configurado';
+                    } else if (nextStatus === 'CANCELLED') {
+                      eventLabel = t.invoices.historyCancelled || 'Fatura CANCELADA permanentemente';
+                    } else {
+                      eventLabel = (t.invoices.statusUpdatedTo || 'Status atualizado para {status}').replace('{status}', getStatusLabel(nextStatus));
+                    }
+                  } else if (!eventLabel) {
+                    eventLabel = log.action;
+                  }
 
-              {invoice.status === 'OVERDUE' && (
-                <div className="p-md bg-red-500/5 border border-red-500/10 rounded-xl flex items-center justify-between text-[12px] text-red-400 font-mono">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-semibold">Status de atraso configurado</span>
-                    <span>Fatura marcada como INADIMPLENTE</span>
-                  </div>
-                  <span>{new Date(invoice.updatedAt).toLocaleString('pt-BR')}</span>
-                </div>
-              )}
-
-              {invoice.status === 'CANCELLED' && (
-                <div className="p-md bg-outline-variant/5 border border-outline-variant/10 rounded-xl flex items-center justify-between text-[12px] text-on-surface-variant/60 font-mono">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-semibold">Fatura CANCELADA permanentemente</span>
-                    <span>Cobrança desativada no workspace</span>
-                  </div>
-                  <span>{new Date(invoice.updatedAt).toLocaleString('pt-BR')}</span>
-                </div>
+                  return (
+                    <div key={log.id} className="p-md bg-surface-container-low border border-outline-variant/30 rounded-xl flex items-center justify-between text-[12px] text-on-surface-variant font-mono">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-semibold text-on-surface">{eventLabel}</span>
+                        <span>{t.invoices.byUser?.replace('{user}', log.actor?.name || 'Sistema') || `Por: ${log.actor?.name || 'Sistema'}`}</span>
+                      </div>
+                      <span className="text-on-surface-variant">{new Date(log.createdAt).toLocaleString('pt-BR')}</span>
+                    </div>
+                  );
+                })
               )}
             </div>
           </Card>
@@ -363,3 +417,4 @@ export default function InvoiceDetailPage() {
     </div>
   );
 }
+
