@@ -19,6 +19,7 @@ export interface BrandSnapshot {
   documentAccentColor?: string | null;
   logoUrl?: string | null;
   footerText?: string | null;
+  signatureName?: string | null;
 }
 
 export interface ResponsibleSnapshot {
@@ -146,6 +147,9 @@ export interface InvoicePdfTemplateData {
     legalName?: string | null;
     document?: string | null;
     email?: string | null;
+    phone?: string | null;
+    website?: string | null;
+    address?: string | null;
   };
   brand: {
     brandName?: string | null;
@@ -163,6 +167,8 @@ export interface InvoicePdfTemplateData {
     documentFooterText?: string | null;
     signatureName?: string | null;
     logoUrl?: string | null;
+    defaultInvoiceNotes?: string | null;
+    defaultContractTerms?: string | null;
   };
   responsible?: ResponsibleSnapshot | null;
   generatedAt: string;
@@ -181,73 +187,302 @@ function escapeHtml(str: string | null | undefined): string {
     .replace(/'/g, "&#039;");
 }
 
-/**
- * Premium A4 PDF generator for Invoices with harmony styling and complete brand configuration integration
- */
-export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
-  // Brand fallback configurations
-  const brandName = escapeHtml(data.brand.brandName || "Dados da empresa configuráveis");
-  const brandSubtitle = escapeHtml(data.brand.brandSubtitle || "Documento não configurado");
-  const legalName = escapeHtml(data.brand.legalName || "Dados da empresa configuráveis");
-  const companyDocument = escapeHtml(data.brand.companyDocument || "CNPJ não configurado");
-  const companyEmail = escapeHtml(data.brand.companyEmail || "E-mail não configurado");
-  const companyAddress = escapeHtml(data.brand.companyAddress || "Endereço não configurado");
-  const companyPhone = escapeHtml(data.brand.companyPhone || "Telefone não configurado");
-  const primaryColor = escapeHtml(data.brand.primaryColorHex || "#1a56db");
-  const documentFooterText = escapeHtml(data.brand.documentFooterText || "Gerado automaticamente pelo sistema.");
-  const logoUrl = data.brand.logoUrl || null;
-
-  // Client configurations
-  const clientName = escapeHtml(data.client.tradeName || data.client.legalName || "Cliente");
-  const clientDocument = escapeHtml(data.client.document || "Documento não configurado");
-  const clientEmail = escapeHtml(data.client.email || "E-mail não configurado");
-
-  // Invoice variables
-  const invoiceNumber = escapeHtml(data.invoice.number);
-  const invoiceStatus = escapeHtml(data.invoice.status);
-  const issueDate = escapeHtml(data.invoice.issueDate);
-  const dueDate = escapeHtml(data.invoice.dueDate);
-  const paymentMethod = escapeHtml(data.invoice.paymentMethod);
-  const pixKey = escapeHtml(data.invoice.pixKey || "Não configurada");
-  const totalAmount = escapeHtml(data.invoice.totalAmount);
-  const generatedAt = escapeHtml(data.generatedAt);
-
-  // Responsible
-  const responsible = data.responsible;
-  const signatureName = responsible?.displayName
-    ? escapeHtml(responsible.displayName)
-    : escapeHtml(data.brand.signatureName);
-
-  // Group items by type
-  const services = data.invoice.items.filter(item => item.type === "SERVICE");
-  const serviceSubtotal = services.reduce((sum, item) => sum + parseFloat(item.totalPrice.replace(/[^\d,.-]/g, "").replace(",", ".")), 0);
-  const materials = data.invoice.items.filter(item => item.type === "MATERIAL");
-  const materialSubtotal = materials.reduce((sum, item) => sum + parseFloat(item.totalPrice.replace(/[^\d,.-]/g, "").replace(",", ".")), 0);
-
-  const formatBrl = (num: number) => {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(num);
+export interface RenderA4DocumentParams {
+  documentType: 'INVOICE' | 'QUOTE' | 'SERVICE_ORDER' | 'CONTRACT' | 'REPORT';
+  brand: BrandSnapshot;
+  responsible: ResponsibleSnapshot | null;
+  client: {
+    tradeName: string;
+    legalName?: string | null;
+    document?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    website?: string | null;
+    address?: string | null;
   };
+  data: {
+    number: string;
+    status: string;
+    issueDate: string;
+    dueDate: string;
+    paymentMethod?: string | null;
+    pixKey?: string | null;
+    totalAmount: string;
+    items: Array<{
+      type: string;
+      description: string;
+      quantity: string;
+      unit: string;
+      unitPrice: string;
+      totalPrice: string;
+    }>;
+    terms?: string | null;
+    observations?: string | null;
+    title?: string | null;
+    subtotalServices?: string | null;
+    subtotalMaterials?: string | null;
+  };
+  templateSettings: TemplateSnapshot;
+  generatedAt?: string;
+}
 
-  // Render items rows
-  const itemsHtml = data.invoice.items.map(item => `
-    <tr>
-      <td style="padding: 10px 0; border-bottom: 1px solid #eee;">
-        <strong style="color: #333; font-size: 10pt; display: block;">${escapeHtml(item.description)}</strong>
-        <span style="font-size: 8pt; color: #888;">${item.type === "SERVICE" ? "Prestação de Serviços de TI" : "Fornecimento de Materiais"}</span>
+/**
+ * Central dynamic block-based A4 document render engine.
+ * Generates highly aesthetic premium layout based on enabling settings, order, and documental brand tokens.
+ */
+export function renderA4Document(params: RenderA4DocumentParams): string {
+  const { documentType, brand, responsible, client, data, templateSettings } = params;
+  const generatedAt = params.generatedAt || new Date().toLocaleString('pt-BR');
+
+  // Colors & Brand Settings
+  const primaryColor = escapeHtml(brand.documentPrimaryColor || "#1a56db");
+  const brandName = escapeHtml(brand.publicName || "Empresa");
+  const brandSubtitle = escapeHtml(brand.brandSubtitle || "");
+  const legalName = escapeHtml(brand.legalName || "");
+  const companyDocument = escapeHtml(brand.taxId || "");
+  const companyEmail = escapeHtml(brand.email || "");
+  const companyPhone = escapeHtml(brand.phone || "");
+  const companyWebsite = escapeHtml(brand.website || "");
+  const companyAddress = escapeHtml(brand.address || "");
+  const logoUrl = brand.logoUrl || null;
+  const documentFooterText = escapeHtml(brand.footerText || "Documento Oficial — Peanut OS.");
+
+  // Client settings
+  const clientName = escapeHtml(client.tradeName || client.legalName || "Cliente");
+  const clientDocument = escapeHtml(client.document || "");
+  const clientEmail = escapeHtml(client.email || "");
+
+  // Document generic data
+  const docNumber = escapeHtml(data.number);
+  const rawStatus = escapeHtml(data.status);
+  const issueDate = escapeHtml(data.issueDate);
+  const dueDate = escapeHtml(data.dueDate);
+  const paymentMethod = escapeHtml(data.paymentMethod || "PIX");
+  const pixKey = escapeHtml(data.pixKey || "Não informada");
+  const totalAmount = escapeHtml(data.totalAmount);
+  const terms = data.terms || "";
+  const observations = data.observations || "";
+  const subtotalServices = escapeHtml(data.subtotalServices || "");
+  const subtotalMaterials = escapeHtml(data.subtotalMaterials || "");
+
+  // Mapping status labels
+  let statusLabel = rawStatus;
+  if (rawStatus === 'PAID' || rawStatus === 'Liquidada') statusLabel = 'Liquidado';
+  else if (rawStatus === 'OVERDUE' || rawStatus === 'Atrasada') statusLabel = 'Atrasado';
+  else if (rawStatus === 'DRAFT') statusLabel = 'Rascunho';
+  else if (rawStatus === 'ISSUED' || rawStatus === 'Pendente') statusLabel = 'Pendente';
+
+  // Document labels based on type
+  let docTypeLabel = "DOCUMENTO";
+  if (documentType === 'INVOICE') docTypeLabel = "FATURA COMERCIAL";
+  else if (documentType === 'QUOTE') docTypeLabel = "ORÇAMENTO";
+  else if (documentType === 'SERVICE_ORDER') docTypeLabel = "ORDEM DE SERVIÇO";
+  else if (documentType === 'CONTRACT') docTypeLabel = "CONTRATO COMERCIAL";
+  else if (documentType === 'REPORT') docTypeLabel = "RELATÓRIO OPERACIONAL";
+
+  const customTitle = data.title ? escapeHtml(data.title) : docTypeLabel;
+
+  // Build items rows HTML
+  const itemsRowsHtml = data.items.map((item, idx) => `
+    <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+      <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: left;">
+        <strong style="color: #1e293b; font-size: 9.5pt; display: block;">${escapeHtml(item.description)}</strong>
+        <span style="font-size: 7.5pt; color: #64748b;">${item.type === "SERVICE" ? "Serviço Prestado" : "Material / Produto"}</span>
       </td>
-      <td style="padding: 10px 0; text-align: center; border-bottom: 1px solid #eee;">${escapeHtml(item.quantity)}</td>
-      <td style="padding: 10px 0; text-align: center; border-bottom: 1px solid #eee;">${escapeHtml(item.unit || "UN")}</td>
-      <td style="padding: 10px 0; text-align: right; border-bottom: 1px solid #eee;">${escapeHtml(item.unitPrice)}</td>
-      <td style="padding: 10px 0; text-align: right; border-bottom: 1px solid #eee; font-weight: bold;">${escapeHtml(item.totalPrice)}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569;">${escapeHtml(item.quantity)}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569;">${escapeHtml(item.unit || "UN")}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #475569;">${escapeHtml(item.unitPrice)}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold; color: #0f172a;">${escapeHtml(item.totalPrice)}</td>
     </tr>
   `).join("");
+
+  // Map blocks to HTML functions
+  const blocksMap: Record<string, () => string> = {
+    header: () => `
+      <div class="block-container block-header" style="margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="vertical-align: middle;">
+              <span style="background: ${primaryColor}; color: white; padding: 5px 12px; border-radius: 4px; font-weight: 800; font-size: 8.5pt; display: inline-block; letter-spacing: 0.5px;">
+                ${docTypeLabel}
+              </span>
+            </td>
+            <td style="text-align: right; vertical-align: middle; font-family: monospace;">
+              <span style="font-size: 14pt; font-weight: bold; color: #0f172a; display: block;">#${docNumber}</span>
+              <div style="font-size: 8pt; color: #64748b; margin-top: 4px; line-height: 1.3;">
+                Emissão: ${issueDate}<br/>
+                Vencimento: <strong style="color: #0f172a;">${dueDate}</strong>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>
+    `,
+    logo: () => `
+      <div class="block-container block-logo" style="margin-bottom: 20px;">
+        ${logoUrl ? `
+          <img src="${logoUrl}" alt="${brandName}" style="max-height: 48px; max-width: 180px; object-fit: contain; display: block;" />
+        ` : `
+          <span style="font-size: 20pt; font-weight: 800; color: ${primaryColor}; tracking-tight: -0.5px; display: block;">${brandName}</span>
+        `}
+      </div>
+    `,
+    companyInfo: () => `
+      <div class="block-container block-company-info" style="font-size: 8.5pt; color: #475569; margin-bottom: 20px; line-height: 1.45; border-left: 3px solid ${primaryColor}; padding-left: 10px;">
+        <strong style="color: #0f172a; font-size: 10pt; display: block; margin-bottom: 2px;">${brandName}</strong>
+        ${brandSubtitle ? `<span style="font-size: 8.5pt; font-weight: 600; color: #64748b; display: block; margin-bottom: 4px;">${brandSubtitle}</span>` : ''}
+        ${legalName ? `Razão Social: ${legalName} | ` : ''}CNPJ/Documento: ${companyDocument}<br/>
+        E-mail: ${companyEmail} ${companyPhone ? `| Tel: ${companyPhone}` : ''} ${companyWebsite ? `| Website: ${companyWebsite}` : ''}<br/>
+        ${companyAddress ? `Endereço: ${companyAddress}` : ''}
+      </div>
+    `,
+    clientInfo: () => `
+      <div class="block-container block-client-info" style="margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <tr>
+            <td style="padding: 12px; line-height: 1.45;">
+              <div style="font-size: 7.5pt; color: #64748b; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; margin-bottom: 4px;">Destinatário / Cliente</div>
+              <div style="font-size: 11pt; font-weight: bold; color: #0f172a;">${clientName}</div>
+              <div style="font-size: 9pt; color: #475569; margin-top: 2px;">
+                ${clientDocument ? `CNPJ/CPF: ${clientDocument}` : ''} 
+                ${clientEmail ? ` | E-mail: ${clientEmail}` : ''}
+              </div>
+              <div style="font-size: 8.5pt; color: #64748b; margin-top: 4px;">
+                Status do Documento: <span style="font-weight: bold; color: ${primaryColor};">${statusLabel}</span>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>
+    `,
+    documentTitle: () => `
+      <div class="block-container block-document-title" style="margin-bottom: 20px; border-bottom: 2px solid ${primaryColor}; padding-bottom: 6px;">
+        <span style="font-size: 13pt; font-weight: 800; color: #0f172a; tracking-tight: -0.2px;">${customTitle}</span>
+      </div>
+    `,
+    itemsTable: () => `
+      <div class="block-container block-items-table" style="margin-bottom: 25px;">
+        <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 8px;">
+          Detalhamento de Serviços e Recursos Cobrados
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-family: monospace; font-size: 9pt;">
+          <thead>
+            <tr style="background: #f1f5f9;">
+              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: left; width: 50%;">Item / Descrição</th>
+              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: center; width: 10%;">Qtd</th>
+              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: center; width: 10%;">Un</th>
+              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: right; width: 15%;">Valor Unit.</th>
+              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: right; width: 15%;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsRowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `,
+    financialSummary: () => `
+      <div class="block-container block-financial-summary" style="margin-bottom: 25px;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="width: 50%;"></td>
+            <td style="width: 50%; text-align: right; font-family: monospace; font-size: 9pt; line-height: 1.5;">
+              ${subtotalServices ? `<div>Subtotal Serviços: <span style="font-weight: bold; min-width: 100px; display: inline-block;">${subtotalServices}</span></div>` : ''}
+              ${subtotalMaterials ? `<div>Subtotal Materiais: <span style="font-weight: bold; min-width: 100px; display: inline-block;">${subtotalMaterials}</span></div>` : ''}
+              <div style="font-size: 11pt; font-weight: bold; color: #000; margin-top: 8px; border-top: 2px solid #0f172a; padding-top: 6px;">
+                Valor Total: <span style="font-weight: 800; min-width: 120px; display: inline-block; color: ${primaryColor};">${totalAmount}</span>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>
+    `,
+    paymentInfo: () => `
+      <div class="block-container block-payment-info" style="margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 8.5pt; line-height: 1.45;">
+        <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #0f172a; margin-bottom: 6px; font-family: sans-serif; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+          Instruções de Pagamento e Recebimento
+        </div>
+        <div>Favorecido: ${legalName || brandName}</div>
+        <div>Método preferencial: ${paymentMethod}</div>
+        <div style="font-weight: bold; margin-top: 4px; color: ${primaryColor}; font-size: 9pt; font-family: monospace;">
+          Chave PIX: ${pixKey}
+        </div>
+      </div>
+    `,
+    terms: () => `
+      <div class="block-container block-terms" style="margin-bottom: 20px; font-size: 8.5pt; color: #475569; line-height: 1.45; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+        <strong style="color: #0f172a; font-size: 9pt; display: block; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Termos e Condições</strong>
+        <div style="white-space: pre-wrap; font-style: italic; color: #64748b;">${escapeHtml(terms || 'Termos de serviço não especificados.')}</div>
+      </div>
+    `,
+    observations: () => `
+      <div class="block-container block-observations" style="margin-bottom: 20px; font-size: 8.5pt; color: #475569; line-height: 1.45; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+        <strong style="color: #0f172a; font-size: 9pt; display: block; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Observações Adicionais</strong>
+        <div style="white-space: pre-wrap; font-style: italic; color: #64748b;">${escapeHtml(observations || 'Nenhuma observação cadastrada.')}</div>
+      </div>
+    `,
+    responsibleSignature: () => {
+      const displaySigName = responsible?.displayName ? escapeHtml(responsible.displayName) : escapeHtml(brand.signatureName || "");
+      const displaySigJob = responsible?.jobTitle ? escapeHtml(responsible.jobTitle) : "Responsável Técnico";
+      return `
+        <div class="block-container block-responsible-signature" style="margin-top: 30px; margin-bottom: 20px; text-align: center;">
+          <div style="display: inline-block; width: 280px; text-align: center; vertical-align: top;">
+            <div style="height: 52px; display: flex; align-items: flex-end; justify-content: center; margin-bottom: 6px;">
+              ${responsible?.signatureImageUrl && responsible.signatureEnabled ? `
+                <img src="${escapeHtml(responsible.signatureImageUrl)}" alt="Assinatura" style="max-height: 50px; max-width: 200px; object-fit: contain; display: block; margin: 0 auto;" />
+              ` : '<div style="height: 10px;"></div>'}
+            </div>
+            <div style="border-top: 1px solid #cbd5e1; padding-top: 6px; font-size: 9pt; font-weight: bold; color: #0f172a;">
+              ${displaySigName}
+            </div>
+            <div style="font-size: 8pt; color: #64748b; margin-top: 2px;">${displaySigJob}</div>
+            <div style="font-size: 7.5pt; color: #94a3b8;">Assinatura do Emissor</div>
+          </div>
+        </div>
+      `;
+    },
+    clientSignature: () => `
+      <div class="block-container block-client-signature" style="margin-top: 30px; margin-bottom: 20px; text-align: center;">
+        <div style="display: inline-block; width: 280px; text-align: center; vertical-align: top;">
+          <div style="height: 52px;"></div>
+          <div style="border-top: 1px solid #cbd5e1; padding-top: 6px; font-size: 9pt; font-weight: bold; color: #0f172a;">
+            Assinatura do Cliente / Destinatário
+          </div>
+          <div style="font-size: 8pt; color: #64748b; margin-top: 2px;">Responsável Autorizado</div>
+          <div style="font-size: 7.5pt; color: #94a3b8;">De acordo com o recebimento</div>
+        </div>
+      </div>
+    `,
+    qrCode: () => `
+      <div class="block-container block-qrcode" style="margin-bottom: 20px; text-align: center;">
+        <div style="display: inline-block; padding: 10px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; text-align: center;">
+          <div style="width: 84px; height: 84px; background: #e2e8f0; display: inline-flex; align-items: center; justify-content: center; font-size: 7.5pt; color: #64748b; font-weight: bold; border-radius: 4px;">
+            [QR CODE PIX]
+          </div>
+          <div style="font-size: 7pt; color: #94a3b8; margin-top: 6px; font-family: monospace;">Aponte o celular</div>
+        </div>
+      </div>
+    `,
+    footer: () => `
+      <div class="block-container block-footer" style="border-top: 1px solid #e2e8f0; padding-top: 10px; font-size: 8pt; color: #94a3b8; font-family: monospace; display: flex; justify-content: space-between; margin-top: auto;">
+        <span>${documentFooterText} | Gerado em: ${generatedAt}</span>
+        <span>Página 1 de 1</span>
+      </div>
+    `,
+  };
+
+  // Compile blocks HTML matching sequence and checking enabled status
+  const blocksHtml = templateSettings.blockOrder
+    .filter(block => templateSettings.enabledBlocks[block] === true && block in blocksMap)
+    .map(block => blocksMap[block]!())
+    .join("\n");
 
   return `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Fatura Comercial #${invoiceNumber}</title>
+  <title>${customTitle} #${docNumber}</title>
   <style>
     @page {
       size: A4;
@@ -255,9 +490,9 @@ export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #1a1a1a;
+      color: #1e293b;
       line-height: 1.4;
-      font-size: 10pt;
+      font-size: 9.5pt;
       background: white;
       margin: 0;
       padding: 0;
@@ -273,219 +508,116 @@ export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
       display: flex;
       flex-direction: column;
     }
-    .header-table {
+    .block-container {
       width: 100%;
-      border-collapse: collapse;
-      border-bottom: 2px solid ${primaryColor};
-      padding-bottom: 15px;
-      margin-bottom: 25px;
-    }
-    .header-logo-cell {
-      vertical-align: top;
-    }
-    .header-meta-cell {
-      text-align: right;
-      vertical-align: top;
-      font-family: monospace;
-    }
-    .meta-box {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 25px;
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .meta-box td {
-      padding: 4px 8px;
-    }
-    .meta-box-title {
-      font-size: 8pt;
-      color: #64748b;
-      text-transform: uppercase;
-      font-weight: bold;
-      letter-spacing: 0.5px;
-    }
-    .items-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-      font-family: monospace;
-    }
-    .items-table th {
-      border-bottom: 2px solid #e2e8f0;
-      padding: 8px 0;
-      font-size: 8pt;
-      color: #64748b;
-      font-family: sans-serif;
-      text-transform: uppercase;
-    }
-    .totals-container {
-      margin-top: 25px;
-      border-top: 2px solid #1a1a1a;
-      padding-top: 15px;
-      text-align: right;
-      font-family: monospace;
-    }
-    .totals-row {
-      margin-bottom: 6px;
-      font-size: 9pt;
-      color: #4a5568;
-    }
-    .grand-total-row {
-      font-size: 12pt;
-      font-weight: bold;
-      color: #000;
-      margin-top: 10px;
-    }
-    .instructions-box {
-      margin-top: 40px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 15px;
-      font-family: monospace;
-      font-size: 8.5pt;
-    }
-    .signature-area {
-      margin-top: auto;
-      padding-top: 40px;
-      text-align: center;
-      width: 250mm;
-      max-width: 280px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .signature-line {
-      border-top: 1px solid #a0aec0;
-      padding-top: 5px;
-      font-size: 9pt;
-      font-weight: bold;
-    }
-    .footer {
-      position: absolute;
-      bottom: 20mm;
-      left: 20mm;
-      right: 20mm;
-      border-top: 1px solid #e2e8f0;
-      padding-top: 10px;
-      font-size: 8pt;
-      color: #94a3b8;
-      font-family: monospace;
-      display: flex;
-      justify-content: space-between;
     }
   </style>
 </head>
 <body>
   <div class="page-container">
-    <!-- Header A4 -->
-    <table class="header-table">
-      <tr>
-        <td class="header-logo-cell">
-          ${logoUrl ? `<img src="${logoUrl}" alt="${brandName}" style="max-height: 48px; max-width: 160px; object-fit: contain; display: block; margin-bottom: 6px;" />` : ''}
-          <span style="font-size: 18pt; font-weight: 800; color: #0f172a; display: block; tracking-tight: -0.5px;">${brandName}</span>
-          <span style="font-size: 9pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; display: block; margin-top: 2px;">
-            ${brandSubtitle}
-          </span>
-          <span style="font-size: 8.5pt; color: #475569; display: block; margin-top: 6px;">CNPJ: ${companyDocument}</span>
-          <span style="font-size: 8.5pt; color: #475569; display: block;">${companyEmail} | ${companyPhone}</span>
-          <span style="font-size: 8.5pt; color: #475569; display: block;">${companyAddress}</span>
-        </td>
-        <td class="header-meta-cell">
-          <span style="font-size: 8.5pt; background: #0f172a; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; display: inline-block;">
-            FATURA COMERCIAL
-          </span>
-          <span style="font-size: 14pt; font-weight: bold; color: #000; display: block; margin-top: 8px;">
-            #${invoiceNumber}
-          </span>
-          <span style="font-size: 8.5pt; color: #64748b; display: block; margin-top: 6px;">
-            Vencimento: <strong style="color: #0f172a;">${dueDate}</strong>
-          </span>
-          <span style="font-size: 8.5pt; color: #64748b; display: block;">
-            Emissão: ${issueDate}
-          </span>
-        </td>
-      </tr>
-    </table>
-
-    <!-- Client Info Block -->
-    <table class="meta-box">
-      <tr>
-        <td colspan="2" class="meta-box-title" style="padding-bottom: 6px;">Destinatário / Cliente</td>
-      </tr>
-      <tr>
-        <td style="font-size: 11pt; font-weight: bold; color: #0f172a; width: 60%;">${clientName}</td>
-        <td style="font-size: 9.5pt; color: #475569; text-align: right;">${clientEmail}</td>
-      </tr>
-      <tr>
-        <td style="font-size: 9.5pt; color: #475569;">CNPJ/CPF: ${clientDocument}</td>
-        <td style="font-size: 9pt; color: #64748b; text-align: right;">Status: <strong style="color: #0f172a;">${invoiceStatus}</strong></td>
-      </tr>
-    </table>
-
-    <!-- Items Section -->
-    <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 10px;">
-      Detalhamento de Serviços e Recursos Cobrados
-    </div>
-    <table class="items-table">
-      <thead>
-        <tr>
-          <th style="text-align: left; width: 50%;">Item / Descrição</th>
-          <th style="text-align: center; width: 10%;">Qtd</th>
-          <th style="text-align: center; width: 10%;">Un</th>
-          <th style="text-align: right; width: 15%;">Valor Unit.</th>
-          <th style="text-align: right; width: 15%;">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${itemsHtml}
-      </tbody>
-    </table>
-
-    <!-- Totals -->
-    <div class="totals-container">
-      <div class="totals-row">
-        Subtotal de Serviços: <span style="font-weight: bold; min-width: 100px; display: inline-block;">${formatBrl(serviceSubtotal)}</span>
-      </div>
-      <div class="totals-row">
-        Subtotal de Materiais: <span style="font-weight: bold; min-width: 100px; display: inline-block;">${formatBrl(materialSubtotal)}</span>
-      </div>
-      <div class="grand-total-row">
-        Total Liquidado: <span style="font-weight: 800; min-width: 120px; display: inline-block;">${totalAmount}</span>
-      </div>
-    </div>
-
-    <!-- Payments instructions -->
-    <div class="instructions-box">
-      <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #0f172a; margin-bottom: 6px;">
-        Instruções de Pagamento e Recebimento
-      </div>
-      <div>Favorecido: ${legalName}</div>
-      <div>Método preferencial de recebimento: ${paymentMethod}</div>
-      <div style="font-weight: bold; margin-top: 4px; color: #0f172a;">Chave PIX: ${pixKey}</div>
-    </div>
-
-    <!-- Responsible Signature -->
-    ${signatureName ? `
-    <div class="signature-area">
-      ${responsible?.signatureImageUrl && responsible.signatureEnabled ? `
-        <img src="${escapeHtml(responsible.signatureImageUrl)}" alt="Assinatura" style="max-height: 50px; max-width: 200px; object-fit: contain; display: block; margin: 0 auto 8px;" />
-      ` : ''}
-      <div class="signature-line">${signatureName}</div>
-      <div style="font-size: 8pt; color: #64748b; margin-top: 2px;">${escapeHtml(responsible?.jobTitle || "Responsável Autorizado")}</div>
-    </div>
-    ` : ""}
-
-    <!-- Footer -->
-    <div class="footer">
-      <span>${documentFooterText} | Gerado em: ${generatedAt}</span>
-      <span>Página 1 de 1</span>
-    </div>
+    ${blocksHtml}
   </div>
 </body>
 </html>
   `.trim();
 }
 
+/**
+ * Premium A4 PDF generator for Invoices.
+ * Integrates fully with the renderA4Document block layout engine for 100% unified code and full backward compatibility.
+ */
+export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
+  const brandSnapshot: BrandSnapshot = {
+    publicName: data.brand.brandName,
+    brandSubtitle: data.brand.brandSubtitle,
+    legalName: data.brand.legalName,
+    taxId: data.brand.companyDocument,
+    email: data.brand.companyEmail,
+    financialEmail: data.brand.financialEmail,
+    phone: data.brand.companyPhone,
+    website: data.brand.companyWebsite,
+    address: data.brand.companyAddress,
+    documentPrimaryColor: data.brand.primaryColorHex,
+    documentSecondaryColor: data.brand.documentSecondaryColor,
+    documentAccentColor: data.brand.documentAccentColor,
+    logoUrl: data.brand.logoUrl,
+    footerText: data.brand.documentFooterText,
+    signatureName: data.brand.signatureName,
+  };
+
+  const responsibleSnapshot: ResponsibleSnapshot | null = data.responsible ? {
+    userId: data.responsible.userId,
+    displayName: data.responsible.displayName,
+    jobTitle: data.responsible.jobTitle,
+    signatureImageUrl: data.responsible.signatureImageUrl,
+    signatureEnabled: data.responsible.signatureEnabled,
+  } : null;
+
+  // Group items and calculate totals
+  const services = data.invoice.items.filter(item => item.type === "SERVICE");
+  const serviceSubtotal = services.reduce((sum, item) => sum + parseFloat(item.totalPrice.replace(/[^\d,.-]/g, "").replace(",", ".")), 0);
+  const materials = data.invoice.items.filter(item => item.type === "MATERIAL");
+  const materialSubtotal = materials.reduce((sum, item) => sum + parseFloat(item.totalPrice.replace(/[^\d,.-]/g, "").replace(",", ".")), 0);
+
+  const formatBrl = (num: number) => {
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(num);
+  };
+
+  const renderData = {
+    number: data.invoice.number,
+    status: data.invoice.status,
+    issueDate: data.invoice.issueDate,
+    dueDate: data.invoice.dueDate,
+    paymentMethod: data.invoice.paymentMethod,
+    pixKey: data.invoice.pixKey,
+    totalAmount: data.invoice.totalAmount,
+    items: data.invoice.items,
+    terms: data.brand.defaultContractTerms || null,
+    observations: data.brand.defaultInvoiceNotes || null,
+    subtotalServices: formatBrl(serviceSubtotal),
+    subtotalMaterials: formatBrl(materialSubtotal),
+  };
+
+  // Standard template structure settings
+  const templateSettings: TemplateSnapshot = {
+    documentType: 'INVOICE',
+    templateKey: 'standard',
+    layoutVariant: 'default',
+    enabledBlocks: {
+      header: true,
+      logo: true,
+      companyInfo: true,
+      clientInfo: true,
+      documentTitle: true,
+      itemsTable: true,
+      financialSummary: true,
+      paymentInfo: true,
+      terms: false,
+      observations: true,
+      responsibleSignature: true,
+      clientSignature: false,
+      qrCode: false,
+      footer: true,
+    },
+    blockOrder: [
+      "header", "logo", "companyInfo", "clientInfo", "documentTitle",
+      "itemsTable", "financialSummary", "paymentInfo", "observations",
+      "responsibleSignature", "footer",
+    ],
+  };
+
+  return renderA4Document({
+    documentType: 'INVOICE',
+    brand: brandSnapshot,
+    responsible: responsibleSnapshot,
+    client: {
+      tradeName: data.client.tradeName,
+      legalName: data.client.legalName,
+      document: data.client.document,
+      email: data.client.email,
+    },
+    data: renderData,
+    templateSettings,
+    generatedAt: data.generatedAt,
+  });
+}

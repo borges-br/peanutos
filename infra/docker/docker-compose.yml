@@ -44,7 +44,7 @@ services:
   # MINIO OBJECT STORAGE (S3-compatible bucket storage for imutable PDFs)
   # ----------------------------------------------------------------------------
   minio:
-    image: minio/minio:RELEASE.2024-05-10T01-39-38Z
+    image: minio/minio
     container_name: peanut_minio
     restart: always
     ports:

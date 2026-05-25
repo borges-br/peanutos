@@ -8,7 +8,7 @@ import * as crypto from 'crypto';
 import * as https from 'https';
 import * as http from 'http';
 import { chromium } from 'playwright';
-import { generateInvoicePdfHtml } from '@peanut/documents';
+import { renderA4Document } from '@peanut/documents';
 import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 // Load environment variables from root or local
@@ -269,7 +269,7 @@ const pdfWorker = new Worker(
     });
     const version = lastDoc ? lastDoc.version + 1 : 1;
 
-    // 4. Format variables for generateInvoicePdfHtml
+    // 4. Format variables for generateInvoicePdfHtml / renderA4Document
     const formatCurrency = (val: number | any) => {
       return new Intl.NumberFormat('pt-BR', {
         style: 'currency',
@@ -281,87 +281,107 @@ const pdfWorker = new Worker(
       return new Date(date).toLocaleDateString('pt-BR');
     };
 
-    const items = invoice.items.map(item => ({
-      type: item.type,
-      description: item.description,
-      quantity: item.quantity.toString(),
-      unit: item.unit,
-      unitPrice: formatCurrency(item.unitPrice),
-      totalPrice: formatCurrency(item.totalPrice),
-    }));
+    const services = invoice.items.filter(item => item.type === "SERVICE");
+    const serviceSubtotal = services.reduce((sum, item) => sum + Number(item.totalPrice), 0);
+    const materials = invoice.items.filter(item => item.type === "MATERIAL");
+    const materialSubtotal = materials.reduce((sum, item) => sum + Number(item.totalPrice), 0);
 
-    const templateData = {
-      invoice: {
-        number: invoice.number,
-        status: invoice.status === 'PAID' ? 'Liquidada' : invoice.status === 'OVERDUE' ? 'Atrasada' : 'Pendente',
-        issueDate: formatDate(invoice.issueDate),
-        dueDate: formatDate(invoice.dueDate),
-        paymentMethod: invoice.paymentMethod,
-        pixKey: invoice.pixKey,
-        totalAmount: formatCurrency(invoice.totalAmount),
-        items,
-      },
-      client: {
-        tradeName: invoice.client.tradeName,
-        legalName: invoice.client.legalName,
-        document: invoice.client.document,
-        email: invoice.client.email,
-      },
-      brand: {
-        brandName: workspace.brandName,
-        brandSubtitle: workspace.brandSubtitle,
-        legalName: workspace.legalName,
-        companyDocument: workspace.companyDocument,
-        companyEmail: workspace.companyEmail,
-        financialEmail: workspace.financialEmail,
-        companyPhone: workspace.companyPhone,
-        companyWebsite: workspace.companyWebsite,
-        companyAddress: workspace.companyAddress,
-        primaryColorHex: workspace.primaryColorHex,
-        documentSecondaryColor: (workspace as any).documentSecondaryColor,
-        documentAccentColor: (workspace as any).documentAccentColor,
-        documentFooterText: workspace.documentFooterText,
-        signatureName: workspace.signatureName,
-        logoUrl: (workspace as any).logoFileObjectId
-          ? `${process.env.INTERNAL_API_URL || 'http://localhost:3001'}/api/v1/files/${(workspace as any).logoFileObjectId}`
-          : null,
-      },
-      responsible: responsibleUser ? {
-        userId: responsibleUser.id,
-        displayName: (responsibleUser as any).documentDisplayName || responsibleUser.name,
-        jobTitle: (responsibleUser as any).jobTitle || null,
-        signatureImageUrl: (responsibleUser as any).signatureImageFileObjectId
-          ? `${process.env.INTERNAL_API_URL || 'http://localhost:3001'}/api/v1/files/${(responsibleUser as any).signatureImageFileObjectId}`
-          : null,
-        signatureEnabled: (responsibleUser as any).documentSignatureEnabled ?? false,
-      } : null,
-      generatedAt: new Date().toLocaleString('pt-BR'),
-    };
-
-    // Build snapshots for metadata
+    // Build snapshots for metadata and rendering
     const brandSnapshot = {
       publicName: workspace.brandName,
       brandSubtitle: workspace.brandSubtitle,
       legalName: workspace.legalName,
       taxId: workspace.companyDocument,
       email: workspace.companyEmail,
+      financialEmail: workspace.financialEmail,
       phone: workspace.companyPhone,
       website: workspace.companyWebsite,
       address: workspace.companyAddress,
-      documentPrimaryColor: workspace.primaryColorHex,
+      documentPrimaryColor: workspace.primaryColorHex || "#1a56db",
+      documentSecondaryColor: (workspace as any).documentSecondaryColor || "#4b5563",
+      documentAccentColor: (workspace as any).documentAccentColor || "#e11d48",
+      logoUrl: (workspace as any).logoFileObjectId
+        ? `${process.env.INTERNAL_API_URL || 'http://localhost:3001'}/api/v1/files/${(workspace as any).logoFileObjectId}`
+        : null,
       footerText: workspace.documentFooterText,
-      hasLogo: !!(workspace as any).logoFileObjectId,
+      signatureName: workspace.signatureName,
     };
 
     const responsibleSnapshot = responsibleUser ? {
       userId: responsibleUser.id,
       displayName: (responsibleUser as any).documentDisplayName || responsibleUser.name,
       jobTitle: (responsibleUser as any).jobTitle || null,
+      signatureImageUrl: (responsibleUser as any).signatureImageFileObjectId
+        ? `${process.env.INTERNAL_API_URL || 'http://localhost:3001'}/api/v1/files/${(responsibleUser as any).signatureImageFileObjectId}`
+        : null,
       signatureEnabled: (responsibleUser as any).documentSignatureEnabled ?? false,
     } : null;
 
-    // 5. Render HTML
-    const html = generateInvoicePdfHtml(templateData);
+    // Fetch template settings from database
+    const templateSetting = await prisma.documentTemplateSetting.findUnique({
+      where: { workspaceId_documentType: { workspaceId, documentType: 'INVOICE' } },
+    });
+
+    const templateSnapshot = templateSetting ? {
+      documentType: 'INVOICE',
+      templateKey: templateSetting.templateKey,
+      layoutVariant: templateSetting.layoutVariant,
+      enabledBlocks: templateSetting.enabledBlocks as Record<string, boolean>,
+      blockOrder: templateSetting.blockOrder as string[],
+    } : {
+      documentType: 'INVOICE',
+      templateKey: 'standard',
+      layoutVariant: 'default',
+      enabledBlocks: {
+        header: true, logo: true, companyInfo: true, clientInfo: true,
+        documentTitle: true, itemsTable: true, financialSummary: true,
+        paymentInfo: true, terms: false, observations: true,
+        responsibleSignature: true, clientSignature: false, qrCode: false, footer: true,
+      },
+      blockOrder: [
+        "header", "logo", "companyInfo", "clientInfo", "documentTitle",
+        "itemsTable", "financialSummary", "paymentInfo", "observations",
+        "responsibleSignature", "footer",
+      ],
+    };
+
+    const renderData = {
+      number: invoice.number,
+      status: invoice.status === 'PAID' ? 'Liquidada' : invoice.status === 'OVERDUE' ? 'Atrasada' : 'Pendente',
+      issueDate: formatDate(invoice.issueDate),
+      dueDate: formatDate(invoice.dueDate),
+      paymentMethod: invoice.paymentMethod,
+      pixKey: invoice.pixKey,
+      totalAmount: formatCurrency(invoice.totalAmount),
+      items: invoice.items.map(item => ({
+        type: item.type,
+        description: item.description,
+        quantity: item.quantity.toString(),
+        unit: item.unit,
+        unitPrice: formatCurrency(item.unitPrice),
+        totalPrice: formatCurrency(item.totalPrice),
+      })),
+      terms: workspace.defaultContractTerms || null,
+      observations: workspace.defaultInvoiceNotes || null,
+      subtotalServices: formatCurrency(serviceSubtotal),
+      subtotalMaterials: formatCurrency(materialSubtotal),
+    };
+
+    // 5. Render dynamic block-based A4 HTML
+    const html = renderA4Document({
+      documentType: 'INVOICE',
+      brand: brandSnapshot,
+      responsible: responsibleSnapshot,
+      client: {
+        tradeName: invoice.client.tradeName,
+        legalName: invoice.client.legalName,
+        document: invoice.client.document,
+        email: invoice.client.email,
+      },
+      data: renderData,
+      templateSettings: templateSnapshot,
+      generatedAt: new Date().toLocaleString('pt-BR'),
+    });
 
     // 6. Launch Playwright headless browser
     console.log(`[PDF Worker] Launching chromium browser...`);
@@ -447,11 +467,7 @@ const pdfWorker = new Worker(
             storage: 's3',
             brandSnapshot,
             responsibleSnapshot,
-            templateSnapshot: {
-              documentType: 'INVOICE',
-              templateKey: 'standard',
-              layoutVariant: 'default',
-            },
+            templateSnapshot,
           }),
         },
       });
