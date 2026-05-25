@@ -22,6 +22,8 @@ const s3Endpoint = normalizeS3Endpoint(process.env.S3_ENDPOINT);
 const s3AccessKey = process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || "minio_admin";
 const s3SecretKey = process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || "change-me-in-production";
 const s3Bucket = process.env.S3_BUCKET || process.env.S3_BUCKET_NAME || "peanut-os-documents";
+const s3Region = process.env.S3_REGION || "us-east-1";
+const s3ForcePathStyle = String(process.env.S3_FORCE_PATH_STYLE ?? "true") === "true";
 
 const s3Client = new S3Client({
   endpoint: s3Endpoint,
@@ -30,7 +32,7 @@ const s3Client = new S3Client({
     accessKeyId: s3AccessKey,
     secretAccessKey: s3SecretKey,
   },
-  forcePathStyle: true,
+  forcePathStyle: s3ForcePathStyle,
 });
 
 /**
