@@ -7,7 +7,7 @@ export async function apiRequest<T = any>(
   const token = typeof window !== 'undefined' ? localStorage.getItem('peanut_token') : null;
 
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     ...(options.headers || {}),
   };
 

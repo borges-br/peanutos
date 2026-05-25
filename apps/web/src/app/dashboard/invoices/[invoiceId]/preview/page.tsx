@@ -83,6 +83,7 @@ export default function InvoiceA4PreviewPage() {
     try {
       const response = await apiRequest<any>(`/documents/invoices/${invoiceId}/generate-pdf`, {
         method: 'POST',
+        body: JSON.stringify({}),
       });
       const jobId = response.jobId;
       
