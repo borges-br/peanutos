@@ -16,6 +16,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (pathname?.startsWith('/dashboard/tickets')) return t.navigation.tickets;
     if (pathname?.startsWith('/dashboard/contracts')) return t.navigation.contracts;
     if (pathname?.startsWith('/dashboard/financials')) return t.navigation.recurringFinancials;
+    if (pathname?.startsWith('/dashboard/webhooks')) return t.navigation.webhooks;
+    if (pathname?.startsWith('/dashboard/auditoria')) return t.navigation.audit;
+    if (pathname?.startsWith('/dashboard/configuracoes')) return t.navigation.settings;
+    if (pathname?.startsWith('/dashboard/documentos')) return t.navigation.centralDocuments;
+    if (pathname?.startsWith('/dashboard/templates-a4')) return t.navigation.templatesA4;
+    if (pathname?.startsWith('/dashboard/perfil')) return t.navigation.profile;
     return 'Peanut OS';
   };
 
