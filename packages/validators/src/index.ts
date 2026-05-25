@@ -458,6 +458,29 @@ export const workspaceBrandSettingsSchema = z.object({
 
 export type WorkspaceBrandSettingsInput = z.infer<typeof workspaceBrandSettingsSchema>;
 
+// --- DOCUMENT VALIDATORS ---
+
+export const documentTypeEnum = z.enum(["QUOTE", "INVOICE", "TICKET_CLOSURE", "CONTRACT", "REPORT"]);
+export type DocumentTypeEnum = z.infer<typeof documentTypeEnum>;
+
+export const documentVisibilityEnum = z.enum(["PRIVATE", "PUBLIC"]);
+export type DocumentVisibilityEnum = z.infer<typeof documentVisibilityEnum>;
+
+export const documentQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  search: z.string().optional().nullable(),
+  documentType: documentTypeEnum.optional().nullable(),
+  entityType: z.string().max(50).optional().nullable(),
+  entityId: z.string().uuid({ message: 'ID da entidade inválido' }).optional().nullable(),
+  visibility: documentVisibilityEnum.optional().nullable(),
+  dateFrom: z.string().refine((val) => !val || !isNaN(Date.parse(val)), { message: 'Data inicial inválida' }).optional().nullable().or(z.literal('')),
+  dateTo: z.string().refine((val) => !val || !isNaN(Date.parse(val)), { message: 'Data final inválida' }).optional().nullable().or(z.literal('')),
+});
+
+export type DocumentQueryInput = z.infer<typeof documentQuerySchema>;
+
+
 
 
 

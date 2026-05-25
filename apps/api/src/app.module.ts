@@ -11,6 +11,7 @@ import { ContractsModule } from "./contracts/contracts.module";
 import { FinancialsModule } from "./financials/financials.module";
 import { InvoicesModule } from "./invoices/invoices.module";
 import { SettingsModule } from "./settings/settings.module";
+import { DocumentsModule } from "./documents/documents.module";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { SettingsModule } from "./settings/settings.module";
     FinancialsModule,
     InvoicesModule,
     SettingsModule,
+    DocumentsModule,
   ],
   controllers: [HealthController],
   providers: [],
