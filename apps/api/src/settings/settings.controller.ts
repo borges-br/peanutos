@@ -14,7 +14,10 @@ import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { workspaceBrandSettingsSchema, uploadImageSchema } from "@peanut/validators";
+import {
+  workspaceBrandSettingsSchema,
+  uploadImageSchema,
+} from "@peanut/validators";
 
 @UseGuards(AuthGuard, RolesGuard)
 @Controller("settings")
@@ -82,6 +85,11 @@ export class SettingsController {
   async deleteLogo(@CurrentUser() user: any, @Req() req: any) {
     const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
-    return this.settingsService.deleteLogo(user.workspaceId, user.id, ipAddress, userAgent);
+    return this.settingsService.deleteLogo(
+      user.workspaceId,
+      user.id,
+      ipAddress,
+      userAgent,
+    );
   }
 }

@@ -4,15 +4,29 @@ import { AuditService } from "../audit/audit.service";
 import { StorageService } from "../storage/storage.service";
 
 const BRAND_FIELDS = [
-  "brandName", "brandSubtitle", "legalName", "companyDocument",
-  "companyEmail", "financialEmail", "companyPhone", "companyWebsite",
-  "companyAddress", "primaryColorHex", "documentSecondaryColor",
-  "documentAccentColor", "documentFooterText", "defaultInvoiceNotes",
-  "defaultQuoteTerms", "defaultServiceOrderTerms", "defaultContractTerms",
+  "brandName",
+  "brandSubtitle",
+  "legalName",
+  "companyDocument",
+  "companyEmail",
+  "financialEmail",
+  "companyPhone",
+  "companyWebsite",
+  "companyAddress",
+  "primaryColorHex",
+  "documentSecondaryColor",
+  "documentAccentColor",
+  "documentFooterText",
+  "defaultInvoiceNotes",
+  "defaultQuoteTerms",
+  "defaultServiceOrderTerms",
+  "defaultContractTerms",
   "signatureName",
 ] as const;
 
-const BRAND_SELECT = Object.fromEntries([...BRAND_FIELDS, "logoFileObjectId"].map(f => [f, true])) as Record<string, true>;
+const BRAND_SELECT = Object.fromEntries(
+  [...BRAND_FIELDS, "logoFileObjectId"].map((f) => [f, true]),
+) as Record<string, true>;
 
 @Injectable()
 export class SettingsService {
@@ -26,7 +40,9 @@ export class SettingsService {
     return value;
   }
 
-  private async buildLogoUrl(logoFileObjectId: string | null): Promise<string | null> {
+  private async buildLogoUrl(
+    logoFileObjectId: string | null,
+  ): Promise<string | null> {
     if (!logoFileObjectId) return null;
     return `/api/v1/files/${logoFileObjectId}`;
   }
@@ -39,7 +55,9 @@ export class SettingsService {
 
     if (!workspace) throw new NotFoundException("Workspace não encontrado");
 
-    const logoUrl = await this.buildLogoUrl((workspace as any).logoFileObjectId);
+    const logoUrl = await this.buildLogoUrl(
+      (workspace as any).logoFileObjectId,
+    );
     const { logoFileObjectId: _, ...rest } = workspace as any;
     return { ...rest, logoUrl, hasLogo: !!logoUrl };
   }
@@ -118,7 +136,11 @@ export class SettingsService {
       action: "brand.logo_uploaded",
       entityType: "WORKSPACE",
       entityId: workspaceId,
-      after: { fileObjectId, filename: upload.filename, mimeType: upload.mimeType },
+      after: {
+        fileObjectId,
+        filename: upload.filename,
+        mimeType: upload.mimeType,
+      },
       ipAddress,
       userAgent,
       severity: "INFO",

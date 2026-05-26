@@ -87,12 +87,19 @@ export class UsersService {
       userAgent,
     });
 
-    this.webhookEvents.emit({
-      workspaceId,
-      eventType: 'user.created',
-      entityId: newUser.id,
-      data: { userId: newUser.id, name: sanitizedUser.name, email: sanitizedUser.email, role: sanitizedUser.role },
-    }).catch(() => {});
+    this.webhookEvents
+      .emit({
+        workspaceId,
+        eventType: "user.created",
+        entityId: newUser.id,
+        data: {
+          userId: newUser.id,
+          name: sanitizedUser.name,
+          email: sanitizedUser.email,
+          role: sanitizedUser.role,
+        },
+      })
+      .catch(() => {});
 
     return sanitizedUser;
   }
@@ -113,9 +120,7 @@ export class UsersService {
 
     // ADMIN cannot modify an OWNER
     if (actorRole === "ADMIN" && target.role === "OWNER") {
-      throw new ForbiddenException(
-        "ADMIN não pode alterar a role de um OWNER",
-      );
+      throw new ForbiddenException("ADMIN não pode alterar a role de um OWNER");
     }
 
     // Prevent removing the last OWNER — input.role is always non-OWNER per schema
@@ -153,12 +158,20 @@ export class UsersService {
     });
 
     if (input.role && before.role !== input.role) {
-      this.webhookEvents.emit({
-        workspaceId,
-        eventType: 'user.role_changed',
-        entityId: id,
-        data: { userId: id, name: after.name, email: after.email, oldRole: before.role, newRole: input.role },
-      }).catch(() => {});
+      this.webhookEvents
+        .emit({
+          workspaceId,
+          eventType: "user.role_changed",
+          entityId: id,
+          data: {
+            userId: id,
+            name: after.name,
+            email: after.email,
+            oldRole: before.role,
+            newRole: input.role,
+          },
+        })
+        .catch(() => {});
     }
 
     return after;
@@ -187,7 +200,12 @@ export class UsersService {
 
     if (status !== "ACTIVE" && user.role === "OWNER") {
       const activeOwners = await prisma.user.count({
-        where: { workspaceId, role: "OWNER", status: "ACTIVE", deletedAt: null },
+        where: {
+          workspaceId,
+          role: "OWNER",
+          status: "ACTIVE",
+          deletedAt: null,
+        },
       });
       if (activeOwners <= 1) {
         throw new BadRequestException(
@@ -282,13 +300,19 @@ export class UsersService {
 
   private sanitizeUser(user: any) {
     const { passwordHash: _, ...safe } = user;
-    const avatarUrl = user.avatarFileObjectId ? `/api/v1/files/${user.avatarFileObjectId}` : null;
-    const signatureUrl = user.signatureImageFileObjectId ? `/api/v1/files/${user.signatureImageFileObjectId}` : null;
+    const avatarUrl = user.avatarFileObjectId
+      ? `/api/v1/files/${user.avatarFileObjectId}`
+      : null;
+    const signatureUrl = user.signatureImageFileObjectId
+      ? `/api/v1/files/${user.signatureImageFileObjectId}`
+      : null;
     return { ...safe, avatarUrl, signatureUrl };
   }
 
   async getMyProfile(userId: string, workspaceId: string) {
-    const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    const user = await prisma.user.findFirst({
+      where: { id: userId, workspaceId, deletedAt: null },
+    });
     if (!user) throw new NotFoundException("Usuário não encontrado");
     return this.sanitizeUser(user);
   }
@@ -300,15 +324,19 @@ export class UsersService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const before = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    const before = await prisma.user.findFirst({
+      where: { id: userId, workspaceId, deletedAt: null },
+    });
     if (!before) throw new NotFoundException("Usuário não encontrado");
 
     const data: any = {};
     if (input.name !== undefined) data.name = input.name;
     if (input.jobTitle !== undefined) data.jobTitle = input.jobTitle || null;
     if (input.phone !== undefined) data.phone = input.phone || null;
-    if (input.documentDisplayName !== undefined) data.documentDisplayName = input.documentDisplayName || null;
-    if (input.documentSignatureEnabled !== undefined) data.documentSignatureEnabled = input.documentSignatureEnabled;
+    if (input.documentDisplayName !== undefined)
+      data.documentDisplayName = input.documentDisplayName || null;
+    if (input.documentSignatureEnabled !== undefined)
+      data.documentSignatureEnabled = input.documentSignatureEnabled;
 
     const updated = await prisma.user.update({ where: { id: userId }, data });
 
@@ -335,7 +363,9 @@ export class UsersService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    const user = await prisma.user.findFirst({
+      where: { id: userId, workspaceId, deletedAt: null },
+    });
     if (!user) throw new NotFoundException("Usuário não encontrado");
 
     // NOTE: Old FileObject is intentionally kept (orphan cleanup deferred to future routine)
@@ -349,7 +379,10 @@ export class UsersService {
       filename: upload.filename,
     });
 
-    await prisma.user.update({ where: { id: userId }, data: { avatarFileObjectId: fileObjectId } });
+    await prisma.user.update({
+      where: { id: userId },
+      data: { avatarFileObjectId: fileObjectId },
+    });
 
     await this.auditService.log({
       workspaceId,
@@ -372,12 +405,17 @@ export class UsersService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    const user = await prisma.user.findFirst({
+      where: { id: userId, workspaceId, deletedAt: null },
+    });
     if (!user) throw new NotFoundException("Usuário não encontrado");
 
     // Unlink avatar without deleting the FileObject (orphan cleanup deferred)
     if (user.avatarFileObjectId) {
-      await prisma.user.update({ where: { id: userId }, data: { avatarFileObjectId: null } });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { avatarFileObjectId: null },
+      });
     }
 
     await this.auditService.log({
@@ -401,7 +439,9 @@ export class UsersService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    const user = await prisma.user.findFirst({
+      where: { id: userId, workspaceId, deletedAt: null },
+    });
     if (!user) throw new NotFoundException("Usuário não encontrado");
 
     // NOTE: Old FileObject is intentionally kept (orphan cleanup deferred to future routine)
@@ -415,7 +455,10 @@ export class UsersService {
       filename: upload.filename,
     });
 
-    await prisma.user.update({ where: { id: userId }, data: { signatureImageFileObjectId: fileObjectId } });
+    await prisma.user.update({
+      where: { id: userId },
+      data: { signatureImageFileObjectId: fileObjectId },
+    });
 
     await this.auditService.log({
       workspaceId,
@@ -438,12 +481,17 @@ export class UsersService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const user = await prisma.user.findFirst({ where: { id: userId, workspaceId, deletedAt: null } });
+    const user = await prisma.user.findFirst({
+      where: { id: userId, workspaceId, deletedAt: null },
+    });
     if (!user) throw new NotFoundException("Usuário não encontrado");
 
     // Unlink signature without deleting the FileObject (orphan cleanup deferred)
     if (user.signatureImageFileObjectId) {
-      await prisma.user.update({ where: { id: userId }, data: { signatureImageFileObjectId: null } });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { signatureImageFileObjectId: null },
+      });
     }
 
     await this.auditService.log({

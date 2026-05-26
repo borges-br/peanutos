@@ -271,12 +271,20 @@ export class ContractsService {
       userAgent,
     });
 
-    this.webhookEvents.emit({
-      workspaceId,
-      eventType: 'contract.created',
-      entityId: newContract.id,
-      data: { contractId: newContract.id, number: newContract.number, title: newContract.title, status: newContract.status, clientId: newContract.clientId },
-    }).catch(() => {});
+    this.webhookEvents
+      .emit({
+        workspaceId,
+        eventType: "contract.created",
+        entityId: newContract.id,
+        data: {
+          contractId: newContract.id,
+          number: newContract.number,
+          title: newContract.title,
+          status: newContract.status,
+          clientId: newContract.clientId,
+        },
+      })
+      .catch(() => {});
 
     return newContract;
   }
@@ -437,12 +445,20 @@ export class ContractsService {
       userAgent,
     });
 
-    this.webhookEvents.emit({
-      workspaceId,
-      eventType: 'contract.status_changed',
-      entityId: id,
-      data: { contractId: id, number: contract.number, title: contract.title, oldStatus: contract.status, newStatus: status },
-    }).catch(() => {});
+    this.webhookEvents
+      .emit({
+        workspaceId,
+        eventType: "contract.status_changed",
+        entityId: id,
+        data: {
+          contractId: id,
+          number: contract.number,
+          title: contract.title,
+          oldStatus: contract.status,
+          newStatus: status,
+        },
+      })
+      .catch(() => {});
 
     return updatedContract;
   }

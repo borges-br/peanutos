@@ -102,7 +102,7 @@ export class AuditService {
       "credential",
       "vpn",
       "bearer",
-      "authorization"
+      "authorization",
     ];
 
     // 2. Technical sensitive keys (redacted for FINANCIAL and READ_ONLY)
@@ -117,7 +117,7 @@ export class AuditService {
       "connection",
       "url",
       "database",
-      "db"
+      "db",
     ];
 
     // 3. Financial sensitive keys (redacted for TECHNICIAN and READ_ONLY)
@@ -133,7 +133,7 @@ export class AuditService {
       "card",
       "cost",
       "value",
-      "revenue"
+      "revenue",
     ];
 
     for (const key of Object.keys(sanitized)) {
@@ -142,20 +142,27 @@ export class AuditService {
       let shouldRedact = generalKeys.some((sub) => lowerKey.includes(sub));
 
       if (role === "FINANCIAL") {
-        shouldRedact = shouldRedact || techKeys.some((sub) => lowerKey.includes(sub));
+        shouldRedact =
+          shouldRedact || techKeys.some((sub) => lowerKey.includes(sub));
       } else if (role === "TECHNICIAN") {
-        shouldRedact = shouldRedact || financialKeys.some((sub) => lowerKey.includes(sub));
+        shouldRedact =
+          shouldRedact || financialKeys.some((sub) => lowerKey.includes(sub));
       } else if (role === "READ_ONLY") {
-        shouldRedact = shouldRedact || techKeys.some((sub) => lowerKey.includes(sub)) || financialKeys.some((sub) => lowerKey.includes(sub));
+        shouldRedact =
+          shouldRedact ||
+          techKeys.some((sub) => lowerKey.includes(sub)) ||
+          financialKeys.some((sub) => lowerKey.includes(sub));
       }
 
       if (shouldRedact) {
         sanitized[key] = "[REDACTED]";
-      } else if (typeof sanitized[key] === "object" && sanitized[key] !== null) {
+      } else if (
+        typeof sanitized[key] === "object" &&
+        sanitized[key] !== null
+      ) {
         sanitized[key] = this.sanitizeForRead(sanitized[key], role);
       }
     }
     return sanitized;
   }
 }
-

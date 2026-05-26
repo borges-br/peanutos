@@ -69,7 +69,10 @@ export class DocumentsController {
     );
 
     reply.header("Content-Type", "application/pdf");
-    reply.header("Content-Disposition", `attachment; filename="${result.filename}"`);
+    reply.header(
+      "Content-Disposition",
+      `attachment; filename="${result.filename}"`,
+    );
     reply.send(result.stream);
   }
 
@@ -88,7 +91,10 @@ export class DocumentsController {
     );
 
     reply.header("Content-Type", "application/pdf");
-    reply.header("Content-Disposition", `inline; filename="${result.filename}"`);
+    reply.header(
+      "Content-Disposition",
+      `inline; filename="${result.filename}"`,
+    );
     reply.send(result.stream);
   }
 

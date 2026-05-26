@@ -30,7 +30,9 @@ export class FilesController {
     // Dev diagnostic logging (safe — never exposes bucket/key to frontend)
     const isDev = process.env.NODE_ENV !== "production";
     if (isDev) {
-      console.log(`[FilesController] GET /files/${fileObjectId} | user.workspaceId=${user.workspaceId}`);
+      console.log(
+        `[FilesController] GET /files/${fileObjectId} | user.workspaceId=${user.workspaceId}`,
+      );
     }
 
     const fileObject = await prisma.fileObject.findFirst({
@@ -40,37 +42,52 @@ export class FilesController {
     if (!fileObject) {
       if (isDev) {
         // Check if it exists in another workspace (debug only)
-        const anyMatch = await prisma.fileObject.findUnique({ where: { id: fileObjectId } });
+        const anyMatch = await prisma.fileObject.findUnique({
+          where: { id: fileObjectId },
+        });
         if (anyMatch) {
-          console.warn(`[FilesController] FileObject ${fileObjectId} exists but belongs to workspace ${anyMatch.workspaceId}, not ${user.workspaceId}`);
+          console.warn(
+            `[FilesController] FileObject ${fileObjectId} exists but belongs to workspace ${anyMatch.workspaceId}, not ${user.workspaceId}`,
+          );
         } else {
-          console.warn(`[FilesController] FileObject ${fileObjectId} does NOT exist in any workspace`);
+          console.warn(
+            `[FilesController] FileObject ${fileObjectId} does NOT exist in any workspace`,
+          );
         }
       }
       throw new NotFoundException("Arquivo não encontrado");
     }
 
     if (isDev) {
-      console.log(`[FilesController] Found: mime=${fileObject.mimeType}, key=${fileObject.key}`);
+      console.log(
+        `[FilesController] Found: mime=${fileObject.mimeType}, key=${fileObject.key}`,
+      );
     }
 
     const { s3, bucket } = this.storage.getS3Config();
 
     let s3Response: any;
     try {
-      s3Response = await s3.send(new GetObjectCommand({
-        Bucket: bucket,
-        Key: fileObject.key,
-      }));
+      s3Response = await s3.send(
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: fileObject.key,
+        }),
+      );
     } catch (err: any) {
       if (isDev) {
-        console.error(`[FilesController] S3 GetObject failed for key=${fileObject.key}:`, err.message);
+        console.error(
+          `[FilesController] S3 GetObject failed for key=${fileObject.key}:`,
+          err.message,
+        );
       }
       throw new NotFoundException("Arquivo não disponível no armazenamento");
     }
 
     if (isDev) {
-      console.log(`[FilesController] S3 OK, streaming response for ${fileObject.originalFilename}`);
+      console.log(
+        `[FilesController] S3 OK, streaming response for ${fileObject.originalFilename}`,
+      );
     }
 
     // Use Fastify's native .send() with the readable stream — do NOT use stream.pipe(res.raw)
@@ -79,7 +96,10 @@ export class FilesController {
     return res
       .header("Content-Type", fileObject.mimeType)
       .header("Cache-Control", "private, max-age=3600")
-      .header("Content-Disposition", `inline; filename="${fileObject.originalFilename}"`)
+      .header(
+        "Content-Disposition",
+        `inline; filename="${fileObject.originalFilename}"`,
+      )
       .send(body);
   }
 }

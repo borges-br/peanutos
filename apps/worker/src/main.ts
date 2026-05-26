@@ -645,10 +645,7 @@ const pdfWorker = new Worker(
       return new Date(date).toLocaleDateString('pt-BR');
     };
 
-    const services = invoice.items.filter(item => item.type === "SERVICE");
-    const serviceSubtotal = services.reduce((sum, item) => sum + Number(item.totalPrice), 0);
-    const materials = invoice.items.filter(item => item.type === "MATERIAL");
-    const materialSubtotal = materials.reduce((sum, item) => sum + Number(item.totalPrice), 0);
+
 
     // Build snapshots for metadata and rendering
     const brandSnapshot = {
@@ -692,6 +689,7 @@ const pdfWorker = new Worker(
       layoutVariant: templateSetting.layoutVariant,
       enabledBlocks: templateSetting.enabledBlocks as Record<string, boolean>,
       blockOrder: templateSetting.blockOrder as string[],
+      settings: templateSetting.settings || {},
     } : {
       documentType: 'INVOICE',
       templateKey: 'standard',
@@ -707,11 +705,12 @@ const pdfWorker = new Worker(
         "itemsTable", "financialSummary", "paymentInfo", "observations",
         "responsibleSignature", "footer",
       ],
+      settings: {},
     };
 
     const renderData = {
       number: invoice.number,
-      status: invoice.status === 'PAID' ? 'Liquidada' : invoice.status === 'OVERDUE' ? 'Atrasada' : 'Pendente',
+      status: invoice.status,
       issueDate: formatDate(invoice.issueDate),
       dueDate: formatDate(invoice.dueDate),
       paymentMethod: invoice.paymentMethod,
@@ -726,9 +725,10 @@ const pdfWorker = new Worker(
         totalPrice: formatCurrency(item.totalPrice),
       })),
       terms: workspace.defaultContractTerms || null,
-      observations: workspace.defaultInvoiceNotes || null,
-      subtotalServices: formatCurrency(serviceSubtotal),
-      subtotalMaterials: formatCurrency(materialSubtotal),
+      observations: invoice.observations || workspace.defaultInvoiceNotes || null,
+      subtotalServices: formatCurrency(invoice.subtotalServices),
+      subtotalMaterials: formatCurrency(invoice.subtotalMaterials),
+      discountAmount: formatCurrency(invoice.discountAmount),
     };
 
     // 5. Render dynamic block-based A4 HTML
@@ -745,6 +745,7 @@ const pdfWorker = new Worker(
       data: renderData,
       templateSettings: templateSnapshot,
       generatedAt: new Date().toLocaleString('pt-BR'),
+      locale: 'pt-BR',
     });
 
     // 6. Launch Playwright headless browser

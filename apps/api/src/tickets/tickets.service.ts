@@ -311,12 +311,21 @@ export class TicketsService {
     });
 
     // 6. Emit webhook event (non-blocking)
-    this.webhookEvents.emit({
-      workspaceId,
-      eventType: 'ticket.created',
-      entityId: ticket.id,
-      data: { ticketId: ticket.id, number: ticket.number, title: ticket.title, status: ticket.status, priority: ticket.priority, clientId: ticket.clientId },
-    }).catch(() => {});
+    this.webhookEvents
+      .emit({
+        workspaceId,
+        eventType: "ticket.created",
+        entityId: ticket.id,
+        data: {
+          ticketId: ticket.id,
+          number: ticket.number,
+          title: ticket.title,
+          status: ticket.status,
+          priority: ticket.priority,
+          clientId: ticket.clientId,
+        },
+      })
+      .catch(() => {});
 
     return ticket;
   }
@@ -531,12 +540,19 @@ export class TicketsService {
       userAgent,
     });
 
-    this.webhookEvents.emit({
-      workspaceId,
-      eventType: 'ticket.status_changed',
-      entityId: id,
-      data: { ticketId: id, number: original.number, oldStatus: original.status, newStatus: status },
-    }).catch(() => {});
+    this.webhookEvents
+      .emit({
+        workspaceId,
+        eventType: "ticket.status_changed",
+        entityId: id,
+        data: {
+          ticketId: id,
+          number: original.number,
+          oldStatus: original.status,
+          newStatus: status,
+        },
+      })
+      .catch(() => {});
 
     return updated;
   }

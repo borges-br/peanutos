@@ -430,9 +430,23 @@ export const invoiceCreateSchema = z.object({
   dueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de vencimento inválida' }),
   paymentMethod: z.enum(["PIX", "TRANSFER", "CASH", "OTHER"]).default("PIX"),
   pixKey: z.string().optional().nullable(),
+  discountAmount: z.coerce.number().min(0, { message: 'O desconto deve ser maior ou igual a zero' }).default(0),
+  discountReason: z.string().optional().nullable(),
+  observations: z.string().optional().nullable(),
   items: z.array(invoiceItemCreateSchema).min(1, { message: 'A fatura deve ter pelo menos 1 item' }),
 });
 export type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
+
+export const invoiceUpdateSchema = z.object({
+  dueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de vencimento inválida' }).optional(),
+  paymentMethod: z.enum(["PIX", "TRANSFER", "CASH", "OTHER"]).optional(),
+  pixKey: z.string().optional().nullable(),
+  discountAmount: z.coerce.number().min(0, { message: 'O desconto deve ser maior ou igual a zero' }).optional(),
+  discountReason: z.string().optional().nullable(),
+  observations: z.string().optional().nullable(),
+  items: z.array(invoiceItemCreateSchema).min(1, { message: 'A fatura deve ter pelo menos 1 item' }).optional(),
+});
+export type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
 
 export const invoiceStatusUpdateSchema = z.object({
   status: invoiceStatusEnum,

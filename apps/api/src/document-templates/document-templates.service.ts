@@ -3,19 +3,36 @@ import { prisma, Prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { TEMPLATE_DOCUMENT_TYPES } from "@peanut/validators";
 
-type DocType = typeof TEMPLATE_DOCUMENT_TYPES[number];
+type DocType = (typeof TEMPLATE_DOCUMENT_TYPES)[number];
 
 const DEFAULT_ENABLED: Record<string, boolean> = {
-  header: true, logo: true, companyInfo: true, clientInfo: true,
-  documentTitle: true, itemsTable: true, financialSummary: true,
-  paymentInfo: true, terms: false, observations: false,
-  responsibleSignature: true, clientSignature: false, qrCode: false, footer: true,
+  header: true,
+  logo: true,
+  companyInfo: true,
+  clientInfo: true,
+  documentTitle: true,
+  itemsTable: true,
+  financialSummary: true,
+  paymentInfo: true,
+  terms: false,
+  observations: false,
+  responsibleSignature: true,
+  clientSignature: false,
+  qrCode: false,
+  footer: true,
 };
 
 const DEFAULT_ORDER = [
-  "header", "logo", "companyInfo", "clientInfo", "documentTitle",
-  "itemsTable", "financialSummary", "paymentInfo",
-  "responsibleSignature", "footer",
+  "header",
+  "logo",
+  "companyInfo",
+  "clientInfo",
+  "documentTitle",
+  "itemsTable",
+  "financialSummary",
+  "paymentInfo",
+  "responsibleSignature",
+  "footer",
 ];
 
 function buildDefault() {
@@ -40,20 +57,45 @@ export class DocumentTemplatesService {
 
     return TEMPLATE_DOCUMENT_TYPES.map((docType) => {
       const found = stored.find((s) => s.documentType === docType);
-      return found ?? { id: null, workspaceId, documentType: docType, ...buildDefault(), createdAt: null, updatedAt: null };
+      return (
+        found ?? {
+          id: null,
+          workspaceId,
+          documentType: docType,
+          ...buildDefault(),
+          createdAt: null,
+          updatedAt: null,
+        }
+      );
     });
   }
 
   async getByType(workspaceId: string, documentType: string) {
     if (!TEMPLATE_DOCUMENT_TYPES.includes(documentType as DocType)) {
-      return { id: null, workspaceId, documentType, ...buildDefault(), createdAt: null, updatedAt: null };
+      return {
+        id: null,
+        workspaceId,
+        documentType,
+        ...buildDefault(),
+        createdAt: null,
+        updatedAt: null,
+      };
     }
 
     const stored = await prisma.documentTemplateSetting.findUnique({
       where: { workspaceId_documentType: { workspaceId, documentType } },
     });
 
-    return stored ?? { id: null, workspaceId, documentType, ...buildDefault(), createdAt: null, updatedAt: null };
+    return (
+      stored ?? {
+        id: null,
+        workspaceId,
+        documentType,
+        ...buildDefault(),
+        createdAt: null,
+        updatedAt: null,
+      }
+    );
   }
 
   async upsert(
@@ -75,12 +117,18 @@ export class DocumentTemplatesService {
       layoutVariant: input.layoutVariant ?? baseData.layoutVariant,
       enabledBlocks: input.enabledBlocks ?? baseData.enabledBlocks,
       blockOrder: input.blockOrder ?? baseData.blockOrder,
-      customTexts: input.customTexts === undefined
-        ? (baseData.customTexts ?? Prisma.JsonNull)
-        : (input.customTexts === null ? Prisma.JsonNull : input.customTexts),
-      settings: input.settings === undefined
-        ? (baseData.settings ?? Prisma.JsonNull)
-        : (input.settings === null ? Prisma.JsonNull : input.settings),
+      customTexts:
+        input.customTexts === undefined
+          ? (baseData.customTexts ?? Prisma.JsonNull)
+          : input.customTexts === null
+            ? Prisma.JsonNull
+            : input.customTexts,
+      settings:
+        input.settings === undefined
+          ? (baseData.settings ?? Prisma.JsonNull)
+          : input.settings === null
+            ? Prisma.JsonNull
+            : input.settings,
     };
 
     const result = await prisma.documentTemplateSetting.upsert({

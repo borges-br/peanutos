@@ -9,6 +9,8 @@ import {
   UseGuards,
   Req,
   BadRequestException,
+  Res,
+  ForbiddenException,
 } from "@nestjs/common";
 import { InvoicesService } from "./invoices.service";
 import { AuthGuard } from "../auth/auth.guard";
@@ -19,6 +21,7 @@ import {
   invoiceQuerySchema,
   invoiceCreateSchema,
   invoiceStatusUpdateSchema,
+  invoiceUpdateSchema,
 } from "@peanut/validators";
 
 @UseGuards(AuthGuard, RolesGuard)
@@ -35,7 +38,11 @@ export class InvoicesController {
       throw new BadRequestException(messages);
     }
 
-    return this.invoicesService.list(user.workspaceId, validation.data, user.role);
+    return this.invoicesService.list(
+      user.workspaceId,
+      validation.data,
+      user.role,
+    );
   }
 
   @Get("clients/:clientId/invoices")
@@ -52,7 +59,11 @@ export class InvoicesController {
       throw new BadRequestException(messages);
     }
 
-    return this.invoicesService.list(user.workspaceId, validation.data, user.role);
+    return this.invoicesService.list(
+      user.workspaceId,
+      validation.data,
+      user.role,
+    );
   }
 
   @Get("invoices/:invoiceId")
@@ -112,5 +123,56 @@ export class InvoicesController {
       userAgent,
     );
   }
-}
 
+  @Patch("invoices/:invoiceId")
+  @Roles("OWNER", "ADMIN", "FINANCIAL")
+  async update(
+    @Param("invoiceId") invoiceId: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const validation = invoiceUpdateSchema.safeParse(body);
+    if (!validation.success) {
+      const messages = validation.error.errors.map((e) => e.message).join(", ");
+      throw new BadRequestException(messages);
+    }
+
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+
+    return this.invoicesService.update(
+      invoiceId,
+      validation.data,
+      user.workspaceId,
+      user.id,
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  @Get("invoices/:invoiceId/preview")
+  @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
+  async getPreview(
+    @Param("invoiceId") invoiceId: string,
+    @CurrentUser() user: any,
+    @Res() reply: any,
+  ) {
+    const hasFinancialPrivilege = ["OWNER", "ADMIN", "FINANCIAL"].includes(
+      user.role,
+    );
+    if (!hasFinancialPrivilege) {
+      throw new ForbiddenException(
+        "Você não possui permissão para visualizar o preview financeiro.",
+      );
+    }
+
+    const html = await this.invoicesService.getInvoicePreviewHtml(
+      invoiceId,
+      user.workspaceId,
+    );
+
+    reply.header("Content-Type", "text/html; charset=utf-8");
+    reply.send(html);
+  }
+}

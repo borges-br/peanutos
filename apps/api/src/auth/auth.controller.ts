@@ -44,7 +44,9 @@ export class AuthController {
       name: user.name,
       email: user.email,
       role: user.role,
-      avatarUrl: user.avatarFileObjectId ? `/api/v1/files/${user.avatarFileObjectId}` : null,
+      avatarUrl: user.avatarFileObjectId
+        ? `/api/v1/files/${user.avatarFileObjectId}`
+        : null,
     };
   }
 

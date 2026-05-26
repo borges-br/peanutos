@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  ConflictException,
-} from "@nestjs/common";
+import { Injectable, ConflictException } from "@nestjs/common";
 import { prisma } from "@peanut/db";
 import * as bcrypt from "bcryptjs";
 import { AuditService } from "../audit/audit.service";
@@ -29,9 +26,7 @@ export class SetupService {
       // Double-check inside transaction to guard against race conditions
       const count = await tx.user.count();
       if (count > 0) {
-        throw new ConflictException(
-          "Setup já foi concluído. Acesso negado.",
-        );
+        throw new ConflictException("Setup já foi concluído. Acesso negado.");
       }
 
       // Ensure unique slug
@@ -42,15 +37,20 @@ export class SetupService {
       const brandData: any = {};
       if (input.brandName) brandData.brandName = input.brandName;
       if (input.legalName) brandData.legalName = input.legalName;
-      if (input.companyDocument) brandData.companyDocument = input.companyDocument;
+      if (input.companyDocument)
+        brandData.companyDocument = input.companyDocument;
       if (input.companyEmail) brandData.companyEmail = input.companyEmail;
       if (input.companyPhone) brandData.companyPhone = input.companyPhone;
       if (input.companyWebsite) brandData.companyWebsite = input.companyWebsite;
       if (input.companyAddress) brandData.companyAddress = input.companyAddress;
-      if (input.primaryColorHex) brandData.primaryColorHex = input.primaryColorHex;
-      if (input.documentSecondaryColor) brandData.documentSecondaryColor = input.documentSecondaryColor;
-      if (input.documentAccentColor) brandData.documentAccentColor = input.documentAccentColor;
-      if (input.documentFooterText) brandData.documentFooterText = input.documentFooterText;
+      if (input.primaryColorHex)
+        brandData.primaryColorHex = input.primaryColorHex;
+      if (input.documentSecondaryColor)
+        brandData.documentSecondaryColor = input.documentSecondaryColor;
+      if (input.documentAccentColor)
+        brandData.documentAccentColor = input.documentAccentColor;
+      if (input.documentFooterText)
+        brandData.documentFooterText = input.documentFooterText;
 
       const workspace = await tx.workspace.create({
         data: {
@@ -102,8 +102,7 @@ export class SetupService {
 
     return {
       success: true,
-      message:
-        "Configuração inicial concluída. Faça login para continuar.",
+      message: "Configuração inicial concluída. Faça login para continuar.",
     };
   }
 

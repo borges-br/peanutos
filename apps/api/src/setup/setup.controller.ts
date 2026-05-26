@@ -26,8 +26,7 @@ export class SetupController {
       throw new BadRequestException(messages);
     }
 
-    const ipAddress =
-      req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
 
     return this.setupService.createAdmin(result.data, ipAddress, userAgent);

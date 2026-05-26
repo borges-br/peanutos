@@ -211,6 +211,13 @@ importers:
         version: 5.9.3
 
   packages/documents:
+    dependencies:
+      cpf-cnpj-validator:
+        specifier: ^2.1.2
+        version: 2.1.2(reflect-metadata@0.2.2)(zod@3.25.76)
+      libphonenumber-js:
+        specifier: ^1.13.3
+        version: 1.13.3
     devDependencies:
       typescript:
         specifier: ^5.4.5
@@ -1415,6 +1422,30 @@ packages:
       typescript:
         optional: true
 
+  cpf-cnpj-validator@2.1.2:
+    resolution: {integrity: sha512-JhU4oUhZRugvDZvWBSsQQHNHbWcjc5VW4BlmaKfChm7ddMSh/Ixv2iHM0uFNx3hN3NYgfVgVNl5MbkjNr5tgyA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@angular/forms': '>=15'
+      class-validator: ^0.14.0 || ^0.15.0
+      joi: ^17.0.0
+      reflect-metadata: ^0.2.0
+      yup: ^1.0.0
+      zod: ^3.22.0 || ^4.0.0
+    peerDependenciesMeta:
+      '@angular/forms':
+        optional: true
+      class-validator:
+        optional: true
+      joi:
+        optional: true
+      reflect-metadata:
+        optional: true
+      yup:
+        optional: true
+      zod:
+        optional: true
+
   create-require@1.1.1:
     resolution: {integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==}
 
@@ -2257,6 +2288,9 @@ packages:
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
+
+  libphonenumber-js@1.13.3:
+    resolution: {integrity: sha512-xMkdAMqcyG7iN2WZZmGIfWbYxW4orRkny+0/AXIbwL0xll2zkDX0Vzo/BXFa6+7mh2UvJl9MbcTtHk0YXkFtBA==}
 
   light-my-request@5.14.0:
     resolution: {integrity: sha512-aORPWntbpH5esaYpGOOmri0OHDOe3wC5M2MQxZ9dvMLZm6DnaAn0kJlcbU9hwsQgLzmZyReKwFwwPkR+nHu5kA==}
@@ -4796,6 +4830,11 @@ snapshots:
     optionalDependencies:
       typescript: 5.7.2
 
+  cpf-cnpj-validator@2.1.2(reflect-metadata@0.2.2)(zod@3.25.76):
+    optionalDependencies:
+      reflect-metadata: 0.2.2
+      zod: 3.25.76
+
   create-require@1.1.1: {}
 
   cron-parser@4.9.0:
@@ -5866,6 +5905,8 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
       type-check: 0.4.0
+
+  libphonenumber-js@1.13.3: {}
 
   light-my-request@5.14.0:
     dependencies:

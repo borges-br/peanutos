@@ -49,8 +49,7 @@ export class UsersController {
       throw new BadRequestException(messages);
     }
 
-    const ipAddress =
-      req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
 
     return this.usersService.create(
@@ -77,8 +76,7 @@ export class UsersController {
       throw new BadRequestException(messages);
     }
 
-    const ipAddress =
-      req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
 
     return this.usersService.updateRole(
@@ -106,8 +104,7 @@ export class UsersController {
       throw new BadRequestException(messages);
     }
 
-    const ipAddress =
-      req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
 
     return this.usersService.updateStatus(
@@ -130,7 +127,14 @@ export class UsersController {
   ) {
     const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
-    return this.usersService.deleteUser(id, user.workspaceId, user.id, user.role, ipAddress, userAgent);
+    return this.usersService.deleteUser(
+      id,
+      user.workspaceId,
+      user.id,
+      user.role,
+      ipAddress,
+      userAgent,
+    );
   }
 
   // ─── My Profile & Document Identity ──────────────────────────────────────────
@@ -143,26 +147,50 @@ export class UsersController {
 
   @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
   @Patch("me/profile")
-  async updateMyProfile(@Body() body: any, @CurrentUser() user: any, @Req() req: any) {
+  async updateMyProfile(
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
     const result = updateUserProfileSchema.safeParse(body);
     if (!result.success) {
-      throw new BadRequestException(result.error.errors.map(e => e.message).join(", "));
+      throw new BadRequestException(
+        result.error.errors.map((e) => e.message).join(", "),
+      );
     }
     const ip = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const ua = req.headers?.["user-agent"] || "Unknown";
-    return this.usersService.updateMyProfile(user.id, user.workspaceId, result.data, ip, ua);
+    return this.usersService.updateMyProfile(
+      user.id,
+      user.workspaceId,
+      result.data,
+      ip,
+      ua,
+    );
   }
 
   @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
   @Post("me/avatar")
-  async uploadAvatar(@Body() body: any, @CurrentUser() user: any, @Req() req: any) {
+  async uploadAvatar(
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
     const result = uploadImageSchema.safeParse(body);
     if (!result.success) {
-      throw new BadRequestException(result.error.errors.map(e => e.message).join(", "));
+      throw new BadRequestException(
+        result.error.errors.map((e) => e.message).join(", "),
+      );
     }
     const ip = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const ua = req.headers?.["user-agent"] || "Unknown";
-    return this.usersService.uploadAvatar(user.id, user.workspaceId, result.data, ip, ua);
+    return this.usersService.uploadAvatar(
+      user.id,
+      user.workspaceId,
+      result.data,
+      ip,
+      ua,
+    );
   }
 
   @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
@@ -175,14 +203,26 @@ export class UsersController {
 
   @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
   @Post("me/signature")
-  async uploadSignature(@Body() body: any, @CurrentUser() user: any, @Req() req: any) {
+  async uploadSignature(
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
     const result = uploadImageSchema.safeParse(body);
     if (!result.success) {
-      throw new BadRequestException(result.error.errors.map(e => e.message).join(", "));
+      throw new BadRequestException(
+        result.error.errors.map((e) => e.message).join(", "),
+      );
     }
     const ip = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const ua = req.headers?.["user-agent"] || "Unknown";
-    return this.usersService.uploadSignature(user.id, user.workspaceId, result.data, ip, ua);
+    return this.usersService.uploadSignature(
+      user.id,
+      user.workspaceId,
+      result.data,
+      ip,
+      ua,
+    );
   }
 
   @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")

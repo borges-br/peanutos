@@ -43,6 +43,8 @@ export default function InvoiceA4PreviewPage() {
     loadBrand();
   }, []);
 
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+
   useEffect(() => {
     async function loadInvoice() {
       setLoading(true);
@@ -50,6 +52,23 @@ export default function InvoiceA4PreviewPage() {
       try {
         const data = await apiRequest(`/invoices/${invoiceId}`);
         setInvoice(data);
+
+        // Load dynamic HTML preview from API
+        const token = localStorage.getItem('peanut_token');
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+        const targetUrl = `${cleanBaseUrl}/invoices/${invoiceId}/preview`;
+
+        const res = await fetch(targetUrl, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        });
+
+        if (res.ok) {
+          const html = await res.text();
+          setPreviewHtml(html);
+        } else {
+          console.error("Failed to load faithful preview:", res.statusText);
+        }
       } catch (err: any) {
         setError(err.message || t.invoices.notFound || 'Fatura não encontrada.');
       } finally {
@@ -186,14 +205,6 @@ export default function InvoiceA4PreviewPage() {
     );
   }
 
-  const formatCurrency = (amount: any) => {
-    if (amount === null || amount === undefined) {
-      return t.invoices.protectedValue || 'Valor protegido';
-    }
-    const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numericAmount);
-  };
-
   const getStatusBadge = (statusValue: string) => {
     switch (statusValue) {
       case 'PAID':
@@ -204,14 +215,6 @@ export default function InvoiceA4PreviewPage() {
         return <span className="text-[10px] bg-yellow-500/10 border border-yellow-500/20 text-yellow-700 px-2.5 py-0.5 rounded font-bold uppercase">Pendente</span>;
     }
   };
-
-  const servicesSubtotal = (invoice.items || [])
-    .filter((i: any) => i.type === 'SERVICE')
-    .reduce((sum: number, i: any) => sum + parseFloat(i.totalPrice || 0), 0);
-
-  const materialsSubtotal = (invoice.items || [])
-    .filter((i: any) => i.type === 'MATERIAL')
-    .reduce((sum: number, i: any) => sum + parseFloat(i.totalPrice || 0), 0);
 
   // Map generic documentActions list for A4PreviewShell header
   const documentActions: any[] = [];
@@ -284,7 +287,7 @@ export default function InvoiceA4PreviewPage() {
           <RestrictedState />
         </div>
       ) : (
-        <div className="flex flex-col gap-md text-black select-text">
+        <div className="flex flex-col gap-md text-black select-text w-full">
           {/* Success Banner */}
           {genSuccess && (
             <div className="bg-green-500/10 border border-green-500/20 text-green-800 p-md rounded-lg text-body-sm flex justify-between items-center mb-md font-sans">
@@ -325,71 +328,19 @@ export default function InvoiceA4PreviewPage() {
             </div>
           )}
 
-          <h3 className="font-bold text-xs uppercase text-black/50 border-b border-black/10 pb-1 tracking-wider mt-md">
-            {t.invoices.previewSectionTitle || "Detalhamento de Serviços e Recursos Cobrados"}
-          </h3>
-
-          {/* Table of Items */}
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-black/20 text-black/60 font-mono">
-                <th className="py-2">{t.invoices.tableDescription || "Item / Descrição"}</th>
-                <th className="py-2 text-center w-12">{t.invoices.tableQty || "Qtd"}</th>
-                <th className="py-2 text-center w-12">{t.invoices.tableUnit || "Un"}</th>
-                <th className="py-2 text-right w-24">{t.invoices.tableUnitPrice || "Valor Unit."}</th>
-                <th className="py-2 text-right w-24">{t.invoices.tableTotal || "Total"}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-black/5 font-mono">
-              {(invoice.items || []).map((item: any) => (
-                <tr key={item.id}>
-                  <td className="py-2">
-                    <span className="font-bold block text-black">{item.description}</span>
-                    <span className="text-[9px] text-black/50 block">{t.invoices.mappingDescription || "Mapeamento operacional faturado"}</span>
-                  </td>
-                  <td className="py-2 text-center">{parseFloat(item.quantity)}</td>
-                  <td className="py-2 text-center">{item.unit || 'UN'}</td>
-                  <td className="py-2 text-right">{formatCurrency(item.unitPrice)}</td>
-                  <td className="py-2 text-right font-bold">{formatCurrency(item.totalPrice)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Totals Section */}
-          <div className="border-t-2 border-black pt-md mt-lg flex flex-col gap-1 items-end text-right font-mono">
-            <div className="flex gap-md text-xs text-black/60">
-              <span>{t.invoices.servicesSubtotalA4 || "Subtotal de Serviços:"}</span>
-              <span>{formatCurrency(servicesSubtotal)}</span>
+          {previewHtml ? (
+            <iframe
+              srcDoc={previewHtml}
+              className="w-full min-h-[920px] border border-outline-variant/30 rounded-lg shadow-inner bg-white"
+              title="Faithful Invoice A4 Preview"
+              sandbox="allow-same-origin allow-scripts"
+            />
+          ) : (
+            <div className="flex flex-col justify-center items-center py-xl gap-sm text-on-surface-variant font-body-sm">
+              <div className="w-8 h-8 rounded-full border-3 border-primary/10 border-t-primary animate-spin" />
+              <p>Carregando layout fiel...</p>
             </div>
-            <div className="flex gap-md text-xs text-black/60">
-              <span>{t.invoices.materialsSubtotalA4 || "Subtotal de Materiais:"}</span>
-              <span>{formatCurrency(materialsSubtotal)}</span>
-            </div>
-            <div className="flex gap-md text-sm font-bold text-black mt-xs border-t border-black/15 pt-xs w-48 justify-end">
-              <span>{t.invoices.totalA4 || "Total Liquidado:"}</span>
-              <span>{formatCurrency(invoice.totalAmount)}</span>
-            </div>
-          </div>
-
-          {/* Payments Instructions */}
-          <div className="mt-xl border border-black/15 bg-black/[0.01] p-md rounded-lg flex flex-col gap-2 font-mono text-[11px] text-black/70">
-            <span className="font-bold text-black text-[10px] uppercase tracking-wide">
-              {t.invoices.instructionsTitle || "Instruções de Pagamento e Recebimento"}
-            </span>
-            <div className="flex flex-col gap-0.5">
-              <span>
-                {t.invoices.favoredLabel?.replace(
-                  '{favored}',
-                  brandSettings?.legalName || brandSettings?.brandName || 'Dados do favorecido configuráveis'
-                ) || `Favorecido: ${brandSettings?.legalName || brandSettings?.brandName || 'Dados do favorecido configuráveis'}`}
-              </span>
-              <span>{t.invoices.preferentialMethod || "Método preferencial: PIX (Chave Pix abaixo)"}</span>
-              <span className="font-bold text-black">
-                {t.invoices.pixKeyLabelA4?.replace('{key}', invoice.pixKey || 'Chave Pix não configurada') || `Chave PIX: ${invoice.pixKey || 'Chave Pix não configurada'}`}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
       )}
     </A4PreviewShell>

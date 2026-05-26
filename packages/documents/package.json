@@ -11,5 +11,9 @@
   },
   "devDependencies": {
     "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "cpf-cnpj-validator": "^2.1.2",
+    "libphonenumber-js": "^1.13.3"
   }
 }

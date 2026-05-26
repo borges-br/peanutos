@@ -14,7 +14,10 @@ import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { updateDocumentTemplateSettingSchema, TEMPLATE_DOCUMENT_TYPES } from "@peanut/validators";
+import {
+  updateDocumentTemplateSettingSchema,
+  TEMPLATE_DOCUMENT_TYPES,
+} from "@peanut/validators";
 
 @UseGuards(AuthGuard, RolesGuard)
 @Controller("document-templates")
@@ -29,9 +32,14 @@ export class DocumentTemplatesController {
 
   @Get(":documentType")
   @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")
-  async getByType(@Param("documentType") documentType: string, @CurrentUser() user: any) {
+  async getByType(
+    @Param("documentType") documentType: string,
+    @CurrentUser() user: any,
+  ) {
     if (!TEMPLATE_DOCUMENT_TYPES.includes(documentType as any)) {
-      throw new BadRequestException(`Tipo de documento inválido. Use: ${TEMPLATE_DOCUMENT_TYPES.join(", ")}`);
+      throw new BadRequestException(
+        `Tipo de documento inválido. Use: ${TEMPLATE_DOCUMENT_TYPES.join(", ")}`,
+      );
     }
     return this.service.getByType(user.workspaceId, documentType);
   }
@@ -50,12 +58,21 @@ export class DocumentTemplatesController {
 
     const result = updateDocumentTemplateSettingSchema.safeParse(body);
     if (!result.success) {
-      throw new BadRequestException(result.error.errors.map(e => e.message).join(", "));
+      throw new BadRequestException(
+        result.error.errors.map((e) => e.message).join(", "),
+      );
     }
 
     const ip = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const ua = req.headers?.["user-agent"] || "Unknown";
-    return this.service.upsert(user.workspaceId, documentType, result.data, user.id, ip, ua);
+    return this.service.upsert(
+      user.workspaceId,
+      documentType,
+      result.data,
+      user.id,
+      ip,
+      ua,
+    );
   }
 
   @Post(":documentType/reset")

@@ -1,6 +1,10 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
 import { prisma } from "@peanut/db";
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import * as crypto from "crypto";
 
 const ALLOWED_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -14,16 +18,26 @@ export class StorageService {
   };
 
   private readonly s3Endpoint = this.normalizeEndpoint(process.env.S3_ENDPOINT);
-  private readonly s3Bucket = process.env.S3_BUCKET || process.env.S3_BUCKET_NAME || "peanut-os-documents";
+  private readonly s3Bucket =
+    process.env.S3_BUCKET ||
+    process.env.S3_BUCKET_NAME ||
+    "peanut-os-documents";
   private readonly s3Region = process.env.S3_REGION || "us-east-1";
-  private readonly s3ForcePathStyle = String(process.env.S3_FORCE_PATH_STYLE ?? "true") === "true";
+  private readonly s3ForcePathStyle =
+    String(process.env.S3_FORCE_PATH_STYLE ?? "true") === "true";
 
   private readonly s3 = new S3Client({
     endpoint: this.s3Endpoint,
     region: this.s3Region,
     credentials: {
-      accessKeyId: process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || "minio_admin",
-      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || "change-me-in-production",
+      accessKeyId:
+        process.env.S3_ACCESS_KEY_ID ||
+        process.env.S3_ACCESS_KEY ||
+        "minio_admin",
+      secretAccessKey:
+        process.env.S3_SECRET_ACCESS_KEY ||
+        process.env.S3_SECRET_KEY ||
+        "change-me-in-production",
     },
     forcePathStyle: this.s3ForcePathStyle,
   });
@@ -57,12 +71,14 @@ export class StorageService {
     const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
 
     try {
-      await this.s3.send(new PutObjectCommand({
-        Bucket: this.s3Bucket,
-        Key: uniqueKey,
-        Body: buffer,
-        ContentType: opts.mimeType,
-      }));
+      await this.s3.send(
+        new PutObjectCommand({
+          Bucket: this.s3Bucket,
+          Key: uniqueKey,
+          Body: buffer,
+          ContentType: opts.mimeType,
+        }),
+      );
     } catch (err: any) {
       console.error("[StorageService] S3 upload failed:", err.message);
       throw new BadRequestException("Falha ao salvar arquivo no armazenamento");
@@ -85,15 +101,24 @@ export class StorageService {
       return { fileObjectId: fileObject.id };
     } catch (dbErr: any) {
       // Cleanup orphaned S3 object
-      await this.s3.send(new DeleteObjectCommand({ Bucket: this.s3Bucket, Key: uniqueKey })).catch(() => {});
-      throw new BadRequestException("Falha ao registrar arquivo no banco de dados");
+      await this.s3
+        .send(
+          new DeleteObjectCommand({ Bucket: this.s3Bucket, Key: uniqueKey }),
+        )
+        .catch(() => {});
+      throw new BadRequestException(
+        "Falha ao registrar arquivo no banco de dados",
+      );
     }
   }
 
   /**
    * Delete a FileObject record (does NOT hard-delete the S3 object to preserve history).
    */
-  async deleteFileObject(fileObjectId: string, workspaceId: string): Promise<void> {
+  async deleteFileObject(
+    fileObjectId: string,
+    workspaceId: string,
+  ): Promise<void> {
     await prisma.fileObject.deleteMany({
       where: { id: fileObjectId, workspaceId },
     });

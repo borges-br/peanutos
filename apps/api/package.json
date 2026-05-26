@@ -22,6 +22,7 @@
     "@peanut/types": "workspace:*",
     "@peanut/utils": "workspace:*",
     "@peanut/validators": "workspace:*",
+    "@peanut/documents": "workspace:*",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.8.1",
     "jsonwebtoken": "^9.0.3",

@@ -3,27 +3,27 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
-} from '@nestjs/common';
-import { prisma } from '@peanut/db';
-import { Queue } from 'bullmq';
-import { AuditService } from '../audit/audit.service';
+} from "@nestjs/common";
+import { prisma } from "@peanut/db";
+import { Queue } from "bullmq";
+import { AuditService } from "../audit/audit.service";
 import {
   CreateWebhookEndpointInput,
   UpdateWebhookEndpointInput,
   WebhookDeliveryQueryInput,
   CreateInboundWebhookInput,
   UpdateInboundWebhookInput,
-} from '@peanut/validators';
+} from "@peanut/validators";
 import {
   generateWebhookSecret,
   encryptSecret,
   decryptSecret,
   computeHmacSignature,
-} from './webhook-signing';
-import { WebhookEventsService } from './webhook-events.service';
+} from "./webhook-signing";
+import { WebhookEventsService } from "./webhook-events.service";
 
-const MANAGE_ROLES = ['OWNER', 'ADMIN'];
-const VIEW_ROLES = ['OWNER', 'ADMIN', 'READ_ONLY'];
+const MANAGE_ROLES = ["OWNER", "ADMIN"];
+const VIEW_ROLES = ["OWNER", "ADMIN", "READ_ONLY"];
 
 @Injectable()
 export class WebhooksService {
@@ -33,24 +33,28 @@ export class WebhooksService {
     private readonly auditService: AuditService,
     private readonly webhookEvents: WebhookEventsService,
   ) {
-    this.dispatchQueue = new Queue('webhook-dispatch', {
+    this.dispatchQueue = new Queue("webhook-dispatch", {
       connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379', 10),
-        password: process.env.REDIS_PASSWORD || 'change-me-in-production',
+        host: process.env.REDIS_HOST || "localhost",
+        port: parseInt(process.env.REDIS_PORT || "6379", 10),
+        password: process.env.REDIS_PASSWORD || "change-me-in-production",
       },
     });
   }
 
   private assertCanManage(role: string) {
     if (!MANAGE_ROLES.includes(role)) {
-      throw new ForbiddenException('Permissão insuficiente para gerenciar webhooks');
+      throw new ForbiddenException(
+        "Permissão insuficiente para gerenciar webhooks",
+      );
     }
   }
 
   private assertCanView(role: string) {
     if (!VIEW_ROLES.includes(role)) {
-      throw new ForbiddenException('Permissão insuficiente para visualizar webhooks');
+      throw new ForbiddenException(
+        "Permissão insuficiente para visualizar webhooks",
+      );
     }
   }
 
@@ -64,7 +68,7 @@ export class WebhooksService {
 
     const endpoints = await prisma.webhookEndpoint.findMany({
       where: { workspaceId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       select: {
         id: true,
         workspaceId: true,
@@ -100,7 +104,7 @@ export class WebhooksService {
       },
     });
 
-    if (!endpoint) throw new NotFoundException('Webhook não encontrado');
+    if (!endpoint) throw new NotFoundException("Webhook não encontrado");
     return endpoint;
   }
 
@@ -132,19 +136,25 @@ export class WebhooksService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'webhook.created',
-      entityType: 'WEBHOOK',
+      action: "webhook.created",
+      entityType: "WEBHOOK",
       entityId: endpoint.id,
-      after: { id: endpoint.id, name: endpoint.name, url: endpoint.url, events: endpoint.events },
+      after: {
+        id: endpoint.id,
+        name: endpoint.name,
+        url: endpoint.url,
+        events: endpoint.events,
+      },
       ipAddress,
       userAgent,
-      severity: 'INFO',
+      severity: "INFO",
     });
 
     return {
       ...this.sanitizeEndpoint(endpoint),
       secret: plainSecret,
-      secretMessage: 'Copie este segredo agora. Ele não será exibido novamente.',
+      secretMessage:
+        "Copie este segredo agora. Ele não será exibido novamente.",
     };
   }
 
@@ -162,7 +172,7 @@ export class WebhooksService {
     const existing = await prisma.webhookEndpoint.findFirst({
       where: { id, workspaceId },
     });
-    if (!existing) throw new NotFoundException('Webhook não encontrado');
+    if (!existing) throw new NotFoundException("Webhook não encontrado");
 
     const updated = await prisma.webhookEndpoint.update({
       where: { id },
@@ -174,23 +184,34 @@ export class WebhooksService {
       },
     });
 
-    const action = input.isActive === false
-      ? 'webhook.disabled'
-      : input.isActive === true
-        ? 'webhook.enabled'
-        : 'webhook.updated';
+    const action =
+      input.isActive === false
+        ? "webhook.disabled"
+        : input.isActive === true
+          ? "webhook.enabled"
+          : "webhook.updated";
 
     await this.auditService.log({
       workspaceId,
       actorUserId,
       action,
-      entityType: 'WEBHOOK',
+      entityType: "WEBHOOK",
       entityId: id,
-      before: { name: existing.name, url: existing.url, events: existing.events, isActive: existing.isActive },
-      after: { name: updated.name, url: updated.url, events: updated.events, isActive: updated.isActive },
+      before: {
+        name: existing.name,
+        url: existing.url,
+        events: existing.events,
+        isActive: existing.isActive,
+      },
+      after: {
+        name: updated.name,
+        url: updated.url,
+        events: updated.events,
+        isActive: updated.isActive,
+      },
       ipAddress,
       userAgent,
-      severity: 'INFO',
+      severity: "INFO",
     });
 
     return this.sanitizeEndpoint(updated);
@@ -209,7 +230,7 @@ export class WebhooksService {
     const existing = await prisma.webhookEndpoint.findFirst({
       where: { id, workspaceId },
     });
-    if (!existing) throw new NotFoundException('Webhook não encontrado');
+    if (!existing) throw new NotFoundException("Webhook não encontrado");
 
     const updated = await prisma.webhookEndpoint.update({
       where: { id },
@@ -219,14 +240,14 @@ export class WebhooksService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'webhook.disabled',
-      entityType: 'WEBHOOK',
+      action: "webhook.disabled",
+      entityType: "WEBHOOK",
       entityId: id,
       before: { isActive: true },
       after: { isActive: false },
       ipAddress,
       userAgent,
-      severity: 'INFO',
+      severity: "INFO",
     });
 
     return this.sanitizeEndpoint(updated);
@@ -245,7 +266,7 @@ export class WebhooksService {
     const existing = await prisma.webhookEndpoint.findFirst({
       where: { id, workspaceId },
     });
-    if (!existing) throw new NotFoundException('Webhook não encontrado');
+    if (!existing) throw new NotFoundException("Webhook não encontrado");
 
     const plainSecret = generateWebhookSecret();
     const encrypted = encryptSecret(plainSecret);
@@ -258,10 +279,10 @@ export class WebhooksService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'webhook.secret_rotated',
-      entityType: 'WEBHOOK',
+      action: "webhook.secret_rotated",
+      entityType: "WEBHOOK",
       entityId: id,
-      severity: 'INFO',
+      severity: "INFO",
       ipAddress,
       userAgent,
     });
@@ -269,7 +290,8 @@ export class WebhooksService {
     return {
       id,
       secret: plainSecret,
-      secretMessage: 'Novo segredo gerado. Copie agora — não será exibido novamente.',
+      secretMessage:
+        "Novo segredo gerado. Copie agora — não será exibido novamente.",
     };
   }
 
@@ -286,52 +308,59 @@ export class WebhooksService {
     const endpoint = await prisma.webhookEndpoint.findFirst({
       where: { id, workspaceId },
     });
-    if (!endpoint) throw new NotFoundException('Webhook não encontrado');
+    if (!endpoint) throw new NotFoundException("Webhook não encontrado");
     if (!endpoint.isActive) {
-      throw new BadRequestException('Não é possível testar um webhook desativado');
+      throw new BadRequestException(
+        "Não é possível testar um webhook desativado",
+      );
     }
 
     const testPayload = {
       id: `evt_test_${Date.now()}`,
-      type: 'webhook.test',
+      type: "webhook.test",
       createdAt: new Date().toISOString(),
       workspaceId,
-      data: { message: 'Esta é uma entrega de teste do Peanut OS.' },
+      data: { message: "Esta é uma entrega de teste do Peanut OS." },
     };
 
     const delivery = await prisma.webhookDelivery.create({
       data: {
         workspaceId,
         webhookId: id,
-        eventType: 'webhook.test',
+        eventType: "webhook.test",
         payload: testPayload,
-        status: 'PENDING',
+        status: "PENDING",
         maxAttempts: 1,
         nextAttemptAt: new Date(),
       },
     });
 
-    await this.dispatchQueue.add(
-      'webhook-dispatch',
-      { deliveryId: delivery.id },
-      { attempts: 1, removeOnComplete: 50, removeOnFail: 50 },
-    ).catch((err) => {
-      console.warn('[WebhooksService] Failed to enqueue test delivery (Redis offline?):', err.message);
-    });
+    await this.dispatchQueue
+      .add(
+        "webhook-dispatch",
+        { deliveryId: delivery.id },
+        { attempts: 1, removeOnComplete: 50, removeOnFail: 50 },
+      )
+      .catch((err) => {
+        console.warn(
+          "[WebhooksService] Failed to enqueue test delivery (Redis offline?):",
+          err.message,
+        );
+      });
 
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'webhook.test_sent',
-      entityType: 'WEBHOOK',
+      action: "webhook.test_sent",
+      entityType: "WEBHOOK",
       entityId: id,
       after: { deliveryId: delivery.id },
       ipAddress,
       userAgent,
-      severity: 'INFO',
+      severity: "INFO",
     });
 
-    return { deliveryId: delivery.id, status: 'queued' };
+    return { deliveryId: delivery.id, status: "queued" };
   }
 
   async listDeliveries(
@@ -345,7 +374,7 @@ export class WebhooksService {
     const endpoint = await prisma.webhookEndpoint.findFirst({
       where: { id: webhookId, workspaceId },
     });
-    if (!endpoint) throw new NotFoundException('Webhook não encontrado');
+    if (!endpoint) throw new NotFoundException("Webhook não encontrado");
 
     const page = Math.max(1, query.page || 1);
     const limit = Math.max(1, Math.min(100, query.limit || 20));
@@ -357,7 +386,7 @@ export class WebhooksService {
         where: { webhookId, workspaceId },
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         select: {
           id: true,
           eventType: true,
@@ -380,7 +409,11 @@ export class WebhooksService {
     };
   }
 
-  async getDelivery(deliveryId: string, workspaceId: string, requesterRole: string) {
+  async getDelivery(
+    deliveryId: string,
+    workspaceId: string,
+    requesterRole: string,
+  ) {
     this.assertCanView(requesterRole);
 
     const delivery = await prisma.webhookDelivery.findFirst({
@@ -402,7 +435,8 @@ export class WebhooksService {
       },
     });
 
-    if (!delivery) throw new NotFoundException('Entrega de webhook não encontrada');
+    if (!delivery)
+      throw new NotFoundException("Entrega de webhook não encontrada");
     return delivery;
   }
 
@@ -415,7 +449,7 @@ export class WebhooksService {
 
     return prisma.inboundWebhookEndpoint.findMany({
       where: { workspaceId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       select: {
         id: true,
         workspaceId: true,
@@ -446,7 +480,8 @@ export class WebhooksService {
       },
     });
 
-    if (!endpoint) throw new NotFoundException('Inbound webhook não encontrado');
+    if (!endpoint)
+      throw new NotFoundException("Inbound webhook não encontrado");
     return endpoint;
   }
 
@@ -477,19 +512,24 @@ export class WebhooksService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'inbound_webhook.created',
-      entityType: 'INBOUND_WEBHOOK',
+      action: "inbound_webhook.created",
+      entityType: "INBOUND_WEBHOOK",
       entityId: endpoint.id,
-      after: { id: endpoint.id, name: endpoint.name, allowedActions: endpoint.allowedActions },
+      after: {
+        id: endpoint.id,
+        name: endpoint.name,
+        allowedActions: endpoint.allowedActions,
+      },
       ipAddress,
       userAgent,
-      severity: 'INFO',
+      severity: "INFO",
     });
 
     return {
       ...this.sanitizeEndpoint(endpoint),
       secret: plainSecret,
-      secretMessage: 'Copie este segredo agora para assinar as requisições HMAC inbound.',
+      secretMessage:
+        "Copie este segredo agora para assinar as requisições HMAC inbound.",
     };
   }
 
@@ -507,32 +547,44 @@ export class WebhooksService {
     const existing = await prisma.inboundWebhookEndpoint.findFirst({
       where: { id, workspaceId },
     });
-    if (!existing) throw new NotFoundException('Inbound webhook não encontrado');
+    if (!existing)
+      throw new NotFoundException("Inbound webhook não encontrado");
 
     const updated = await prisma.inboundWebhookEndpoint.update({
       where: { id },
       data: {
         ...(input.name !== undefined && { name: input.name }),
-        ...(input.allowedActions !== undefined && { allowedActions: input.allowedActions }),
+        ...(input.allowedActions !== undefined && {
+          allowedActions: input.allowedActions,
+        }),
         ...(input.isActive !== undefined && { isActive: input.isActive }),
       },
     });
 
-    const action = input.isActive === false
-      ? 'inbound_webhook.disabled'
-      : 'inbound_webhook.updated';
+    const action =
+      input.isActive === false
+        ? "inbound_webhook.disabled"
+        : "inbound_webhook.updated";
 
     await this.auditService.log({
       workspaceId,
       actorUserId,
       action,
-      entityType: 'INBOUND_WEBHOOK',
+      entityType: "INBOUND_WEBHOOK",
       entityId: id,
-      before: { name: existing.name, allowedActions: existing.allowedActions, isActive: existing.isActive },
-      after: { name: updated.name, allowedActions: updated.allowedActions, isActive: updated.isActive },
+      before: {
+        name: existing.name,
+        allowedActions: existing.allowedActions,
+        isActive: existing.isActive,
+      },
+      after: {
+        name: updated.name,
+        allowedActions: updated.allowedActions,
+        isActive: updated.isActive,
+      },
       ipAddress,
       userAgent,
-      severity: 'INFO',
+      severity: "INFO",
     });
 
     return this.sanitizeEndpoint(updated);
@@ -551,7 +603,8 @@ export class WebhooksService {
     const existing = await prisma.inboundWebhookEndpoint.findFirst({
       where: { id, workspaceId },
     });
-    if (!existing) throw new NotFoundException('Inbound webhook não encontrado');
+    if (!existing)
+      throw new NotFoundException("Inbound webhook não encontrado");
 
     await prisma.inboundWebhookEndpoint.delete({
       where: { id },
@@ -560,13 +613,13 @@ export class WebhooksService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'inbound_webhook.deleted',
-      entityType: 'INBOUND_WEBHOOK',
+      action: "inbound_webhook.deleted",
+      entityType: "INBOUND_WEBHOOK",
       entityId: id,
       before: { name: existing.name },
       ipAddress,
       userAgent,
-      severity: 'WARN',
+      severity: "WARN",
     });
 
     return { success: true };
@@ -585,7 +638,8 @@ export class WebhooksService {
     const existing = await prisma.inboundWebhookEndpoint.findFirst({
       where: { id, workspaceId },
     });
-    if (!existing) throw new NotFoundException('Inbound webhook não encontrado');
+    if (!existing)
+      throw new NotFoundException("Inbound webhook não encontrado");
 
     const plainSecret = generateWebhookSecret();
     const encrypted = encryptSecret(plainSecret);
@@ -598,10 +652,10 @@ export class WebhooksService {
     await this.auditService.log({
       workspaceId,
       actorUserId,
-      action: 'inbound_webhook.secret_rotated',
-      entityType: 'INBOUND_WEBHOOK',
+      action: "inbound_webhook.secret_rotated",
+      entityType: "INBOUND_WEBHOOK",
       entityId: id,
-      severity: 'INFO',
+      severity: "INFO",
       ipAddress,
       userAgent,
     });
@@ -609,7 +663,8 @@ export class WebhooksService {
     return {
       id,
       secret: plainSecret,
-      secretMessage: 'Novo segredo de entrada gerado. Copie agora — não será exibido novamente.',
+      secretMessage:
+        "Novo segredo de entrada gerado. Copie agora — não será exibido novamente.",
     };
   }
 
@@ -631,19 +686,25 @@ export class WebhooksService {
       where: { id: endpointId },
     });
     if (!endpoint || !endpoint.isActive) {
-      throw new ForbiddenException('Endpoint de entrada inativo ou não cadastrado');
+      throw new ForbiddenException(
+        "Endpoint de entrada inativo ou não cadastrado",
+      );
     }
 
     // 2. Validate timestamp
     const nowSecs = Math.floor(Date.now() / 1000);
     const ts = parseInt(timestampStr, 10);
     if (isNaN(ts) || Math.abs(nowSecs - ts) > 300) {
-      throw new BadRequestException('Timestamp expirado ou fora da janela permitida');
+      throw new BadRequestException(
+        "Timestamp expirado ou fora da janela permitida",
+      );
     }
 
     // 3. Cryptographic HMAC validation (using decrypted key and raw request body buffer/string)
     if (!endpoint.encryptedSecret) {
-      throw new ForbiddenException('Segredo do endpoint de entrada não configurado');
+      throw new ForbiddenException(
+        "Segredo do endpoint de entrada não configurado",
+      );
     }
 
     const secret = decryptSecret(endpoint.encryptedSecret);
@@ -655,24 +716,28 @@ export class WebhooksService {
         data: {
           workspaceId: endpoint.workspaceId,
           actorUserId: null,
-          action: 'inbound_webhook.rejected',
-          entityType: 'INBOUND_WEBHOOK',
+          action: "inbound_webhook.rejected",
+          entityType: "INBOUND_WEBHOOK",
           entityId: endpointId,
-          afterJson: JSON.stringify({ reason: 'HMAC signature mismatch' }),
-          severity: 'SECURITY_ALERT',
+          afterJson: JSON.stringify({ reason: "HMAC signature mismatch" }),
+          severity: "SECURITY_ALERT",
         },
       });
-      throw new ForbiddenException('Assinatura HMAC inválida');
+      throw new ForbiddenException("Assinatura HMAC inválida");
     }
 
     // 4. Validate allowed actions
     const { action, entity, data, externalReference } = body;
     if (!action || !entity || !entity.id) {
-      throw new BadRequestException('Ação ou entidade inválida no payload de entrada');
+      throw new BadRequestException(
+        "Ação ou entidade inválida no payload de entrada",
+      );
     }
 
     if (!endpoint.allowedActions.includes(action)) {
-      throw new ForbiddenException(`Ação "${action}" não está na lista de permissões deste endpoint`);
+      throw new ForbiddenException(
+        `Ação "${action}" não está na lista de permissões deste endpoint`,
+      );
     }
 
     // 5. Idempotency check with externalReference
@@ -690,13 +755,13 @@ export class WebhooksService {
           action,
           entityId: entity.id,
           duplicate: true,
-          message: 'Requisição processada anteriormente (idempotência)',
+          message: "Requisição processada anteriormente (idempotência)",
         };
       }
     }
 
     const workspaceId = endpoint.workspaceId;
-    let auditId = '';
+    let auditId = "";
 
     try {
       // Log received state
@@ -704,28 +769,32 @@ export class WebhooksService {
         data: {
           workspaceId,
           actorUserId: null,
-          action: 'inbound_webhook.received',
-          entityType: 'INBOUND_WEBHOOK',
+          action: "inbound_webhook.received",
+          entityType: "INBOUND_WEBHOOK",
           entityId: endpointId,
-          afterJson: JSON.stringify({ action, entityId: entity.id, externalReference }),
-          severity: 'INFO',
+          afterJson: JSON.stringify({
+            action,
+            entityId: entity.id,
+            externalReference,
+          }),
+          severity: "INFO",
         },
       });
 
       // 6. Execute direct database actions safely
-      if (action === 'ticket.update_status') {
+      if (action === "ticket.update_status") {
         const ticket = await prisma.ticket.findFirst({
           where: { id: entity.id, workspaceId },
         });
-        if (!ticket) throw new NotFoundException('Chamado não encontrado');
+        if (!ticket) throw new NotFoundException("Chamado não encontrado");
         const oldStatus = ticket.status;
 
         await prisma.ticket.update({
           where: { id: entity.id },
           data: {
             status: data.status,
-            ...(data.status === 'RESOLVED' && { resolvedAt: new Date() }),
-            ...(data.status === 'CLOSED' && { closedAt: new Date() }),
+            ...(data.status === "RESOLVED" && { resolvedAt: new Date() }),
+            ...(data.status === "CLOSED" && { closedAt: new Date() }),
           },
         });
 
@@ -736,7 +805,7 @@ export class WebhooksService {
               ticketId: ticket.id,
               content: data.comment,
               isInternal: false,
-              visibility: 'INTERNAL',
+              visibility: "INTERNAL",
             },
           });
         }
@@ -745,18 +814,17 @@ export class WebhooksService {
           data: {
             workspaceId,
             ticketId: ticket.id,
-            event: 'STATUS_CHANGED',
+            event: "STATUS_CHANGED",
             description: `Status alterado via API Inbound de ${oldStatus} para ${data.status}`,
             before: oldStatus,
             after: data.status,
           },
         });
-
-      } else if (action === 'ticket.add_comment') {
+      } else if (action === "ticket.add_comment") {
         const ticket = await prisma.ticket.findFirst({
           where: { id: entity.id, workspaceId },
         });
-        if (!ticket) throw new NotFoundException('Chamado não encontrado');
+        if (!ticket) throw new NotFoundException("Chamado não encontrado");
 
         await prisma.ticketComment.create({
           data: {
@@ -764,15 +832,14 @@ export class WebhooksService {
             ticketId: ticket.id,
             content: data.comment || data.content,
             isInternal: false,
-            visibility: 'INTERNAL',
+            visibility: "INTERNAL",
           },
         });
-
-      } else if (action === 'ticket.assign') {
+      } else if (action === "ticket.assign") {
         const ticket = await prisma.ticket.findFirst({
           where: { id: entity.id, workspaceId },
         });
-        if (!ticket) throw new NotFoundException('Chamado não encontrado');
+        if (!ticket) throw new NotFoundException("Chamado não encontrado");
         const oldAssignee = ticket.assignedToId;
 
         await prisma.ticket.update({
@@ -784,18 +851,17 @@ export class WebhooksService {
           data: {
             workspaceId,
             ticketId: ticket.id,
-            event: 'ASSIGNED',
+            event: "ASSIGNED",
             description: `Designado via API Inbound`,
             before: oldAssignee || undefined,
             after: data.assignedToId || undefined,
           },
         });
-
-      } else if (action === 'contract.update_status') {
+      } else if (action === "contract.update_status") {
         const contract = await prisma.contract.findFirst({
           where: { id: entity.id, workspaceId },
         });
-        if (!contract) throw new NotFoundException('Contrato não encontrado');
+        if (!contract) throw new NotFoundException("Contrato não encontrado");
         const oldStatus = contract.status;
 
         await prisma.contract.update({
@@ -807,7 +873,7 @@ export class WebhooksService {
           data: {
             workspaceId,
             contractId: contract.id,
-            event: 'STATUS_CHANGED',
+            event: "STATUS_CHANGED",
             description: `Status alterado via API Inbound de ${oldStatus} para ${data.status}`,
             before: oldStatus,
             after: data.status,
@@ -820,7 +886,7 @@ export class WebhooksService {
         data: {
           workspaceId,
           eventType: `inbound:${action}`,
-          entityType: entity.type || 'INBOUND',
+          entityType: entity.type || "INBOUND",
           entityId: entity.id,
           periodKey: externalReference || null,
           payload: body,
@@ -832,32 +898,44 @@ export class WebhooksService {
         data: {
           workspaceId,
           actorUserId: null,
-          action: 'inbound_webhook.action_executed',
-          entityType: 'INBOUND_WEBHOOK',
+          action: "inbound_webhook.action_executed",
+          entityType: "INBOUND_WEBHOOK",
           entityId: endpointId,
-          afterJson: JSON.stringify({ action, entityId: entity.id, externalReference }),
-          severity: 'INFO',
+          afterJson: JSON.stringify({
+            action,
+            entityId: entity.id,
+            externalReference,
+          }),
+          severity: "INFO",
         },
       });
       auditId = audit.id;
 
       // 9. Dispatch outbound event notification in real-time
-      if (action.startsWith('ticket.')) {
-        this.webhookEvents.emit({
-          workspaceId,
-          eventType: action,
-          entityId: entity.id,
-          data: { ticketId: entity.id, action, ...data },
-          source: { kind: 'inbound', name: 'Inbound Integration' },
-        }).catch(() => {});
-      } else if (action === 'contract.update_status') {
-        this.webhookEvents.emit({
-          workspaceId,
-          eventType: 'contract.status_changed',
-          entityId: entity.id,
-          data: { contractId: entity.id, oldStatus: 'UNKNOWN', newStatus: data.status },
-          source: { kind: 'inbound', name: 'Inbound Integration' },
-        }).catch(() => {});
+      if (action.startsWith("ticket.")) {
+        this.webhookEvents
+          .emit({
+            workspaceId,
+            eventType: action,
+            entityId: entity.id,
+            data: { ticketId: entity.id, action, ...data },
+            source: { kind: "inbound", name: "Inbound Integration" },
+          })
+          .catch(() => {});
+      } else if (action === "contract.update_status") {
+        this.webhookEvents
+          .emit({
+            workspaceId,
+            eventType: "contract.status_changed",
+            entityId: entity.id,
+            data: {
+              contractId: entity.id,
+              oldStatus: "UNKNOWN",
+              newStatus: data.status,
+            },
+            source: { kind: "inbound", name: "Inbound Integration" },
+          })
+          .catch(() => {});
       }
 
       return {
@@ -866,17 +944,20 @@ export class WebhooksService {
         entityId: entity.id,
         auditId,
       };
-
     } catch (err: any) {
       await prisma.auditLog.create({
         data: {
           workspaceId,
           actorUserId: null,
-          action: 'inbound_webhook.action_failed',
-          entityType: 'INBOUND_WEBHOOK',
+          action: "inbound_webhook.action_failed",
+          entityType: "INBOUND_WEBHOOK",
           entityId: endpointId,
-          afterJson: JSON.stringify({ action, entityId: entity.id, error: err.message }),
-          severity: 'WARN',
+          afterJson: JSON.stringify({
+            action,
+            entityId: entity.id,
+            error: err.message,
+          }),
+          severity: "WARN",
         },
       });
       throw err;

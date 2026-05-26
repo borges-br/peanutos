@@ -129,12 +129,20 @@ export class ClientsService {
       userAgent,
     });
 
-    this.webhookEvents.emit({
-      workspaceId,
-      eventType: 'client.created',
-      entityId: newClient.id,
-      data: { clientId: newClient.id, tradeName: newClient.tradeName, legalName: newClient.legalName, document: newClient.document, status: newClient.status },
-    }).catch(() => {});
+    this.webhookEvents
+      .emit({
+        workspaceId,
+        eventType: "client.created",
+        entityId: newClient.id,
+        data: {
+          clientId: newClient.id,
+          tradeName: newClient.tradeName,
+          legalName: newClient.legalName,
+          document: newClient.document,
+          status: newClient.status,
+        },
+      })
+      .catch(() => {});
 
     return newClient;
   }
@@ -194,12 +202,19 @@ export class ClientsService {
       userAgent,
     });
 
-    this.webhookEvents.emit({
-      workspaceId,
-      eventType: 'client.updated',
-      entityId: id,
-      data: { clientId: id, tradeName: updatedClient.tradeName, legalName: updatedClient.legalName, status: updatedClient.status },
-    }).catch(() => {});
+    this.webhookEvents
+      .emit({
+        workspaceId,
+        eventType: "client.updated",
+        entityId: id,
+        data: {
+          clientId: id,
+          tradeName: updatedClient.tradeName,
+          legalName: updatedClient.legalName,
+          status: updatedClient.status,
+        },
+      })
+      .catch(() => {});
 
     return updatedClient;
   }

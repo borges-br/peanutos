@@ -2,6 +2,9 @@
 // PEANUT OS - DOCUMENTS & PRINT TEMPLATES
 // ==============================================================================
 
+import { formatCpfCnpj, formatPhone } from './formatters';
+export * from './formatters';
+
 // ─── Snapshot Types ───────────────────────────────────────────────────────────
 
 export interface BrandSnapshot {
@@ -36,6 +39,10 @@ export interface TemplateSnapshot {
   layoutVariant: string;
   enabledBlocks: Record<string, boolean>;
   blockOrder: string[];
+  settings?: {
+    clientDisplayMode?: 'LEGAL_NAME' | 'TRADE_NAME' | 'LEGAL_WITH_TRADE';
+    showItemTypeLabel?: boolean;
+  } | any;
 }
 
 export interface PDFTemplateData {
@@ -64,7 +71,7 @@ export function generateBaseA4Html(data: PDFTemplateData): string {
       margin: 20mm;
     }
     body {
-      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       color: #333;
       line-height: 1.5;
       font-size: 11pt;
@@ -132,6 +139,11 @@ export interface InvoicePdfTemplateData {
     dueDate: string;
     paymentMethod: string;
     pixKey?: string | null;
+    subtotalServices?: string | null;
+    subtotalMaterials?: string | null;
+    discountAmount?: string | null;
+    discountReason?: string | null;
+    observations?: string | null;
     totalAmount: string;
     items: Array<{
       type: string;
@@ -172,6 +184,7 @@ export interface InvoicePdfTemplateData {
   };
   responsible?: ResponsibleSnapshot | null;
   generatedAt: string;
+  locale?: 'pt-BR' | 'en-US';
 }
 
 /**
@@ -221,10 +234,106 @@ export interface RenderA4DocumentParams {
     title?: string | null;
     subtotalServices?: string | null;
     subtotalMaterials?: string | null;
+    discountAmount?: string | null;
+    discountReason?: string | null;
   };
   templateSettings: TemplateSnapshot;
   generatedAt?: string;
+  locale?: 'pt-BR' | 'en-US';
 }
+
+// ─── Multi-language translation catalog ──────────────────────────────────────────
+
+const translations = {
+  "pt-BR": {
+    invoice: "FATURA COMERCIAL",
+    quote: "ORÇAMENTO",
+    serviceOrder: "ORDEM DE SERVIÇO",
+    contract: "CONTRATO COMERCIAL",
+    report: "RELATÓRIO OPERACIONAL",
+    document: "DOCUMENTO",
+    issueDate: "Emissão",
+    dueDate: "Vencimento",
+    recipient: "Destinatário / Cliente",
+    status: "Status do Documento",
+    itemDescription: "Item / Descrição",
+    qty: "Qtd",
+    unit: "Un",
+    unitPrice: "Valor Unit.",
+    total: "Total",
+    detailing: "Detalhamento de Serviços e Recursos Cobrados",
+    subtotalServices: "Subtotal Serviços",
+    subtotalMaterials: "Subtotal Materiais",
+    discount: "Desconto",
+    totalAmount: "Valor Total",
+    paymentInstructions: "Instruções de Pagamento e Recebimento",
+    favored: "Favorecido",
+    preferredMethod: "Método preferencial",
+    pixKey: "Chave PIX",
+    terms: "Termos e Condições",
+    observations: "Observações Adicionais",
+    noTerms: "Termos de serviço não especificados.",
+    noObservations: "Nenhuma observação cadastrada.",
+    issuerSignature: "Assinatura do Emissor",
+    clientSignature: "Assinatura do Cliente / Destinatário",
+    authorizedSignatory: "Responsável Autorizado",
+    acknowledgement: "De acordo com o recebimento",
+    scanQr: "Aponte o celular",
+    page: "Página",
+    of: "de",
+    draft: "Rascunho",
+    issued: "Pendente",
+    paid: "Liquidado",
+    overdue: "Atrasado",
+    cancelled: "Cancelado",
+    serviceType: "Serviço Prestado",
+    materialType: "Material / Produto",
+  },
+  "en-US": {
+    invoice: "COMMERCIAL INVOICE",
+    quote: "QUOTE",
+    serviceOrder: "SERVICE ORDER",
+    contract: "COMMERCIAL CONTRACT",
+    report: "OPERATIONAL REPORT",
+    document: "DOCUMENT",
+    issueDate: "Issued",
+    dueDate: "Due Date",
+    recipient: "Recipient / Client",
+    status: "Document Status",
+    itemDescription: "Item / Description",
+    qty: "Qty",
+    unit: "Unit",
+    unitPrice: "Unit Price",
+    total: "Total",
+    detailing: "Detailed Services and Materials Billed",
+    subtotalServices: "Services Subtotal",
+    subtotalMaterials: "Materials Subtotal",
+    discount: "Discount",
+    totalAmount: "Total Amount",
+    paymentInstructions: "Payment Instructions",
+    favored: "Beneficiary",
+    preferredMethod: "Preferred method",
+    pixKey: "PIX Key",
+    terms: "Terms & Conditions",
+    observations: "Additional Observations",
+    noTerms: "Terms of service not specified.",
+    noObservations: "No observations registered.",
+    issuerSignature: "Issuer Signature",
+    clientSignature: "Recipient Signature",
+    authorizedSignatory: "Authorized Signatory",
+    acknowledgement: "According to receipt",
+    scanQr: "Scan QR Code",
+    page: "Page",
+    of: "of",
+    draft: "Draft",
+    issued: "Pending",
+    paid: "Paid",
+    overdue: "Overdue",
+    cancelled: "Cancelled",
+    serviceType: "Service Rendered",
+    materialType: "Material / Product",
+  }
+};
 
 /**
  * Central dynamic block-based A4 document render engine.
@@ -233,23 +342,42 @@ export interface RenderA4DocumentParams {
 export function renderA4Document(params: RenderA4DocumentParams): string {
   const { documentType, brand, responsible, client, data, templateSettings } = params;
   const generatedAt = params.generatedAt || new Date().toLocaleString('pt-BR');
+  const locale = params.locale || "pt-BR";
+  const t = translations[locale] || translations["pt-BR"];
 
   // Colors & Brand Settings
   const primaryColor = escapeHtml(brand.documentPrimaryColor || "#1a56db");
   const brandName = escapeHtml(brand.publicName || "Empresa");
   const brandSubtitle = escapeHtml(brand.brandSubtitle || "");
   const legalName = escapeHtml(brand.legalName || "");
-  const companyDocument = escapeHtml(brand.taxId || "");
+  const companyDocument = escapeHtml(formatCpfCnpj(brand.taxId || ""));
   const companyEmail = escapeHtml(brand.email || "");
-  const companyPhone = escapeHtml(brand.phone || "");
+  const companyPhone = escapeHtml(formatPhone(brand.phone || ""));
   const companyWebsite = escapeHtml(brand.website || "");
   const companyAddress = escapeHtml(brand.address || "");
   const logoUrl = brand.logoUrl || null;
   const documentFooterText = escapeHtml(brand.footerText || "Documento Oficial — Peanut OS.");
 
-  // Client settings
-  const clientName = escapeHtml(client.tradeName || client.legalName || "Cliente");
-  const clientDocument = escapeHtml(client.document || "");
+  // Client display mode toggle
+  const clientDisplayMode = templateSettings.settings?.clientDisplayMode || "LEGAL_NAME";
+  let clientName = "";
+  const clientTrade = client.tradeName ? client.tradeName.trim() : "";
+  const clientLegal = client.legalName ? client.legalName.trim() : "";
+
+  if (clientDisplayMode === "TRADE_NAME") {
+    clientName = escapeHtml(clientTrade || clientLegal || "Cliente");
+  } else if (clientDisplayMode === "LEGAL_WITH_TRADE") {
+    if (clientLegal && clientTrade && clientLegal !== clientTrade) {
+      clientName = escapeHtml(`${clientLegal} (${clientTrade})`);
+    } else {
+      clientName = escapeHtml(clientLegal || clientTrade || "Cliente");
+    }
+  } else {
+    // default LEGAL_NAME
+    clientName = escapeHtml(clientLegal || clientTrade || "Cliente");
+  }
+
+  const clientDocument = escapeHtml(formatCpfCnpj(client.document || ""));
   const clientEmail = escapeHtml(client.email || "");
 
   // Document generic data
@@ -265,36 +393,41 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
   const subtotalServices = escapeHtml(data.subtotalServices || "");
   const subtotalMaterials = escapeHtml(data.subtotalMaterials || "");
 
-  // Mapping status labels
+  // Mapping status labels using dictionary
   let statusLabel = rawStatus;
-  if (rawStatus === 'PAID' || rawStatus === 'Liquidada') statusLabel = 'Liquidado';
-  else if (rawStatus === 'OVERDUE' || rawStatus === 'Atrasada') statusLabel = 'Atrasado';
-  else if (rawStatus === 'DRAFT') statusLabel = 'Rascunho';
-  else if (rawStatus === 'ISSUED' || rawStatus === 'Pendente') statusLabel = 'Pendente';
+  if (rawStatus === 'PAID' || rawStatus === 'Liquidada' || rawStatus === 'Liquidado') statusLabel = t.paid;
+  else if (rawStatus === 'OVERDUE' || rawStatus === 'Atrasada' || rawStatus === 'Atrasado') statusLabel = t.overdue;
+  else if (rawStatus === 'DRAFT' || rawStatus === 'Rascunho') statusLabel = t.draft;
+  else if (rawStatus === 'ISSUED' || rawStatus === 'Pendente') statusLabel = t.issued;
+  else if (rawStatus === 'CANCELLED' || rawStatus === 'Cancelado') statusLabel = t.cancelled;
 
   // Document labels based on type
-  let docTypeLabel = "DOCUMENTO";
-  if (documentType === 'INVOICE') docTypeLabel = "FATURA COMERCIAL";
-  else if (documentType === 'QUOTE') docTypeLabel = "ORÇAMENTO";
-  else if (documentType === 'SERVICE_ORDER') docTypeLabel = "ORDEM DE SERVIÇO";
-  else if (documentType === 'CONTRACT') docTypeLabel = "CONTRATO COMERCIAL";
-  else if (documentType === 'REPORT') docTypeLabel = "RELATÓRIO OPERACIONAL";
+  let docTypeLabel = t.document;
+  if (documentType === 'INVOICE') docTypeLabel = t.invoice;
+  else if (documentType === 'QUOTE') docTypeLabel = t.quote;
+  else if (documentType === 'SERVICE_ORDER') docTypeLabel = t.serviceOrder;
+  else if (documentType === 'CONTRACT') docTypeLabel = t.contract;
+  else if (documentType === 'REPORT') docTypeLabel = t.report;
 
   const customTitle = data.title ? escapeHtml(data.title) : docTypeLabel;
 
-  // Build items rows HTML
-  const itemsRowsHtml = data.items.map((item, idx) => `
+  // Build items rows HTML (Toggled display of Item Type via showItemTypeLabel)
+  const showItemTypeLabel = templateSettings.settings?.showItemTypeLabel ?? false;
+  const itemsRowsHtml = data.items.map((item, idx) => {
+    const itemTypeLabel = item.type === "SERVICE" ? t.serviceType : t.materialType;
+    return `
     <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: left;">
         <strong style="color: #1e293b; font-size: 9.5pt; display: block;">${escapeHtml(item.description)}</strong>
-        <span style="font-size: 7.5pt; color: #64748b;">${item.type === "SERVICE" ? "Serviço Prestado" : "Material / Produto"}</span>
+        ${showItemTypeLabel ? `<span style="font-size: 7.5pt; color: #64748b;">${itemTypeLabel}</span>` : ''}
       </td>
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569;">${escapeHtml(item.quantity)}</td>
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569;">${escapeHtml(item.unit || "UN")}</td>
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #475569;">${escapeHtml(item.unitPrice)}</td>
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold; color: #0f172a;">${escapeHtml(item.totalPrice)}</td>
     </tr>
-  `).join("");
+    `;
+  }).join("");
 
   // Map blocks to HTML functions
   const blocksMap: Record<string, () => string> = {
@@ -310,8 +443,8 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
             <td style="text-align: right; vertical-align: middle; font-family: monospace;">
               <span style="font-size: 14pt; font-weight: bold; color: #0f172a; display: block;">#${docNumber}</span>
               <div style="font-size: 8pt; color: #64748b; margin-top: 4px; line-height: 1.3;">
-                Emissão: ${issueDate}<br/>
-                Vencimento: <strong style="color: #0f172a;">${dueDate}</strong>
+                ${t.issueDate}: ${issueDate}<br/>
+                ${t.dueDate}: <strong style="color: #0f172a;">${dueDate}</strong>
               </div>
             </td>
           </tr>
@@ -341,14 +474,14 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
         <table style="width: 100%; border-collapse: collapse; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
           <tr>
             <td style="padding: 12px; line-height: 1.45;">
-              <div style="font-size: 7.5pt; color: #64748b; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; margin-bottom: 4px;">Destinatário / Cliente</div>
+              <div style="font-size: 7.5pt; color: #64748b; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; margin-bottom: 4px;">${t.recipient}</div>
               <div style="font-size: 11pt; font-weight: bold; color: #0f172a;">${clientName}</div>
               <div style="font-size: 9pt; color: #475569; margin-top: 2px;">
                 ${clientDocument ? `CNPJ/CPF: ${clientDocument}` : ''} 
                 ${clientEmail ? ` | E-mail: ${clientEmail}` : ''}
               </div>
               <div style="font-size: 8.5pt; color: #64748b; margin-top: 4px;">
-                Status do Documento: <span style="font-weight: bold; color: ${primaryColor};">${statusLabel}</span>
+                ${t.status}: <span style="font-weight: bold; color: ${primaryColor};">${statusLabel}</span>
               </div>
             </td>
           </tr>
@@ -363,16 +496,16 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     itemsTable: () => `
       <div class="block-container block-items-table" style="margin-bottom: 25px;">
         <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 8px;">
-          Detalhamento de Serviços e Recursos Cobrados
+          ${t.detailing}
         </div>
         <table style="width: 100%; border-collapse: collapse; font-family: monospace; font-size: 9pt;">
           <thead>
             <tr style="background: #f1f5f9;">
-              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: left; width: 50%;">Item / Descrição</th>
-              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: center; width: 10%;">Qtd</th>
-              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: center; width: 10%;">Un</th>
-              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: right; width: 15%;">Valor Unit.</th>
-              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: right; width: 15%;">Total</th>
+              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: left; width: 50%;">${t.itemDescription}</th>
+              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: center; width: 10%;">${t.qty}</th>
+              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: center; width: 10%;">${t.unit}</th>
+              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: right; width: 15%;">${t.unitPrice}</th>
+              <th style="border-bottom: 2px solid #cbd5e1; padding: 8px 10px; font-size: 8pt; color: #475569; font-family: sans-serif; text-transform: uppercase; text-align: right; width: 15%;">${t.total}</th>
             </tr>
           </thead>
           <tbody>
@@ -381,44 +514,49 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
         </table>
       </div>
     `,
-    financialSummary: () => `
+    financialSummary: () => {
+      const discountVal = data.discountAmount ? parseFloat(data.discountAmount.replace(/[^\d,.-]/g, "").replace(",", ".")) : 0;
+      const formattedDiscount = data.discountAmount || "0";
+      return `
       <div class="block-container block-financial-summary" style="margin-bottom: 25px;">
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
             <td style="width: 50%;"></td>
             <td style="width: 50%; text-align: right; font-family: monospace; font-size: 9pt; line-height: 1.5;">
-              ${subtotalServices ? `<div>Subtotal Serviços: <span style="font-weight: bold; min-width: 100px; display: inline-block;">${subtotalServices}</span></div>` : ''}
-              ${subtotalMaterials ? `<div>Subtotal Materiais: <span style="font-weight: bold; min-width: 100px; display: inline-block;">${subtotalMaterials}</span></div>` : ''}
+              ${subtotalServices ? `<div>${t.subtotalServices}: <span style="font-weight: bold; min-width: 100px; display: inline-block;">${subtotalServices}</span></div>` : ''}
+              ${subtotalMaterials ? `<div>${t.subtotalMaterials}: <span style="font-weight: bold; min-width: 100px; display: inline-block;">${subtotalMaterials}</span></div>` : ''}
+              ${discountVal > 0 ? `<div style="color: #dc2626;">${t.discount}: <span style="font-weight: bold; min-width: 100px; display: inline-block;">-${formattedDiscount}</span></div>` : ''}
               <div style="font-size: 11pt; font-weight: bold; color: #000; margin-top: 8px; border-top: 2px solid #0f172a; padding-top: 6px;">
-                Valor Total: <span style="font-weight: 800; min-width: 120px; display: inline-block; color: ${primaryColor};">${totalAmount}</span>
+                ${t.totalAmount}: <span style="font-weight: 800; min-width: 120px; display: inline-block; color: ${primaryColor};">${totalAmount}</span>
               </div>
             </td>
           </tr>
         </table>
       </div>
-    `,
+      `;
+    },
     paymentInfo: () => `
       <div class="block-container block-payment-info" style="margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 8.5pt; line-height: 1.45;">
         <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #0f172a; margin-bottom: 6px; font-family: sans-serif; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
-          Instruções de Pagamento e Recebimento
+          ${t.paymentInstructions}
         </div>
-        <div>Favorecido: ${legalName || brandName}</div>
-        <div>Método preferencial: ${paymentMethod}</div>
+        <div>${t.favored}: ${legalName || brandName}</div>
+        <div>${t.preferredMethod}: ${paymentMethod}</div>
         <div style="font-weight: bold; margin-top: 4px; color: ${primaryColor}; font-size: 9pt; font-family: monospace;">
-          Chave PIX: ${pixKey}
+          ${t.pixKey}: ${pixKey}
         </div>
       </div>
     `,
     terms: () => `
       <div class="block-container block-terms" style="margin-bottom: 20px; font-size: 8.5pt; color: #475569; line-height: 1.45; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
-        <strong style="color: #0f172a; font-size: 9pt; display: block; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Termos e Condições</strong>
-        <div style="white-space: pre-wrap; font-style: italic; color: #64748b;">${escapeHtml(terms || 'Termos de serviço não especificados.')}</div>
+        <strong style="color: #0f172a; font-size: 9pt; display: block; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${t.terms}</strong>
+        <div style="white-space: pre-wrap; font-style: italic; color: #64748b;">${escapeHtml(terms || t.noTerms)}</div>
       </div>
     `,
     observations: () => `
       <div class="block-container block-observations" style="margin-bottom: 20px; font-size: 8.5pt; color: #475569; line-height: 1.45; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
-        <strong style="color: #0f172a; font-size: 9pt; display: block; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Observações Adicionais</strong>
-        <div style="white-space: pre-wrap; font-style: italic; color: #64748b;">${escapeHtml(observations || 'Nenhuma observação cadastrada.')}</div>
+        <strong style="color: #0f172a; font-size: 9pt; display: block; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">${t.observations}</strong>
+        <div style="white-space: pre-wrap; font-style: italic; color: #64748b;">${escapeHtml(observations || t.noObservations)}</div>
       </div>
     `,
     responsibleSignature: () => {
@@ -436,7 +574,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
               ${displaySigName}
             </div>
             <div style="font-size: 8pt; color: #64748b; margin-top: 2px;">${displaySigJob}</div>
-            <div style="font-size: 7.5pt; color: #94a3b8;">Assinatura do Emissor</div>
+            <div style="font-size: 7.5pt; color: #94a3b8;">${t.issuerSignature}</div>
           </div>
         </div>
       `;
@@ -446,10 +584,10 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
         <div style="display: inline-block; width: 280px; text-align: center; vertical-align: top;">
           <div style="height: 52px;"></div>
           <div style="border-top: 1px solid #cbd5e1; padding-top: 6px; font-size: 9pt; font-weight: bold; color: #0f172a;">
-            Assinatura do Cliente / Destinatário
+            ${t.clientSignature}
           </div>
-          <div style="font-size: 8pt; color: #64748b; margin-top: 2px;">Responsável Autorizado</div>
-          <div style="font-size: 7.5pt; color: #94a3b8;">De acordo com o recebimento</div>
+          <div style="font-size: 8pt; color: #64748b; margin-top: 2px;">${t.authorizedSignatory}</div>
+          <div style="font-size: 7.5pt; color: #94a3b8;">${t.acknowledgement}</div>
         </div>
       </div>
     `,
@@ -459,14 +597,13 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
           <div style="width: 84px; height: 84px; background: #e2e8f0; display: inline-flex; align-items: center; justify-content: center; font-size: 7.5pt; color: #64748b; font-weight: bold; border-radius: 4px;">
             [QR CODE PIX]
           </div>
-          <div style="font-size: 7pt; color: #94a3b8; margin-top: 6px; font-family: monospace;">Aponte o celular</div>
+          <div style="font-size: 7pt; color: #94a3b8; margin-top: 6px; font-family: monospace;">${t.scanQr}</div>
         </div>
       </div>
     `,
     footer: () => `
       <div class="block-container block-footer" style="border-top: 1px solid #e2e8f0; padding-top: 10px; font-size: 8pt; color: #94a3b8; font-family: monospace; display: flex; justify-content: space-between; margin-top: auto;">
         <span>${documentFooterText} | Gerado em: ${generatedAt}</span>
-        <span>Página 1 de 1</span>
       </div>
     `,
   };
@@ -479,7 +616,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
 
   return `
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="${locale}">
 <head>
   <meta charset="UTF-8">
   <title>${customTitle} #${docNumber}</title>
@@ -501,15 +638,36 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     }
     .page-container {
       width: 210mm;
-      height: 297mm;
+      min-height: 297mm;
+      height: auto;
       box-sizing: border-box;
       padding: 20mm;
       position: relative;
       display: flex;
       flex-direction: column;
+      background: white;
     }
     .block-container {
       width: 100%;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      break-after: avoid;
+      page-break-after: avoid;
+    }
+    table {
+      break-inside: auto;
+    }
+    tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tfoot {
+      display: table-footer-group;
     }
   </style>
 </head>
@@ -559,6 +717,8 @@ export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
   const materials = data.invoice.items.filter(item => item.type === "MATERIAL");
   const materialSubtotal = materials.reduce((sum, item) => sum + parseFloat(item.totalPrice.replace(/[^\d,.-]/g, "").replace(",", ".")), 0);
 
+  const discountAmountStr = data.invoice.discountAmount || "R$ 0,00";
+
   const formatBrl = (num: number) => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(num);
   };
@@ -573,9 +733,10 @@ export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
     totalAmount: data.invoice.totalAmount,
     items: data.invoice.items,
     terms: data.brand.defaultContractTerms || null,
-    observations: data.brand.defaultInvoiceNotes || null,
+    observations: data.invoice.observations || data.brand.defaultInvoiceNotes || null,
     subtotalServices: formatBrl(serviceSubtotal),
     subtotalMaterials: formatBrl(materialSubtotal),
+    discountAmount: discountAmountStr,
   };
 
   // Standard template structure settings
@@ -619,5 +780,6 @@ export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
     data: renderData,
     templateSettings,
     generatedAt: data.generatedAt,
+    locale: data.locale,
   });
 }

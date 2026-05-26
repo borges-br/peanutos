@@ -11,7 +11,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     adapter,
-    { rawBody: true }
+    { rawBody: true },
   );
 
   // Set global API prefix
