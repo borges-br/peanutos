@@ -274,6 +274,7 @@ export default function InvoiceA4PreviewPage() {
       backPath={`/dashboard/invoices/${invoiceId}`}
       companyName={brandSettings?.brandName}
       companySub={brandSettings?.brandSubtitle}
+      companyLogoUrl={brandSettings?.logoUrl}
       companyDocument={brandSettings?.companyDocument}
       companyEmail={brandSettings?.companyEmail}
       documentFooterText={brandSettings?.documentFooterText}

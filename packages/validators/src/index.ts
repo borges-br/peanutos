@@ -415,7 +415,9 @@ export const invoiceItemCreateSchema = z.object({
   quantity: z.coerce.number().positive({ message: 'A quantidade deve ser positiva' }),
   unit: z.string().min(1).max(20).default("UN"),
   unitPrice: z.coerce.number().min(0, { message: 'O valor unitário deve ser maior ou igual a zero' }),
+  unitCost: z.coerce.number().min(0, { message: 'O custo unitário deve ser maior ou igual a zero' }).optional().default(0),
   totalPrice: z.coerce.number().min(0).optional().nullable(),
+  totalCost: z.coerce.number().min(0).optional().nullable(),
 });
 export type InvoiceItemCreateInput = z.infer<typeof invoiceItemCreateSchema>;
 
@@ -482,12 +484,12 @@ export type WorkspaceBrandSettingsInput = z.infer<typeof workspaceBrandSettingsS
 
 // --- FILE UPLOAD VALIDATOR ---
 
-const ALLOWED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+const ALLOWED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'] as const;
 export const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 
 export const uploadImageSchema = z.object({
   data: z.string().min(1, { message: 'Dados do arquivo são obrigatórios' }),
-  mimeType: z.enum(ALLOWED_IMAGE_MIMES, { errorMap: () => ({ message: 'Tipo de arquivo não permitido. Use PNG, JPEG ou WebP' }) }),
+  mimeType: z.enum(ALLOWED_IMAGE_MIMES, { errorMap: () => ({ message: 'Tipo de arquivo não permitido. Use SVG, PNG, JPEG ou WebP' }) }),
   filename: z.string().min(1).max(255),
 });
 
@@ -973,7 +975,7 @@ export const WEBHOOK_EVENT_CATALOG: WebhookCatalogEntry[] = [
     type: 'invoice.due_soon',
     category: 'COMMERCIAL',
     label: 'Fatura Vence em Breve',
-    description: 'Disparado X dias antes do vencimento da fatura ativa.',
+    description: 'Disparado conforme a antecedência configurada antes do vencimento da fatura ativa.',
     entityType: 'INVOICE',
     lifecycle: 'scheduled',
     status: 'active',
@@ -981,7 +983,8 @@ export const WEBHOOK_EVENT_CATALOG: WebhookCatalogEntry[] = [
       invoiceId: 'inv_82718',
       number: 'FAT-2026-9817',
       dueDate: '2026-05-30T03:00:00.000Z',
-      daysRemaining: 3
+      dueSoonOffsetHours: 72,
+      remainingHours: 72
     }
   },
   {
@@ -1259,6 +1262,16 @@ export type CreateWebhookEndpointInput = z.infer<typeof createWebhookEndpointSch
 export const updateWebhookEndpointSchema = createWebhookEndpointSchema.partial();
 
 export type UpdateWebhookEndpointInput = z.infer<typeof updateWebhookEndpointSchema>;
+
+export const webhookAutomationSettingsSchema = z.object({
+  invoiceDueSoonOffsetHours: z.coerce
+    .number()
+    .int({ message: 'Informe uma antecedência em horas inteiras' })
+    .min(1, { message: 'A antecedência mínima é de 1 hora' })
+    .max(24 * 30, { message: 'A antecedência máxima é de 30 dias' }),
+});
+
+export type WebhookAutomationSettingsInput = z.infer<typeof webhookAutomationSettingsSchema>;
 
 export const webhookDeliveryQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

@@ -8,6 +8,8 @@ import { useAuth } from '../../../../context/AuthContext';
 import Button from '../../../../components/ui/Button';
 import Badge from '../../../../components/ui/Badge';
 import Card from '../../../../components/ui/Card';
+import Input from '../../../../components/ui/Input';
+import Select from '../../../../components/ui/Select';
 import RestrictedState from '../../../../components/ui/RestrictedState';
 
 export default function InvoiceDetailPage() {
@@ -24,6 +26,9 @@ export default function InvoiceDetailPage() {
   const [statusSaving, setStatusSaving] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [editingItems, setEditingItems] = useState(false);
+  const [editItems, setEditItems] = useState<any[]>([]);
+  const [editSaving, setEditSaving] = useState(false);
 
   const hasFinancialPrivilege = user ? ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role) : false;
 
@@ -33,6 +38,7 @@ export default function InvoiceDetailPage() {
     try {
       const data = await apiRequest(`/invoices/${invoiceId}`);
       setInvoice(data);
+      setEditItems(normalizeItemsForEdit(data.items || []));
     } catch (err: any) {
       setError(err.message || t.invoices.notFound || 'Fatura não encontrada.');
     } finally {
@@ -90,6 +96,81 @@ export default function InvoiceDetailPage() {
       alert(err.message || t.invoices.errorStatusChange || 'Falha ao alterar status da fatura.');
     } finally {
       setStatusSaving(false);
+    }
+  };
+
+  const normalizeItemsForEdit = (items: any[]) =>
+    items.map((item) => ({
+      type: item.type || 'SERVICE',
+      description: item.description || '',
+      quantity: Number(item.quantity || 1),
+      unit: item.unit || 'UN',
+      unitPrice: Number(item.unitPrice || 0),
+      unitCost: Number(item.unitCost || 0),
+    }));
+
+  const handleEditItemChange = (index: number, field: string, value: any) => {
+    const next = [...editItems];
+    const item = { ...next[index] };
+    if (['quantity', 'unitPrice', 'unitCost'].includes(field)) {
+      item[field] = parseFloat(value) || 0;
+    } else {
+      item[field] = value;
+    }
+    if (field === 'type' && value !== 'MATERIAL') {
+      item.unitCost = 0;
+    }
+    next[index] = item;
+    setEditItems(next);
+  };
+
+  const handleAddEditItem = () => {
+    setEditItems([
+      ...editItems,
+      { type: 'SERVICE', description: '', quantity: 1, unit: 'UN', unitPrice: 0, unitCost: 0 },
+    ]);
+  };
+
+  const handleRemoveEditItem = (index: number) => {
+    if (editItems.length <= 1) return;
+    setEditItems(editItems.filter((_, idx) => idx !== index));
+  };
+
+  const handleCancelEditItems = () => {
+    setEditItems(normalizeItemsForEdit(invoice.items || []));
+    setEditingItems(false);
+  };
+
+  const handleSaveEditItems = async () => {
+    if (!hasFinancialPrivilege || invoice.status !== 'DRAFT') return;
+    if (editItems.some((item) => !item.description.trim() || item.quantity <= 0 || item.unitPrice < 0 || item.unitCost < 0)) {
+      alert('Preencha os itens com descrição, quantidade positiva e valores válidos.');
+      return;
+    }
+
+    setEditSaving(true);
+    try {
+      const updated = await apiRequest<any>(`/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          items: editItems.map((item) => ({
+            type: item.type,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unitPrice: item.unitPrice,
+            unitCost: item.type === 'MATERIAL' ? item.unitCost : 0,
+          })),
+        }),
+      });
+      setInvoice(updated);
+      setEditItems(normalizeItemsForEdit(updated.items || []));
+      setEditingItems(false);
+      fetchHistory();
+    } catch (err: any) {
+      alert(err.message || 'Falha ao salvar itens da fatura.');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -368,8 +449,114 @@ export default function InvoiceDetailPage() {
 
       {activeTab === 'items' && (
         <div className="flex flex-col gap-md animate-in fade-in duration-150 select-text">
-          <Card title="Detalhamento dos Itens Cobrados">
-            <div className="overflow-x-auto w-full">
+          <Card
+            title="Detalhamento dos Itens Cobrados"
+            headerAction={
+              hasFinancialPrivilege && invoice.status === 'DRAFT' ? (
+                editingItems ? (
+                  <div className="flex gap-xs">
+                    <Button variant="ghost" onClick={handleCancelEditItems} disabled={editSaving} className="py-1 px-3 text-xs">
+                      Cancelar
+                    </Button>
+                    <Button variant="primary" onClick={handleSaveEditItems} loading={editSaving} disabled={editSaving} className="py-1 px-3 text-xs">
+                      Salvar itens
+                    </Button>
+                  </div>
+                ) : (
+                  <Button variant="secondary" onClick={() => setEditingItems(true)} className="py-1 px-3 text-xs">
+                    <span className="material-symbols-outlined text-[14px] mr-1">edit</span>
+                    Editar itens
+                  </Button>
+                )
+              ) : null
+            }
+          >
+            {editingItems ? (
+              <div className="flex flex-col gap-sm">
+                {editItems.map((item, index) => (
+                  <div key={index} className="p-md bg-surface-container-low border border-outline-variant/40 rounded-xl flex flex-col gap-md">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-sm w-full">
+                      <div className="md:col-span-2">
+                        <Select
+                          label="Tipo"
+                          value={item.type}
+                          onChange={(e) => handleEditItemChange(index, 'type', e.target.value)}
+                          options={[
+                            { value: 'SERVICE', label: 'Serviço' },
+                            { value: 'MATERIAL', label: 'Material' },
+                          ]}
+                          disabled={editSaving}
+                        />
+                      </div>
+                      <div className="md:col-span-4">
+                        <Input
+                          label="Descrição"
+                          value={item.description}
+                          onChange={(e) => handleEditItemChange(index, 'description', e.target.value)}
+                          disabled={editSaving}
+                          required
+                        />
+                      </div>
+                      <div className="md:col-span-1">
+                        <Input
+                          label="Qtd"
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => handleEditItemChange(index, 'quantity', e.target.value)}
+                          disabled={editSaving}
+                          required
+                        />
+                      </div>
+                      <div className="md:col-span-1">
+                        <Input
+                          label="Un."
+                          value={item.unit}
+                          onChange={(e) => handleEditItemChange(index, 'unit', e.target.value)}
+                          disabled={editSaving}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <Input
+                          label={item.type === 'MATERIAL' ? 'Venda unit. (R$)' : 'Unit. (R$)'}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.unitPrice}
+                          onChange={(e) => handleEditItemChange(index, 'unitPrice', e.target.value)}
+                          disabled={editSaving}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <Input
+                          label="Custo unit. (R$)"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.unitCost}
+                          onChange={(e) => handleEditItemChange(index, 'unitCost', e.target.value)}
+                          disabled={editSaving || item.type !== 'MATERIAL'}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-on-surface-variant font-mono">
+                      <span>Total venda: {formatCurrency(item.quantity * item.unitPrice)}</span>
+                      <span>Custo interno: {formatCurrency(item.type === 'MATERIAL' ? item.quantity * item.unitCost : 0)}</span>
+                      {editItems.length > 1 && (
+                        <Button variant="ghost" onClick={() => handleRemoveEditItem(index)} disabled={editSaving} className="text-error py-1 px-2 text-xs">
+                          Remover
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <Button variant="outline" onClick={handleAddEditItem} disabled={editSaving} className="w-fit py-1 px-3 text-xs">
+                  <span className="material-symbols-outlined text-[14px] mr-1">add</span>
+                  Adicionar item
+                </Button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto w-full">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-outline-variant/30 text-on-surface-variant/70">
@@ -378,6 +565,7 @@ export default function InvoiceDetailPage() {
                     <th className="py-2.5 font-semibold text-center w-12">Qtd</th>
                     <th className="py-2.5 font-semibold text-center w-12">Un</th>
                     <th className="py-2.5 font-semibold text-right w-24">Valor Unit.</th>
+                    {hasFinancialPrivilege && <th className="py-2.5 font-semibold text-right w-24">Custo Unit.</th>}
                     <th className="py-2.5 font-semibold text-right w-24">Valor Total</th>
                   </tr>
                 </thead>
@@ -395,12 +583,14 @@ export default function InvoiceDetailPage() {
                       <td className="py-3.5 text-center font-mono">{parseFloat(item.quantity)}</td>
                       <td className="py-3.5 text-center font-mono">{item.unit || 'UN'}</td>
                       <td className="py-3.5 text-right font-mono">{formatCurrency(item.unitPrice)}</td>
+                      {hasFinancialPrivilege && <td className="py-3.5 text-right font-mono">{formatCurrency(item.unitCost || 0)}</td>}
                       <td className="py-3.5 text-right font-mono font-semibold">{formatCurrency(item.totalPrice)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+              </div>
+            )}
           </Card>
         </div>
       )}
@@ -432,9 +622,19 @@ export default function InvoiceDetailPage() {
                     )}
                   </span>
                 </div>
+                <div className="flex justify-between items-center py-2 border-b border-outline-variant/10">
+                  <span className="text-on-surface-variant font-sans">Custo interno de materiais:</span>
+                  <span className="font-semibold text-warning">
+                    {formatCurrency(invoice.subtotalMaterialCost || 0)}
+                  </span>
+                </div>
                 <div className="flex justify-between items-center py-3 text-lg font-bold text-primary border-t-2 border-outline-variant mt-sm">
                   <span className="font-sans">{t.invoices.grandTotal}:</span>
                   <span>{formatCurrency(invoice.totalAmount)}</span>
+                </div>
+                <div className="flex justify-between items-center py-2 text-sm font-bold text-success">
+                  <span className="font-sans">Líquido estimado:</span>
+                  <span>{formatCurrency(invoice.netAmount ?? invoice.totalAmount)}</span>
                 </div>
               </div>
             </Card>
@@ -491,4 +691,3 @@ export default function InvoiceDetailPage() {
     </div>
   );
 }
-

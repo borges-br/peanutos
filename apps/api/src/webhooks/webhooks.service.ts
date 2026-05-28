@@ -13,6 +13,7 @@ import {
   WebhookDeliveryQueryInput,
   CreateInboundWebhookInput,
   UpdateInboundWebhookInput,
+  WebhookAutomationSettingsInput,
 } from "@peanut/validators";
 import {
   generateWebhookSecret,
@@ -84,6 +85,62 @@ export class WebhooksService {
     });
 
     return endpoints;
+  }
+
+  async getSettings(workspaceId: string, requesterRole: string) {
+    this.assertCanView(requesterRole);
+
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { invoiceDueSoonOffsetHours: true },
+    });
+
+    if (!workspace) throw new NotFoundException("Workspace não encontrado");
+
+    return {
+      invoiceDueSoonOffsetHours: workspace.invoiceDueSoonOffsetHours ?? 72,
+    };
+  }
+
+  async updateSettings(
+    input: WebhookAutomationSettingsInput,
+    workspaceId: string,
+    actorUserId: string,
+    requesterRole: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    this.assertCanManage(requesterRole);
+
+    const before = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { invoiceDueSoonOffsetHours: true },
+    });
+
+    if (!before) throw new NotFoundException("Workspace não encontrado");
+
+    const updated = await prisma.workspace.update({
+      where: { id: workspaceId },
+      data: {
+        invoiceDueSoonOffsetHours: input.invoiceDueSoonOffsetHours,
+      },
+      select: { invoiceDueSoonOffsetHours: true },
+    });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "webhook.settings_updated",
+      entityType: "WORKSPACE",
+      entityId: workspaceId,
+      before,
+      after: updated,
+      ipAddress,
+      userAgent,
+      severity: "INFO",
+    });
+
+    return updated;
   }
 
   async getById(id: string, workspaceId: string, requesterRole: string) {

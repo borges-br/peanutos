@@ -280,20 +280,20 @@ export default function SettingsPage() {
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Logo da empresa</label>
                 <div className="flex items-center gap-md flex-wrap">
                   {logoUrl ? (
-                    <div className="relative w-24 h-16 border border-outline-variant rounded-lg bg-white/5 flex items-center justify-center overflow-hidden">
+                    <div className="relative w-20 h-20 border border-outline-variant rounded-lg bg-white/5 flex items-center justify-center overflow-hidden">
                       <AuthenticatedImage
                         src={logoUrl}
                         alt="Logo"
                         className="max-w-full max-h-full object-contain"
                         fallback={
-                          <div className="w-24 h-16 border border-dashed border-outline-variant rounded-lg bg-surface-container/20 flex items-center justify-center">
+                          <div className="w-20 h-20 border border-dashed border-outline-variant rounded-lg bg-surface-container/20 flex items-center justify-center">
                             <span className="material-symbols-outlined text-on-surface-variant text-2xl">image</span>
                           </div>
                         }
                       />
                     </div>
                   ) : (
-                    <div className="w-24 h-16 border border-dashed border-outline-variant rounded-lg bg-surface-container/20 flex items-center justify-center">
+                    <div className="w-20 h-20 border border-dashed border-outline-variant rounded-lg bg-surface-container/20 flex items-center justify-center">
                       <span className="material-symbols-outlined text-on-surface-variant text-2xl">image</span>
                     </div>
                   )}
@@ -324,7 +324,7 @@ export default function SettingsPage() {
                       )}
                     </div>
                   )}
-                  <p className="text-[11px] text-on-surface-variant/60 w-full">PNG, JPEG ou WebP. Máximo 2 MB. Recomendado: fundo transparente.</p>
+                  <p className="text-[11px] text-on-surface-variant/60 w-full">SVG, PNG, JPEG ou WebP. Máximo 2 MB. Use SVG ou PNG com fundo transparente para documentos A4.</p>
                 </div>
               </div>
 
@@ -621,10 +621,11 @@ export default function SettingsPage() {
         }}
         uploadUrl="/settings/brand/logo"
         title="Alterar Logo da Empresa"
-        aspect={1.5}
+        aspect={1}
         cropShape="rect"
         buttonLabel="Salvar logo"
         icon="business"
+        preserveOriginal
       />
     </main>
   );

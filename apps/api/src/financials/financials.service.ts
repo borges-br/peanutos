@@ -15,7 +15,11 @@ export class FinancialsService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const [recurringContracts, contractsByStatusRaw, billingEvents] =
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const [recurringContracts, contractsByStatusRaw, billingEvents, paidInvoices] =
       await Promise.all([
         prisma.contract.findMany({
           where: {
@@ -61,6 +65,23 @@ export class FinancialsService {
             },
           },
         }),
+        prisma.invoice.findMany({
+          where: {
+            workspaceId,
+            status: "PAID",
+            paidAt: {
+              gte: monthStart,
+              lt: nextMonthStart,
+            },
+          },
+          select: {
+            totalAmount: true,
+            subtotalMaterialCost: true,
+            subtotalServices: true,
+            subtotalMaterials: true,
+            discountAmount: true,
+          },
+        }),
       ]);
 
     // Compute metrics
@@ -84,6 +105,30 @@ export class FinancialsService {
         ? Math.round(totalMrrCents / activeContractsCount)
         : 0;
 
+    const toCents = (value: any) => Math.round(Number(value || 0) * 100);
+    const monthlyReceivedCents = paidInvoices.reduce(
+      (acc, invoice) => acc + toCents(invoice.totalAmount),
+      0,
+    );
+    const monthlyMaterialCostCents = paidInvoices.reduce(
+      (acc, invoice) => acc + toCents((invoice as any).subtotalMaterialCost),
+      0,
+    );
+    const monthlyNetReceivedCents =
+      monthlyReceivedCents - monthlyMaterialCostCents;
+    const monthlyServicesCents = paidInvoices.reduce(
+      (acc, invoice) => acc + toCents(invoice.subtotalServices),
+      0,
+    );
+    const monthlyMaterialsSoldCents = paidInvoices.reduce(
+      (acc, invoice) => acc + toCents(invoice.subtotalMaterials),
+      0,
+    );
+    const monthlyDiscountsCents = paidInvoices.reduce(
+      (acc, invoice) => acc + toCents(invoice.discountAmount),
+      0,
+    );
+
     // Formulate status breakdown object
     const contractsByStatus = contractsByStatusRaw.reduce((acc: any, curr) => {
       acc[curr.status] = curr._count.id;
@@ -106,6 +151,16 @@ export class FinancialsService {
       totalMrrCents,
       activeContracts: activeContractsCount,
       averageContractValueCents,
+      monthlyReceived: {
+        period: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+        paidInvoices: paidInvoices.length,
+        grossReceivedCents: monthlyReceivedCents,
+        materialCostCents: monthlyMaterialCostCents,
+        netReceivedCents: monthlyNetReceivedCents,
+        servicesCents: monthlyServicesCents,
+        materialsSoldCents: monthlyMaterialsSoldCents,
+        discountsCents: monthlyDiscountsCents,
+      },
       contractsByStatus,
       nextBillingEvents: billingEvents,
     };

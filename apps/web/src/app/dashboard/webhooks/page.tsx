@@ -52,6 +52,15 @@ interface WebhookEndpoint {
   _count?: { deliveries: number };
 }
 
+const DUE_SOON_OPTIONS = [
+  { value: 12, label: '12 horas antes' },
+  { value: 24, label: '1 dia antes' },
+  { value: 48, label: '2 dias antes' },
+  { value: 72, label: '3 dias antes' },
+  { value: 168, label: '7 dias antes' },
+  { value: 336, label: '2 semanas antes' },
+];
+
 interface InboundWebhookEndpoint {
   id: string;
   name: string;
@@ -86,6 +95,9 @@ export default function WebhooksPage() {
   const [inbounds, setInbounds] = useState<InboundWebhookEndpoint[]>([]);
   const [loadingWebhooks, setLoadingWebhooks] = useState(true);
   const [loadingInbounds, setLoadingInbounds] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [invoiceDueSoonOffsetHours, setInvoiceDueSoonOffsetHours] = useState(72);
   const [error, setError] = useState<string | null>(null);
 
   // Outbound create/edit modal
@@ -192,10 +204,40 @@ export default function WebhooksPage() {
     }
   }, []);
 
+  const loadSettings = useCallback(async () => {
+    setSettingsLoading(true);
+    try {
+      const data = await apiRequest('/webhooks/settings');
+      setInvoiceDueSoonOffsetHours(Number(data.invoiceDueSoonOffsetHours || 72));
+    } catch (err: any) {
+      console.warn('Webhook settings load failed:', err.message);
+    } finally {
+      setSettingsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadWebhooks();
     loadInbounds();
-  }, [loadWebhooks, loadInbounds]);
+    loadSettings();
+  }, [loadWebhooks, loadInbounds, loadSettings]);
+
+  const saveDueSoonOffset = async (value: number) => {
+    setInvoiceDueSoonOffsetHours(value);
+    setSettingsSaving(true);
+    try {
+      const data = await apiRequest('/webhooks/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ invoiceDueSoonOffsetHours: value }),
+      });
+      setInvoiceDueSoonOffsetHours(Number(data.invoiceDueSoonOffsetHours || value));
+    } catch (err: any) {
+      alert(err.message || 'Erro ao salvar configuração de webhook');
+      loadSettings();
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
 
   // Outbound CRUD
   const openCreateForm = () => {
@@ -507,6 +549,34 @@ export default function WebhooksPage() {
       {/* TAB 1: OUTBOUND WEBHOOKS */}
       {activeMainTab === 'outbound' && (
         <section className="space-y-lg animate-fade-in">
+          <Card title="Gatilhos automáticos">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-md">
+              <div className="space-y-1">
+                <p className="text-[13px] font-semibold text-on-surface">Fatura vence em breve</p>
+                <p className="text-[12px] text-on-surface-variant">
+                  Define quando o evento <code className="font-mono text-primary">invoice.due_soon</code> será disparado para faturas emitidas.
+                </p>
+              </div>
+              <div className="flex items-center gap-sm">
+                <select
+                  value={invoiceDueSoonOffsetHours}
+                  disabled={!canManage || settingsLoading || settingsSaving}
+                  onChange={(e) => saveDueSoonOffset(Number(e.target.value))}
+                  className="h-9 min-w-[180px] rounded-md border border-outline-variant bg-background px-sm text-[13px] text-on-surface outline-none focus:border-primary disabled:opacity-60"
+                >
+                  {DUE_SOON_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {settingsSaving && (
+                  <span className="text-[11px] text-on-surface-variant">Salvando...</span>
+                )}
+              </div>
+            </div>
+          </Card>
+
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-bold text-on-surface">Endpoints Cadastrados</h2>
             {canManage && (

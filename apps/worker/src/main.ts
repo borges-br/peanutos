@@ -2,6 +2,8 @@
 // PEANUT OS - BACKGROUND WORKER ENTRYPOINT
 // ==============================================================================
 import * as dotenv from 'dotenv';
+import { existsSync } from 'fs';
+import { resolve } from 'path';
 import { Worker, Job, Queue } from 'bullmq';
 import { prisma } from '@peanut/db';
 import * as crypto from 'crypto';
@@ -9,10 +11,15 @@ import * as https from 'https';
 import * as http from 'http';
 import { chromium } from 'playwright';
 import { renderA4Document } from '@peanut/documents';
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 
 // Load environment variables from root or local
-dotenv.config({ override: true });
+for (const path of [resolve(process.cwd(), ".env"), resolve(process.cwd(), "..", "..", ".env")]) {
+  if (existsSync(path)) {
+    dotenv.config({ path, override: false });
+    break;
+  }
+}
 
 // S3 Client initialization with resilient fallbacks
 const normalizeS3Endpoint = (endpoint?: string) => {
@@ -36,6 +43,33 @@ const s3Client = new S3Client({
   },
   forcePathStyle: s3ForcePathStyle,
 });
+
+async function fileObjectToDataUri(fileObjectId: string | null | undefined, workspaceId: string): Promise<string | null> {
+  if (!fileObjectId) return null;
+
+  const fileObject = await prisma.fileObject.findFirst({
+    where: { id: fileObjectId, workspaceId },
+  });
+  if (!fileObject) return null;
+
+  try {
+    const response = await s3Client.send(
+      new GetObjectCommand({
+        Bucket: fileObject.bucket,
+        Key: fileObject.key,
+      }),
+    );
+    const chunks: Buffer[] = [];
+    for await (const chunk of response.Body as any) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const buffer = Buffer.concat(chunks);
+    return `data:${fileObject.mimeType};base64,${buffer.toString('base64')}`;
+  } catch (err: any) {
+    console.warn('[PDF Worker] Failed to inline document image:', err.message);
+    return null;
+  }
+}
 
 /**
  * Auto-create target S3 bucket in non-production environments
@@ -247,20 +281,28 @@ async function sweepInvoices() {
   const today = new Date();
   const todayStr = formatDateInTz(today);
 
-  const dueSoonDays = parseInt(process.env.WEBHOOK_INVOICE_DUE_SOON_DAYS || '3', 10);
-  const dueSoonTargetStr = formatDateInTz(new Date(today.getTime() + dueSoonDays * 24 * 60 * 60 * 1000));
+  const fallbackDueSoonHours = parseInt(process.env.WEBHOOK_INVOICE_DUE_SOON_HOURS || '', 10)
+    || parseInt(process.env.WEBHOOK_INVOICE_DUE_SOON_DAYS || '3', 10) * 24;
 
-  console.log(`[Webhook Invoice Sweep] Today: ${todayStr}, Due Soon Target: ${dueSoonTargetStr}`);
+  console.log(`[Webhook Invoice Sweep] Today: ${todayStr}, fallback due soon offset: ${fallbackDueSoonHours}h`);
 
   // Fetch all pending/issued/overdue invoices
   const invoices = await prisma.invoice.findMany({
     where: {
       status: { in: ['ISSUED', 'OVERDUE'] },
     },
+    include: {
+      workspace: {
+        select: { invoiceDueSoonOffsetHours: true },
+      },
+    },
   });
 
   for (const inv of invoices) {
     const dueDateStr = formatDateInTz(inv.dueDate);
+    const remainingMs = inv.dueDate.getTime() - today.getTime();
+    const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+    const dueSoonOffsetHours = inv.workspace?.invoiceDueSoonOffsetHours || fallbackDueSoonHours;
 
     // A. invoice.due_today
     if (dueDateStr === todayStr) {
@@ -280,8 +322,8 @@ async function sweepInvoices() {
     }
 
     // B. invoice.due_soon
-    if (dueDateStr === dueSoonTargetStr) {
-      const periodKey = `${todayStr}:dueSoon`;
+    if (remainingMs > 0 && remainingHours <= dueSoonOffsetHours) {
+      const periodKey = `${dueDateStr}:dueSoon:${dueSoonOffsetHours}h`;
       await emitUniqueWebhook({
         workspaceId: inv.workspaceId,
         eventType: 'invoice.due_soon',
@@ -292,7 +334,8 @@ async function sweepInvoices() {
           invoiceId: inv.id,
           number: inv.number,
           dueDate: inv.dueDate.toISOString(),
-          daysRemaining: dueSoonDays,
+          dueSoonOffsetHours,
+          remainingHours,
         },
       });
     }
@@ -645,7 +688,8 @@ const pdfWorker = new Worker(
       return new Date(date).toLocaleDateString('pt-BR');
     };
 
-
+    const logoDataUri = await fileObjectToDataUri((workspace as any).logoFileObjectId, workspaceId);
+    const signatureDataUri = await fileObjectToDataUri((responsibleUser as any)?.signatureImageFileObjectId, workspaceId);
 
     // Build snapshots for metadata and rendering
     const brandSnapshot = {
@@ -661,9 +705,7 @@ const pdfWorker = new Worker(
       documentPrimaryColor: workspace.primaryColorHex || "#1a56db",
       documentSecondaryColor: (workspace as any).documentSecondaryColor || "#4b5563",
       documentAccentColor: (workspace as any).documentAccentColor || "#e11d48",
-      logoUrl: (workspace as any).logoFileObjectId
-        ? `${process.env.INTERNAL_API_URL || 'http://localhost:3001'}/api/v1/files/${(workspace as any).logoFileObjectId}`
-        : null,
+      logoUrl: logoDataUri,
       footerText: workspace.documentFooterText,
       signatureName: workspace.signatureName,
     };
@@ -672,9 +714,7 @@ const pdfWorker = new Worker(
       userId: responsibleUser.id,
       displayName: (responsibleUser as any).documentDisplayName || responsibleUser.name,
       jobTitle: (responsibleUser as any).jobTitle || null,
-      signatureImageUrl: (responsibleUser as any).signatureImageFileObjectId
-        ? `${process.env.INTERNAL_API_URL || 'http://localhost:3001'}/api/v1/files/${(responsibleUser as any).signatureImageFileObjectId}`
-        : null,
+      signatureImageUrl: signatureDataUri,
       signatureEnabled: (responsibleUser as any).documentSignatureEnabled ?? false,
     } : null;
 

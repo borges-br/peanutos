@@ -140,6 +140,43 @@ export default function FinancialsOverviewPage() {
         </div>
       </div>
 
+      {metrics.monthlyReceived && (
+        <div className="bg-surface border border-outline-variant p-lg rounded-xl shadow-lg flex flex-col gap-md">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-sm border-b border-outline-variant/30 pb-md">
+            <div>
+              <h3 className="text-sm font-semibold text-on-surface">Recebido líquido do mês</h3>
+              <p className="text-[12px] text-on-surface-variant">
+                Faturas pagas em {metrics.monthlyReceived.period}. Custos de material são internos e não aparecem no PDF do cliente.
+              </p>
+            </div>
+            <Badge variant="success" className="text-[10px] py-0 px-2 uppercase font-semibold">
+              {metrics.monthlyReceived.paidInvoices} faturas pagas
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
+            <div className="bg-surface-container-low border border-outline-variant/40 rounded-lg p-md">
+              <span className="text-[11px] text-on-surface-variant uppercase font-semibold">Bruto recebido</span>
+              <div className="text-2xl font-bold font-mono text-on-surface mt-xs">
+                {formatCurrency(metrics.monthlyReceived.grossReceivedCents)}
+              </div>
+            </div>
+            <div className="bg-surface-container-low border border-outline-variant/40 rounded-lg p-md">
+              <span className="text-[11px] text-on-surface-variant uppercase font-semibold">Custo de materiais</span>
+              <div className="text-2xl font-bold font-mono text-warning mt-xs">
+                {formatCurrency(metrics.monthlyReceived.materialCostCents)}
+              </div>
+            </div>
+            <div className="bg-surface-container-low border border-primary/30 rounded-lg p-md">
+              <span className="text-[11px] text-on-surface-variant uppercase font-semibold">Líquido estimado</span>
+              <div className="text-2xl font-bold font-mono text-primary mt-xs">
+                {formatCurrency(metrics.monthlyReceived.netReceivedCents)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Secondary split: Contracts status chart vs Billing events schedule */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
         

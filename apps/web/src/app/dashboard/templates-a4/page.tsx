@@ -427,6 +427,7 @@ export default function TemplatesA4Page() {
             backPath="/dashboard"
             companyName={brandSettings?.brandName}
             companySub={brandSettings?.brandSubtitle}
+            companyLogoUrl={brandSettings?.logoUrl}
             companyDocument={brandSettings?.companyDocument}
             companyEmail={brandSettings?.companyEmail}
             documentFooterText={brandSettings?.documentFooterText}

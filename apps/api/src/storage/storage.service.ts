@@ -7,7 +7,12 @@ import {
 } from "@aws-sdk/client-s3";
 import * as crypto from "crypto";
 
-const ALLOWED_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const ALLOWED_IMAGE_MIMES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/svg+xml",
+]);
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 @Injectable()
@@ -66,7 +71,19 @@ export class StorageService {
       throw new BadRequestException("Arquivo excede o tamanho máximo de 2 MB");
     }
 
-    const ext = opts.mimeType.split("/")[1] || "bin";
+    if (opts.mimeType === "image/svg+xml") {
+      const svg = buffer.toString("utf8");
+      const unsafeSvgPattern =
+        /<script|on\w+\s*=|<foreignObject|javascript:|data:text\/html/i;
+      if (!svg.includes("<svg") || unsafeSvgPattern.test(svg)) {
+        throw new BadRequestException("SVG inválido ou potencialmente inseguro");
+      }
+    }
+
+    const ext =
+      opts.mimeType === "image/svg+xml"
+        ? "svg"
+        : opts.mimeType.split("/")[1] || "bin";
     const uniqueKey = `${opts.workspaceId}/${opts.folder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
     const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
 

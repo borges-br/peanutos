@@ -7,13 +7,65 @@ import { prisma, Prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
 import { renderA4Document } from "@peanut/documents";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 
 @Injectable()
 export class InvoicesService {
+  private normalizeS3Endpoint(endpoint?: string) {
+    const value = endpoint || "http://localhost:9000";
+    return /^https?:\/\//i.test(value) ? value : `http://${value}`;
+  }
+
+  private readonly s3Client = new S3Client({
+    endpoint: this.normalizeS3Endpoint(process.env.S3_ENDPOINT),
+    region: process.env.S3_REGION || "us-east-1",
+    credentials: {
+      accessKeyId:
+        process.env.S3_ACCESS_KEY_ID ||
+        process.env.S3_ACCESS_KEY ||
+        "minio_admin",
+      secretAccessKey:
+        process.env.S3_SECRET_ACCESS_KEY ||
+        process.env.S3_SECRET_KEY ||
+        "change-me-in-production",
+    },
+    forcePathStyle: String(process.env.S3_FORCE_PATH_STYLE ?? "true") === "true",
+  });
+
   constructor(
     private readonly auditService: AuditService,
     private readonly webhookEvents: WebhookEventsService,
   ) {}
+
+  private async fileObjectToDataUri(
+    fileObjectId: string | null | undefined,
+    workspaceId: string,
+  ): Promise<string | null> {
+    if (!fileObjectId) return null;
+
+    const fileObject = await prisma.fileObject.findFirst({
+      where: { id: fileObjectId, workspaceId },
+    });
+    if (!fileObject) return null;
+
+    try {
+      const response = await this.s3Client.send(
+        new GetObjectCommand({
+          Bucket: fileObject.bucket,
+          Key: fileObject.key,
+        }),
+      );
+      const chunks: Buffer[] = [];
+      for await (const chunk of response.Body as any) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const buffer = Buffer.concat(chunks);
+      return `data:${fileObject.mimeType};base64,${buffer.toString("base64")}`;
+    } catch (err: any) {
+      console.warn("[InvoicesService] Failed to inline document image:", err.message);
+      return null;
+    }
+  }
 
   /**
    * Sanitizes invoice details based on the requester's role.
@@ -36,8 +88,10 @@ export class InvoicesService {
       pixKey: null,
       subtotalServices: null,
       subtotalMaterials: null,
+      subtotalMaterialCost: null,
       discountAmount: null,
       discountReason: null,
+      netAmount: null,
       observations: null,
     };
 
@@ -45,7 +99,9 @@ export class InvoicesService {
       sanitized.items = sanitized.items.map((item: any) => ({
         ...item,
         unitPrice: null,
+        unitCost: null,
         totalPrice: null,
+        totalCost: null,
       }));
     }
 
@@ -230,13 +286,20 @@ export class InvoicesService {
     // 3. Recalculate totals using Prisma.Decimal to avoid precision errors
     let subtotalServices = new Prisma.Decimal(0);
     let subtotalMaterials = new Prisma.Decimal(0);
+    let subtotalMaterialCost = new Prisma.Decimal(0);
 
     const itemsToCreate = (input.items || []).map((item: any, idx: number) => {
       const qty = new Prisma.Decimal(item.quantity || 1);
       const price = new Prisma.Decimal(item.unitPrice || 0);
+      const cost =
+        item.type === "MATERIAL"
+          ? new Prisma.Decimal(item.unitCost || 0)
+          : new Prisma.Decimal(0);
       const total = qty.mul(price);
+      const totalCost = qty.mul(cost);
       if (item.type === "MATERIAL") {
         subtotalMaterials = subtotalMaterials.add(total);
+        subtotalMaterialCost = subtotalMaterialCost.add(totalCost);
       } else {
         subtotalServices = subtotalServices.add(total);
       }
@@ -247,7 +310,9 @@ export class InvoicesService {
         quantity: qty,
         unit: item.unit || "UN",
         unitPrice: price,
+        unitCost: cost,
         totalPrice: total,
+        totalCost,
         sortOrder: idx,
       };
     });
@@ -260,6 +325,7 @@ export class InvoicesService {
       );
     }
     const totalAmountDecimal = subtotal.sub(discountAmount);
+    const netAmountDecimal = totalAmountDecimal.sub(subtotalMaterialCost);
 
     // 4. Create invoice with safe sequential/random number and collision handling
     let newInvoice: any;
@@ -288,10 +354,12 @@ export class InvoicesService {
             pixKey: input.pixKey || null,
             subtotalServices,
             subtotalMaterials,
+            subtotalMaterialCost,
             discountAmount,
             discountReason: input.discountReason || null,
             observations: input.observations || null,
             totalAmount: totalAmountDecimal,
+            netAmount: netAmountDecimal,
             items: {
               create: itemsToCreate,
             },
@@ -326,11 +394,15 @@ export class InvoicesService {
       items: newInvoice.items.map((item: any) => ({
         ...item,
         unitPrice: "[REDACTED]",
+        unitCost: "[REDACTED]",
         totalPrice: "[REDACTED]",
+        totalCost: "[REDACTED]",
       })),
       totalAmount: "[REDACTED]",
+      netAmount: "[REDACTED]",
       subtotalServices: "[REDACTED]",
       subtotalMaterials: "[REDACTED]",
+      subtotalMaterialCost: "[REDACTED]",
       discountAmount: "[REDACTED]",
     };
 
@@ -515,6 +587,9 @@ export class InvoicesService {
     // Recalculation logic
     let subtotalServices = new Prisma.Decimal(invoice.subtotalServices);
     let subtotalMaterials = new Prisma.Decimal(invoice.subtotalMaterials);
+    let subtotalMaterialCost = new Prisma.Decimal(
+      (invoice as any).subtotalMaterialCost || 0,
+    );
     const discountAmount = new Prisma.Decimal(
       input.discountAmount !== undefined
         ? input.discountAmount
@@ -525,13 +600,20 @@ export class InvoicesService {
       // Delete old items and prepare new ones
       subtotalServices = new Prisma.Decimal(0);
       subtotalMaterials = new Prisma.Decimal(0);
+      subtotalMaterialCost = new Prisma.Decimal(0);
 
       const itemsToCreate = input.items.map((item: any, idx: number) => {
         const qty = new Prisma.Decimal(item.quantity || 1);
         const price = new Prisma.Decimal(item.unitPrice || 0);
+        const cost =
+          item.type === "MATERIAL"
+            ? new Prisma.Decimal(item.unitCost || 0)
+            : new Prisma.Decimal(0);
         const total = qty.mul(price);
+        const totalCost = qty.mul(cost);
         if (item.type === "MATERIAL") {
           subtotalMaterials = subtotalMaterials.add(total);
+          subtotalMaterialCost = subtotalMaterialCost.add(totalCost);
         } else {
           subtotalServices = subtotalServices.add(total);
         }
@@ -542,7 +624,9 @@ export class InvoicesService {
           quantity: qty,
           unit: item.unit || "UN",
           unitPrice: price,
+          unitCost: cost,
           totalPrice: total,
+          totalCost,
           sortOrder: idx,
         };
       });
@@ -554,11 +638,14 @@ export class InvoicesService {
         );
       }
       const totalAmountDecimal = subtotal.sub(discountAmount);
+      const netAmountDecimal = totalAmountDecimal.sub(subtotalMaterialCost);
 
       dataToUpdate.subtotalServices = subtotalServices;
       dataToUpdate.subtotalMaterials = subtotalMaterials;
+      dataToUpdate.subtotalMaterialCost = subtotalMaterialCost;
       dataToUpdate.discountAmount = discountAmount;
       dataToUpdate.totalAmount = totalAmountDecimal;
+      dataToUpdate.netAmount = netAmountDecimal;
 
       const updated = await prisma.$transaction(async (tx) => {
         await tx.invoiceItem.deleteMany({ where: { invoiceId } });
@@ -597,9 +684,11 @@ export class InvoicesService {
         );
       }
       const totalAmountDecimal = subtotal.sub(discountAmount);
+      const netAmountDecimal = totalAmountDecimal.sub(subtotalMaterialCost);
 
       dataToUpdate.discountAmount = discountAmount;
       dataToUpdate.totalAmount = totalAmountDecimal;
+      dataToUpdate.netAmount = netAmountDecimal;
 
       const updated = await prisma.invoice.update({
         where: { id: invoiceId },
@@ -664,6 +753,11 @@ export class InvoicesService {
       return new Date(date).toLocaleDateString("pt-BR");
     };
 
+    const logoDataUri = await this.fileObjectToDataUri(
+      (workspace as any).logoFileObjectId,
+      workspaceId,
+    );
+
     const brandSnapshot = {
       publicName: workspace.brandName,
       brandSubtitle: workspace.brandSubtitle,
@@ -678,9 +772,7 @@ export class InvoicesService {
       documentSecondaryColor:
         (workspace as any).documentSecondaryColor || "#4b5563",
       documentAccentColor: (workspace as any).documentAccentColor || "#e11d48",
-      logoUrl: (workspace as any).logoFileObjectId
-        ? `${process.env.INTERNAL_API_URL || "http://localhost:3001"}/api/v1/files/${(workspace as any).logoFileObjectId}`
-        : null,
+      logoUrl: logoDataUri,
       footerText: workspace.documentFooterText,
       signatureName: workspace.signatureName,
     };

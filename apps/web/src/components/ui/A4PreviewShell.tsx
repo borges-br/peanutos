@@ -4,6 +4,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import Button from './Button';
 import { useI18n } from '../../i18n/useI18n';
+import AuthenticatedImage from './AuthenticatedImage';
 
 interface A4PreviewShellProps {
   title: string;
@@ -20,6 +21,7 @@ interface A4PreviewShellProps {
   children: React.ReactNode;
   companyName?: string;
   companySub?: string;
+  companyLogoUrl?: string | null;
   companyDocument?: string;
   companyEmail?: string;
   documentFooterText?: string;
@@ -55,6 +57,7 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
   children,
   companyName,
   companySub,
+  companyLogoUrl,
   companyDocument,
   companyEmail,
   documentFooterText,
@@ -152,17 +155,28 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
             className="flex justify-between items-start border-b-2 pb-md mb-md"
             style={{ borderBottomColor: primaryColorHex || '#000000' }}
           >
-            <div className="flex flex-col gap-1">
-              <span className="text-xl font-bold tracking-tight text-black">{displayCompanyName}</span>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-black/60">
-                {displayCompanySub}
-              </span>
-              <span className="text-[11px] text-black/70 font-mono mt-xs leading-none">
-                {displayCompanyDocument}
-              </span>
-              <span className="text-[11px] text-black/70 font-mono leading-none">
-                {displayCompanyEmail}
-              </span>
+            <div className="flex items-start gap-md">
+              {companyLogoUrl && (
+                <div className="w-16 h-16 rounded-lg overflow-hidden bg-transparent flex items-center justify-center shrink-0">
+                  <AuthenticatedImage
+                    src={companyLogoUrl}
+                    alt={displayCompanyName}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                <span className="text-xl font-bold tracking-tight text-black">{displayCompanyName}</span>
+                <span className="text-[10px] uppercase font-bold tracking-widest text-black/60">
+                  {displayCompanySub}
+                </span>
+                <span className="text-[11px] text-black/70 font-mono mt-xs leading-none">
+                  {displayCompanyDocument}
+                </span>
+                <span className="text-[11px] text-black/70 font-mono leading-none">
+                  {displayCompanyEmail}
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-col items-end text-right gap-1 font-mono">
@@ -231,4 +245,3 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
 };
 
 export default A4PreviewShell;
-

@@ -22,6 +22,7 @@ import {
   webhookDeliveryQuerySchema,
   createInboundWebhookSchema,
   updateInboundWebhookSchema,
+  webhookAutomationSettingsSchema,
 } from "@peanut/validators";
 
 @UseGuards(AuthGuard, RolesGuard)
@@ -33,6 +34,37 @@ export class WebhooksController {
   @Roles("OWNER", "ADMIN", "READ_ONLY")
   async list(@CurrentUser() user: any) {
     return this.webhooksService.list(user.workspaceId, user.role);
+  }
+
+  @Get("webhooks/settings")
+  @Roles("OWNER", "ADMIN", "READ_ONLY")
+  async getSettings(@CurrentUser() user: any) {
+    return this.webhooksService.getSettings(user.workspaceId, user.role);
+  }
+
+  @Patch("webhooks/settings")
+  @Roles("OWNER", "ADMIN")
+  async updateSettings(
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const validation = webhookAutomationSettingsSchema.safeParse(body);
+    if (!validation.success) {
+      throw new BadRequestException(
+        validation.error.errors.map((e) => e.message).join(", "),
+      );
+    }
+    const ip = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const ua = req.headers?.["user-agent"] || "Unknown";
+    return this.webhooksService.updateSettings(
+      validation.data,
+      user.workspaceId,
+      user.id,
+      user.role,
+      ip,
+      ua,
+    );
   }
 
   @Post("webhooks")

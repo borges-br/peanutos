@@ -38,6 +38,9 @@ importers:
       '@peanut/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@peanut/documents':
+        specifier: workspace:*
+        version: link:../../packages/documents
       '@peanut/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -53,6 +56,9 @@ importers:
       bullmq:
         specifier: ^5.8.1
         version: 5.77.1
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
       jsonwebtoken:
         specifier: ^9.0.3
         version: 9.0.3

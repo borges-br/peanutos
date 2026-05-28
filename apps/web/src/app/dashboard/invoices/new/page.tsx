@@ -16,6 +16,7 @@ interface InvoiceItemInput {
   quantity: number;
   unit: string;
   unitPrice: number;
+  unitCost: number;
 }
 
 export default function NewInvoicePage() {
@@ -28,7 +29,7 @@ export default function NewInvoicePage() {
   const [paymentMethod, setPaymentMethod] = useState('PIX');
   const [pixKey, setPixKey] = useState('');
   const [items, setItems] = useState<InvoiceItemInput[]>([
-    { type: 'SERVICE', description: '', quantity: 1, unit: 'UN', unitPrice: 0 },
+    { type: 'SERVICE', description: '', quantity: 1, unit: 'UN', unitPrice: 0, unitCost: 0 },
   ]);
 
   const [loading, setLoading] = useState(false);
@@ -59,7 +60,7 @@ export default function NewInvoicePage() {
   const handleAddItem = () => {
     setItems([
       ...items,
-      { type: 'SERVICE', description: '', quantity: 1, unit: 'UN', unitPrice: 0 },
+      { type: 'SERVICE', description: '', quantity: 1, unit: 'UN', unitPrice: 0, unitCost: 0 },
     ]);
   };
 
@@ -71,7 +72,7 @@ export default function NewInvoicePage() {
   const handleItemChange = (index: number, field: keyof InvoiceItemInput, value: any) => {
     const updated = [...items];
     const item = { ...updated[index] };
-    if (field === 'quantity' || field === 'unitPrice') {
+    if (field === 'quantity' || field === 'unitPrice' || field === 'unitCost') {
       (item as any)[field] = parseFloat(value) || 0;
     } else {
       (item as any)[field] = value;
@@ -88,7 +89,11 @@ export default function NewInvoicePage() {
 
   const servicesSubtotal = calculateSubtotal('SERVICE');
   const materialsSubtotal = calculateSubtotal('MATERIAL');
+  const materialsCost = items
+    .filter((item) => item.type === 'MATERIAL')
+    .reduce((sum, item) => sum + item.quantity * item.unitCost, 0);
   const grandTotal = servicesSubtotal + materialsSubtotal;
+  const netTotal = grandTotal - materialsCost;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,6 +124,7 @@ export default function NewInvoicePage() {
         quantity: item.quantity,
         unit: item.unit,
         unitPrice: item.unitPrice,
+        unitCost: item.type === 'MATERIAL' ? item.unitCost : 0,
       })),
     };
 
@@ -249,7 +255,7 @@ export default function NewInvoicePage() {
                     />
                   </div>
 
-                  <div className="md:col-span-5">
+                  <div className="md:col-span-4">
                     <Input
                       label={t.invoices.itemDescriptionLabel || "Descrição do item *"}
                       value={item.description}
@@ -282,9 +288,9 @@ export default function NewInvoicePage() {
                     />
                   </div>
 
-                  <div className="md:col-span-3">
+                  <div className="md:col-span-2">
                     <Input
-                      label={t.invoices.itemPriceLabel || "Unit. (R$) *"}
+                      label={item.type === 'MATERIAL' ? "Venda unit. (R$) *" : (t.invoices.itemPriceLabel || "Unit. (R$) *")}
                       type="number"
                       step="0.01"
                       min="0.00"
@@ -292,6 +298,18 @@ export default function NewInvoicePage() {
                       onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)}
                       disabled={saving}
                       required
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <Input
+                      label="Custo unit. (R$)"
+                      type="number"
+                      step="0.01"
+                      min="0.00"
+                      value={item.unitCost}
+                      onChange={(e) => handleItemChange(index, 'unitCost', e.target.value)}
+                      disabled={saving || item.type !== 'MATERIAL'}
                     />
                   </div>
                 </div>
@@ -318,8 +336,12 @@ export default function NewInvoicePage() {
           <div className="flex flex-col gap-xs font-mono text-xs text-on-surface-variant">
             <span>{t.invoices.servicesSubtotal || "Serviços"}: R$ {servicesSubtotal.toFixed(2)}</span>
             <span>{t.invoices.materialsSubtotal || "Materiais"}: R$ {materialsSubtotal.toFixed(2)}</span>
+            <span>Custo interno de materiais: R$ {materialsCost.toFixed(2)}</span>
             <span className="text-sm font-bold text-primary mt-1 border-t border-outline-variant/35 pt-1">
               {t.invoices.grandTotal || "Valor Total Geral"}: R$ {grandTotal.toFixed(2)}
+            </span>
+            <span className="text-sm font-bold text-success">
+              Líquido estimado: R$ {netTotal.toFixed(2)}
             </span>
           </div>
 
@@ -336,4 +358,3 @@ export default function NewInvoicePage() {
     </div>
   );
 }
-

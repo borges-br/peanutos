@@ -454,9 +454,33 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     logo: () => `
       <div class="block-container block-logo" style="margin-bottom: 20px;">
         ${logoUrl ? `
-          <img src="${logoUrl}" alt="${brandName}" style="max-height: 48px; max-width: 180px; object-fit: contain; display: block;" />
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="width: 76px; vertical-align: middle;">
+                <div style="width: 64px; height: 64px; background: transparent; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                  <img src="${logoUrl}" alt="${brandName}" style="width: 100%; height: 100%; object-fit: contain; display: block;" />
+                </div>
+              </td>
+              <td style="vertical-align: middle;">
+                <span style="font-size: 18pt; font-weight: 800; color: #0f172a; display: block; line-height: 1.1;">${brandName}</span>
+                ${brandSubtitle ? `<span style="font-size: 9pt; font-weight: 600; color: #64748b; display: block; margin-top: 4px;">${brandSubtitle}</span>` : ''}
+              </td>
+            </tr>
+          </table>
         ` : `
-          <span style="font-size: 20pt; font-weight: 800; color: ${primaryColor}; tracking-tight: -0.5px; display: block;">${brandName}</span>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="width: 76px; vertical-align: middle;">
+                <div style="width: 64px; height: 64px; background: ${primaryColor}; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                  <span style="font-size: 22pt; font-weight: 900; color: #ffffff; line-height: 1;">${brandName.charAt(0) || "P"}</span>
+                </div>
+              </td>
+              <td style="vertical-align: middle;">
+                <span style="font-size: 18pt; font-weight: 800; color: #0f172a; display: block; line-height: 1.1;">${brandName}</span>
+                ${brandSubtitle ? `<span style="font-size: 9pt; font-weight: 600; color: #64748b; display: block; margin-top: 4px;">${brandSubtitle}</span>` : ''}
+              </td>
+            </tr>
+          </table>
         `}
       </div>
     `,

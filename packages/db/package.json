@@ -7,9 +7,9 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "generate": "prisma generate",
-    "migrate": "prisma migrate dev",
-    "seed": "ts-node prisma/seed.ts"
+    "generate": "node scripts/with-root-env.js prisma generate",
+    "migrate": "node scripts/with-root-env.js prisma migrate dev",
+    "seed": "node scripts/with-root-env.js ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0"

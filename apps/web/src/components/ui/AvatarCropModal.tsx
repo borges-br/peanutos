@@ -16,6 +16,7 @@ interface AvatarCropModalProps {
   cropShape?: 'rect' | 'round';
   buttonLabel?: string;
   icon?: string;
+  preserveOriginal?: boolean;
 }
 
 const createImage = (url: string): Promise<HTMLImageElement> =>
@@ -63,7 +64,7 @@ async function getCroppedImg(imageSrc: string, pixelCrop: any): Promise<string> 
       } else {
         reject(new Error('Canvas is empty'));
       }
-    }, 'image/jpeg', 0.95);
+    }, 'image/png');
   });
 }
 
@@ -77,6 +78,7 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
   cropShape = 'round',
   buttonLabel = 'Salvar foto',
   icon = 'account_circle',
+  preserveOriginal = false,
 }) => {
   const { refreshUser } = useAuth();
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -98,9 +100,11 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const allowed = ['image/png', 'image/jpeg', 'image/webp'];
+    const allowed = preserveOriginal
+      ? ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+      : ['image/png', 'image/jpeg', 'image/webp'];
     if (!allowed.includes(file.type)) {
-      setError('Formato não suportado. Use PNG, JPEG ou WebP.');
+      setError(preserveOriginal ? 'Formato não suportado. Use SVG, PNG, JPEG ou WebP.' : 'Formato não suportado. Use PNG, JPEG ou WebP.');
       return;
     }
 
@@ -120,15 +124,16 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
   };
 
   const handleUpload = async () => {
-    if (!imageSrc || !croppedAreaPixels) return;
+    if (!imageSrc || (!preserveOriginal && !croppedAreaPixels)) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      // Crop the image to obtain base64
-      const croppedBase64 = await getCroppedImg(imageSrc, croppedAreaPixels);
-      const pureBase64 = croppedBase64.replace(/^data:[^;]+;base64,/, '');
+      const uploadBase64 = preserveOriginal
+        ? imageSrc
+        : await getCroppedImg(imageSrc, croppedAreaPixels);
+      const pureBase64 = uploadBase64.replace(/^data:[^;]+;base64,/, '');
 
       const response = await apiRequest(uploadUrl, {
         method: 'POST',
@@ -194,7 +199,7 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept={preserveOriginal ? "image/svg+xml,image/png,image/jpeg,image/webp" : "image/png,image/jpeg,image/webp"}
             className="hidden"
             onChange={handleFileChange}
           />
@@ -208,9 +213,23 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
                   Clique para selecionar uma imagem
                 </p>
                 <p className="text-[11px] text-on-surface-variant/70">
-                  Formatos suportados: PNG, JPEG ou WebP (Máx. 2 MB)
+                  {preserveOriginal ? 'Formatos suportados: SVG, PNG, JPEG ou WebP (Máx. 2 MB)' : 'Formatos suportados: PNG, JPEG ou WebP (Máx. 2 MB)'}
                 </p>
               </div>
+            </div>
+          ) : preserveOriginal ? (
+            <div className="w-full space-y-md flex flex-col items-center">
+              <div className="relative w-full h-[260px] bg-surface-container/30 rounded-xl overflow-hidden border border-outline-variant flex items-center justify-center">
+                <img src={imageSrc} alt="Preview da logo" className="max-w-full max-h-full object-contain" />
+              </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-[12px] text-primary hover:underline flex items-center gap-xs"
+              >
+                <span className="material-symbols-outlined text-[14px]">cached</span>
+                Escolher outro arquivo
+              </button>
             </div>
           ) : (
             <div className="w-full space-y-md flex flex-col items-center">
@@ -265,7 +284,7 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
           <Button
             variant="primary"
             onClick={handleUpload}
-            disabled={loading || !imageSrc}
+            disabled={loading || !imageSrc || (!preserveOriginal && !croppedAreaPixels)}
             loading={loading}
             className="text-xs px-lg"
           >

@@ -184,6 +184,7 @@ model Workspace {
   defaultContractTerms       String? @db.Text
   signatureName              String? @db.VarChar(150)
   logoFileObjectId           String? @db.Uuid
+  invoiceDueSoonOffsetHours  Int     @default(72)
 
   // Relationships
   users                    User[]
@@ -467,8 +468,10 @@ model Quote {
   validUntil         DateTime
   subtotalServices   Decimal     @db.Decimal(12, 2)
   subtotalMaterials  Decimal     @db.Decimal(12, 2)
+  subtotalMaterialCost Decimal   @default(0) @db.Decimal(12, 2)
   discountAmount     Decimal     @default(0) @db.Decimal(12, 2)
   totalAmount        Decimal     @db.Decimal(12, 2)
+  netAmount          Decimal     @default(0) @db.Decimal(12, 2)
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -490,7 +493,9 @@ model QuoteItem {
   quantity    Decimal  @db.Decimal(10, 2)
   unit        String   @db.VarChar(20)
   unitPrice   Decimal  @db.Decimal(12, 2)
+  unitCost    Decimal  @default(0) @db.Decimal(12, 2)
   totalPrice  Decimal  @db.Decimal(12, 2)
+  totalCost   Decimal  @default(0) @db.Decimal(12, 2)
   sortOrder   Int      @default(0)
 
   // Relationships
@@ -515,10 +520,12 @@ model Invoice {
   pixKey        String?       @db.VarChar(100)
   subtotalServices   Decimal   @default(0) @db.Decimal(12, 2)
   subtotalMaterials  Decimal   @default(0) @db.Decimal(12, 2)
+  subtotalMaterialCost Decimal @default(0) @db.Decimal(12, 2)
   discountAmount     Decimal   @default(0) @db.Decimal(12, 2)
   discountReason     String?   @db.Text
   observations       String?   @db.Text
   totalAmount   Decimal       @db.Decimal(12, 2)
+  netAmount     Decimal       @default(0) @db.Decimal(12, 2)
   paidAt        DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -543,7 +550,9 @@ model InvoiceItem {
   quantity    Decimal  @db.Decimal(10, 2)
   unit        String   @db.VarChar(20)
   unitPrice   Decimal  @db.Decimal(12, 2)
+  unitCost    Decimal  @default(0) @db.Decimal(12, 2)
   totalPrice  Decimal  @db.Decimal(12, 2)
+  totalCost   Decimal  @default(0) @db.Decimal(12, 2)
   sortOrder   Int      @default(0)
 
   // Relationships
