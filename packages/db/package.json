@@ -9,6 +9,7 @@
     "build": "tsc",
     "generate": "node scripts/with-root-env.js prisma generate",
     "migrate": "node scripts/with-root-env.js prisma migrate dev",
+    "migrate:deploy": "node scripts/with-root-env.js prisma migrate deploy",
     "seed": "node scripts/with-root-env.js ts-node prisma/seed.ts"
   },
   "dependencies": {

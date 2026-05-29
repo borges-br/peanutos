@@ -1,0 +1,45 @@
+<svg width="1200" height="420" viewBox="0 0 1200 420" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Peanut OS architecture overview</title>
+  <desc id="desc">A visual overview of Peanut OS modules: web, API, worker, database, Redis, object storage and integrations.</desc>
+  <rect width="1200" height="420" rx="28" fill="#0B1020"/>
+  <rect x="24" y="24" width="1152" height="372" rx="24" fill="#111827" stroke="#263244"/>
+  <circle cx="1070" cy="70" r="74" fill="#C6A15B" opacity="0.14"/>
+  <circle cx="106" cy="332" r="92" fill="#3BB273" opacity="0.10"/>
+  <text x="72" y="86" fill="#F8FAFC" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="38" font-weight="800">Peanut OS</text>
+  <text x="72" y="122" fill="#CBD5E1" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="17">Gestao operacional, tecnica, comercial e financeira para provedores de TI.</text>
+  <g transform="translate(72 172)">
+    <rect width="190" height="88" rx="16" fill="#182235" stroke="#334155"/>
+    <text x="24" y="38" fill="#F8FAFC" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">Next.js Web</text>
+    <text x="24" y="64" fill="#94A3B8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13">Dashboard e A4 preview</text>
+  </g>
+  <g transform="translate(342 172)">
+    <rect width="190" height="88" rx="16" fill="#182235" stroke="#334155"/>
+    <text x="24" y="38" fill="#F8FAFC" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">NestJS API</text>
+    <text x="24" y="64" fill="#94A3B8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13">RBAC, contratos, faturas</text>
+  </g>
+  <g transform="translate(612 172)">
+    <rect width="190" height="88" rx="16" fill="#182235" stroke="#334155"/>
+    <text x="24" y="38" fill="#F8FAFC" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">Worker</text>
+    <text x="24" y="64" fill="#94A3B8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13">PDF, SLA, webhooks</text>
+  </g>
+  <g transform="translate(882 172)">
+    <rect width="190" height="88" rx="16" fill="#182235" stroke="#334155"/>
+    <text x="24" y="38" fill="#F8FAFC" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">Infra</text>
+    <text x="24" y="64" fill="#94A3B8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13">Postgres, Redis, S3</text>
+  </g>
+  <path d="M262 216H342" stroke="#C6A15B" stroke-width="4" stroke-linecap="round"/>
+  <path d="M532 216H612" stroke="#C6A15B" stroke-width="4" stroke-linecap="round"/>
+  <path d="M802 216H882" stroke="#C6A15B" stroke-width="4" stroke-linecap="round"/>
+  <g transform="translate(72 306)">
+    <rect width="144" height="40" rx="20" fill="#213025" stroke="#3BB273"/>
+    <text x="22" y="26" fill="#B7F7CF" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700">Docker Ready</text>
+  </g>
+  <g transform="translate(232 306)">
+    <rect width="156" height="40" rx="20" fill="#2A2519" stroke="#C6A15B"/>
+    <text x="22" y="26" fill="#F6D48D" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700">GHCR Publish</text>
+  </g>
+  <g transform="translate(404 306)">
+    <rect width="176" height="40" rx="20" fill="#1A2537" stroke="#60A5FA"/>
+    <text x="22" y="26" fill="#BFDBFE" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700">Dominio proprio</text>
+  </g>
+</svg>

@@ -1,0 +1,175 @@
+name: peanut-os
+
+x-app-env: &app-env
+  NODE_ENV: production
+  NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-Peanut OS}
+  NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-Borges TI}
+  NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-suporte@example.com}
+  NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:-https://localhost}
+  NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
+  API_BODY_LIMIT_BYTES: ${API_BODY_LIMIT_BYTES:-26214400}
+  CORS_ORIGIN: ${CORS_ORIGIN:-https://localhost}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-peanut_user}:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/${POSTGRES_DB:-peanut_db}?schema=public
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-change-me-in-production}
+  JWT_SECRET: ${JWT_SECRET:-change-me-in-production-at-least-32-chars-long}
+  JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+  REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-change-me-in-production-at-least-32-chars-long}
+  REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
+  APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-change-me-generate-a-real-32-byte-key}
+  APPLICATION_ENCRYPTION_KEY: ${APPLICATION_ENCRYPTION_KEY:-000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f}
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minio_admin}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-change-me-in-production}
+  S3_BUCKET: ${S3_BUCKET:-peanut-os-documents}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+  S3_AUTO_CREATE_BUCKET: ${S3_AUTO_CREATE_BUCKET:-true}
+  WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-change-me-in-production-signing-secret}
+  WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:-peanut-os-webhook-key-change-in-production!!}
+  WEBHOOK_MAX_ATTEMPTS: ${WEBHOOK_MAX_ATTEMPTS:-5}
+  WEBHOOK_TIMEOUT_MS: ${WEBHOOK_TIMEOUT_MS:-10000}
+  WEBHOOK_MAX_CONCURRENCY: ${WEBHOOK_MAX_CONCURRENCY:-5}
+  WEBHOOK_SCHEDULER_TIMEZONE: ${WEBHOOK_SCHEDULER_TIMEZONE:-America/Sao_Paulo}
+  WEBHOOK_INVOICE_DUE_SOON_HOURS: ${WEBHOOK_INVOICE_DUE_SOON_HOURS:-72}
+  WEBHOOK_CONTRACT_ENDING_SOON_DAYS: ${WEBHOOK_CONTRACT_ENDING_SOON_DAYS:-15}
+  WEBHOOK_TICKET_FEEDBACK_HOURS_AFTER_RESOLVED: ${WEBHOOK_TICKET_FEEDBACK_HOURS_AFTER_RESOLVED:-24}
+  BILLING_SCHEDULE_CRON: ${BILLING_SCHEDULE_CRON:-0 2 * * *}
+  PDF_MAX_CONCURRENCY: ${PDF_MAX_CONCURRENCY:-1}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+services:
+  # Caddy mode: use this service when Peanut OS should manage HTTP, HTTPS,
+  # Let's Encrypt certificates, and reverse proxying by itself.
+  # If you use NGINX Proxy Manager, add docker-compose.npm.yml to your compose
+  # command; that override moves this service behind an inactive profile.
+  caddy:
+    image: caddy:2-alpine
+    container_name: peanut-caddy
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_started
+    environment:
+      PEANUT_DOMAIN: ${PEANUT_DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  web:
+    # Internal Next.js service. Caddy or NGINX Proxy Manager should proxy to
+    # this container on port 3000; it is intentionally not published directly.
+    image: ${PEANUT_IMAGE_REGISTRY:-ghcr.io}/${PEANUT_IMAGE_NAMESPACE:-owner/peanutos}/peanut-web:${PEANUT_IMAGE_TAG:-latest}
+    container_name: peanut-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
+      NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-Peanut OS}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-Borges TI}
+      NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-suporte@example.com}
+    expose:
+      - "3000"
+
+  api:
+    # Internal NestJS API service. Reverse proxies should forward /api/v1 to
+    # this container on port 3001; keep the database and queues private.
+    image: ${PEANUT_IMAGE_REGISTRY:-ghcr.io}/${PEANUT_IMAGE_NAMESPACE:-owner/peanutos}/peanut-api:${PEANUT_IMAGE_TAG:-latest}
+    container_name: peanut-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      PORT_API: 3001
+    expose:
+      - "3001"
+
+  worker:
+    image: ${PEANUT_IMAGE_REGISTRY:-ghcr.io}/${PEANUT_IMAGE_NAMESPACE:-owner/peanutos}/peanut-worker:${PEANUT_IMAGE_TAG:-latest}
+    container_name: peanut-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+
+  migrator:
+    image: ${PEANUT_IMAGE_REGISTRY:-ghcr.io}/${PEANUT_IMAGE_NAMESPACE:-owner/peanutos}/peanut-migrator:${PEANUT_IMAGE_TAG:-latest}
+    profiles:
+      - migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: peanut-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-peanut_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
+      POSTGRES_DB: ${POSTGRES_DB:-peanut_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-peanut_user} -d ${POSTGRES_DB:-peanut_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: peanut-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-change-me-in-production}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-change-me-in-production}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: peanut-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minio_admin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-change-me-in-production}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  redis_data:
+  minio_data:

@@ -1,177 +1,200 @@
-# Peanut OS 🥜
+# Peanut OS
 
-Peanut OS is a professional, high-performance web platform designed for the operational, technical, and commercial management of IT Service Providers. Initially conceptualized as a robust system for **Borges TI**, it is designed from the ground up with a white-label architecture to support custom branding, and a logical database model that prepares the schema for future multi-tenant operations.
+[![Next.js](https://img.shields.io/badge/Next.js-14-000000?logo=nextdotjs)](https://nextjs.org/)
+[![NestJS](https://img.shields.io/badge/NestJS-10-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![Prisma](https://img.shields.io/badge/Prisma-5-2D3748?logo=prisma)](https://www.prisma.io/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docs/deployment/production-docker.md)
+[![GHCR](https://img.shields.io/badge/GHCR-auto_publish-181717?logo=github&logoColor=white)](.github/workflows/publish-images.yml)
+[![pnpm](https://img.shields.io/badge/pnpm-workspace-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+
+![Peanut OS overview](docs/assets/peanut-os-hero.svg)
+
+Peanut OS e uma plataforma web para gestao operacional de prestadores de servicos de TI. O projeto combina CRM tecnico, contratos, faturas, orcamentos, ordens de servico, inventario, documentos A4, webhooks e filas de background em um monorepo TypeScript.
 
 > [!NOTE]
-> **Project Status**: **Phase 4 Complete in code (Contracts & Recurring Billing Foundation)**.
-> Contracts, line items, contract history, quota enforcement, contract-aware SLA selection, financial MRR endpoints, recurring billing schedule events, BullMQ billing scheduler foundation, and the contracts/financial dashboard screens are implemented and build-green. The Phase 4 Prisma schema validates, but the local Prisma migration could not be generated/applied because the schema engine failed against the local PostgreSQL connection; see `docs/ai-handoff/08-database-notes.md`.
+> Estado atual: MVP funcional em evolucao, com setup local, imagens Docker de producao e publicacao automatica via GitHub Actions.
 
----
+## O que ja existe
 
-## 🛠️ The Tech Stack
+| Area | Estado | Destaques |
+| --- | --- | --- |
+| Autenticacao e RBAC | Implementado | Setup inicial, login JWT, perfis `OWNER`, `ADMIN`, `FINANCIAL`, `TECHNICIAN`, `READ_ONLY` |
+| Clientes | Implementado | Cadastro, contatos, status, detalhes e relacionamento com contratos/chamados |
+| Inventario | Implementado | Ativos, atribuicoes, dados sensiveis criptografados e auditoria |
+| Chamados | Implementado | SLA, comentarios, apontamento de tempo, categorias e politicas configuraveis |
+| Contratos | Implementado | Itens recorrentes, historico, cotas e base para agenda financeira |
+| Faturas | Implementado | Itens editaveis antes da emissao, custos internos, preview A4 e PDF |
+| Orcamentos | Implementado | Servicos, materiais, custo/venda, status, preview e PDF |
+| Ordens de servico | Implementado | Fluxo operacional, responsavel, agenda, itens e PDF |
+| Documentos | Implementado | Central com upload manual, MinIO/S3, filtros e downloads |
+| Webhooks | Implementado | Eventos assinados, disparo por filas e gatilhos configuraveis |
+| Deploy | Implementado | Dockerfile multi-target, Compose de producao, Caddy, NGINX Proxy Manager e GHCR |
 
-- **Monorepo & Task Orchestration**: `pnpm workspaces` + [Turborepo](https://turbo.build/)
-- **Frontend**: [Next.js 14 (App Router)](https://nextjs.org/) + TypeScript + Tailwind CSS + Vanilla CSS Layouts
-- **Backend API**: [NestJS](https://nestjs.com/) Modular Monolith (Fastify Adapter)
-- **Database ORM**: PostgreSQL + [Prisma](https://www.prisma.io/)
-- **Background Jobs & Queues**: Redis + [BullMQ](https://bullmq.io/)
-- **Immutable PDF Generator**: Playwright / Chromium (isolated worker thread)
-- **Object Storage**: MinIO / S3-compatible attachment storage
-- **Automation / Integrations**: HMAC Signed Webhooks for n8n
+## Arquitetura
 
----
+```mermaid
+flowchart LR
+  Web["apps/web<br/>Next.js"] --> API["apps/api<br/>NestJS Fastify"]
+  API --> DB[("PostgreSQL<br/>Prisma")]
+  API --> Redis[("Redis<br/>BullMQ")]
+  API --> S3[("MinIO / S3<br/>Documentos")]
+  Worker["apps/worker<br/>PDF + jobs"] --> Redis
+  Worker --> DB
+  Worker --> S3
+  API --> Webhooks["n8n / HTTP webhooks"]
+```
 
-## 📁 Repository Structure
+## Monorepo
 
 ```txt
 peanutos/
-├── apps/
-│   ├── web/           # Next.js Frontend Admin Panel (App Router) [Port 3000]
-│   ├── api/           # NestJS Fastify Modular Monolith Backend API [Port 3001]
-│   └── worker/        # BullMQ isolated Background Queue Worker [Port 3002]
-├── packages/
-│   ├── db/            # Prisma Schema, relational models, and mock seeding
-│   ├── ui/            # Shared Design System React UI Components
-│   ├── types/         # Domain TypeScript types shared across apps & packages
-│   ├── validators/    # Shared Zod validation schemas for forms & API DTOs
-│   ├── documents/     # Playwright HTML templates for print-ready PDFs
-│   ├── utils/         # Encryption stubs and formatting helpers
-│   └── config/        # Shared ESLint/Prettier/TypeScript configurations
-├── infra/
-│   ├── docker/        # Local Docker Compose setup (Postgres, Redis, MinIO)
-│   └── nginx/         # Local Reverse Proxy specs for local domains
-└── docs/
-    ├── architecture/  # Architectural design sheets and data flows
-    └── ai-handoff/    # Protocol folder for multi-agent coordination
+|-- apps/
+|   |-- web/              # Next.js dashboard
+|   |-- api/              # NestJS modular monolith
+|   `-- worker/           # BullMQ, PDF, SLA, webhooks
+|-- packages/
+|   |-- db/               # Prisma schema, migrations, seed
+|   |-- documents/        # Templates HTML/A4 e renderizacao PDF
+|   |-- types/            # Tipos compartilhados
+|   |-- ui/               # Componentes React compartilhados
+|   |-- utils/            # Formatadores e criptografia
+|   `-- validators/       # Schemas Zod
+|-- infra/
+|   |-- docker/           # Compose local/producao e Dockerfile
+|   |-- caddy/            # Reverse proxy TLS para dominio proprio
+|   `-- nginx/            # Referencia local antiga
+`-- docs/
+    |-- deployment/       # Guias de deploy
+    `-- architecture/     # Notas de arquitetura
 ```
 
----
+## Stack
 
-## 🚦 Features & Roadmap
+| Camada | Tecnologia |
+| --- | --- |
+| Frontend | Next.js 14, React 18, Tailwind CSS |
+| Backend | NestJS 10, Fastify |
+| Banco | PostgreSQL 16, Prisma 5 |
+| Filas | Redis 7, BullMQ |
+| PDFs | Playwright Chromium |
+| Storage | MinIO ou qualquer S3 compativel |
+| Monorepo | pnpm workspaces, Turborepo |
+| Deploy | Docker, GHCR, Caddy ou NGINX Proxy Manager |
 
-### Implemented Modules
+## Comecar localmente
 
-#### Foundation (Phase 0)
-- [x] Monorepo & workspaces setup with `pnpm workspaces` & `turbo.json`.
-- [x] Shared packages configured (`@peanut/db`, `@peanut/ui`, `@peanut/types`, `@peanut/validators`, `@peanut/documents`, `@peanut/utils`).
-- [x] Initial relational PostgreSQL database schema with logical `workspaceId` column for future tenant-isolation.
-- [x] Docker Compose environment for local DB dependency orchestrations.
-- [x] NestJS + Fastify base controller and Next.js Landing page importing shared packages successfully.
+Pre-requisitos:
 
-#### Authentication & Client Management (Phase 1)
-- [x] Stateless JWT token-based Session Authentication.
-- [x] Unified Role-Based Access Controls (RBAC) with guards supporting `READ_ONLY`, `FINANCIAL`, `TECHNICIAN`, `ADMIN`, and `OWNER` roles.
-- [x] Scoped logical tenancy (`workspaceId`) on all database queries.
-- [x] Safe workspace User CRUD with deactivation safeguards for `OWNER` accounts.
-- [x] Customers CRUD with multi-field search, pagination, and status badge filters.
-- [x] Client Contacts CRUD with validation checks and single-primary contact toggling limits.
-- [x] Beautiful dark glassmorphic Next.js pages: `/login`, `/dashboard`, `/dashboard/clients`, `/dashboard/clients/new`, `/dashboard/clients/[id]` detail tabs.
+| Ferramenta | Versao sugerida |
+| --- | --- |
+| Node.js | 20 LTS |
+| pnpm | 9.1.1 |
+| Docker Desktop | Atual |
 
-#### Client Inventory & Asset Management (Phase 2)
-- [x] Hardware & Software Inventory: Notebooks, Servers, Routers, Printers, Firewalls, VMs, Cloud Services, Software Licenses, and VPNs.
-- [x] Registry of Client Users: isolations, status toggles, and equipment assignments.
-- [x] Secure symmetric envelope cryptography (`AES-256-GCM`) via `@peanut/utils` and environment variables validations.
-- [x] Internal technical comments board rejecting plain text passwords.
-- [x] Full visual history logs for hardware life-cycles (creation, specs edits, assignments, credential reveals).
-- [x] Audited click-to-reveal credentials overlay for technical operators, leaving no credentials in local storage/session or logs.
-- [x] Sleek, responsive Next.js technical sheets: `/dashboard/inventory`, `/dashboard/clients/[id]/users`, `/dashboard/clients/[id]/inventory`, and detailed `/dashboard/clients/[id]/assets/[assetId]` spec views.
+```powershell
+cd C:\Github\peanutos
+cp .env.example .env
+pnpm install
+docker compose -f infra\docker\docker-compose.yml up -d
+pnpm db:generate
+pnpm db:migrate
+pnpm dev
+```
 
-#### Helpdesk, Ticketing & SLA Foundation (Phase 3)
-- [x] Incidents board `/dashboard/tickets` with advanced search, page paginators, client/priority/technician dropdown filters, and SLA remaining timers.
-- [x] Creation forms `/dashboard/tickets/new` loading cascading contacts, users, and assets dynamically based on Client selection, backed by client-side Zod validators.
-- [x] Split detailed panel `/dashboard/tickets/[ticketId]` mapping technical descriptions, communications timeline (Padlock notes vs. public chat), working time logs, re-assignment controls, and state transitions.
-- [x] Centralized ticket status state machines protecting ticket lifecycles against invalid status updates.
-- [x] Automatic SLA Policy calculations computing response/resolution deadlines using fallback approved policy hours.
-- [x] Plaintext password checker rejecting un-audited credentials in ticket comments case-insensitively.
-- [x] Time logging tracking faturable working hours with start/end duration positive checks.
-- [x] BullMQ background SLA worker sweeping unresolved tickets and logging breach warnings.
-- [x] Client tickets view `/dashboard/clients/[id]/tickets` scoping list under the client detail tab.
+URLs locais:
 
-### Planned Modules (Next Phases)
-- [x] **Phase 4**: Contracts, quota validations, billing schedule foundation, monthly MRR financials dashboard, and background billing scheduler worker.
-- [ ] **Phase 5**: Quotes, invoices, and PDF foundation.
-- [ ] **Phase 6**: Outbox Event dispatcher and secure HMAC signed webhooks to n8n.
+| Servico | URL |
+| --- | --- |
+| Web | http://localhost:3000 |
+| API | http://localhost:3001/api/v1 |
+| MinIO Console | http://localhost:9001 |
 
----
+> [!TIP]
+> Em banco zerado, o app redireciona para `/setup` para criar o primeiro workspace e usuario administrador.
 
-## 💻 Local Development Setup
+## Comandos uteis
 
-### Prerequisites
-- Node.js >= 18.0.0
-- pnpm >= 9.1.1
-- Docker Desktop (for local DB dependencies)
+| Comando | Uso |
+| --- | --- |
+| `pnpm dev` | Sobe web, API, worker e packages em watch mode |
+| `pnpm build` | Build completo do monorepo |
+| `pnpm db:generate` | Gera Prisma Client |
+| `pnpm db:migrate` | Aplica migrations em desenvolvimento |
+| `pnpm db:migrate:deploy` | Aplica migrations em producao |
+| `pnpm db:seed` | Popula dados ficticios de desenvolvimento |
+| `docker compose -f infra\docker\docker-compose.yml up -d` | Sobe Postgres, Redis e MinIO locais |
+| `docker compose -f infra\docker\docker-compose.yml down -v` | Zera banco, Redis e MinIO locais |
 
-### First Access — Bootstrap Setup
+## Deploy online
 
-When the database has no users, the application automatically presents the setup wizard at **`/setup`**.
+O projeto ja inclui:
 
-1. Access `http://localhost:3000` — you will be redirected to `/setup`.
-2. Fill in the workspace name, administrator name, e-mail and password.
-3. After submission you will be redirected to `/login`.
-4. Log in with the credentials you just created.
+| Arquivo | Funcao |
+| --- | --- |
+| [`infra/docker/Dockerfile`](infra/docker/Dockerfile) | Dockerfile multi-target para `web`, `api`, `worker` e `migrator` |
+| [`infra/docker/docker-compose.production.yml`](infra/docker/docker-compose.production.yml) | Stack self-hosted com app, Postgres, Redis, MinIO e Caddy |
+| [`infra/docker/docker-compose.npm.yml`](infra/docker/docker-compose.npm.yml) | Override para NGINX Proxy Manager, sem publicar Caddy |
+| [`infra/caddy/Caddyfile`](infra/caddy/Caddyfile) | TLS automatico e proxy por dominio |
+| [`.github/workflows/publish-images.yml`](.github/workflows/publish-images.yml) | Publicacao automatica no GHCR com path filtering |
+| [`.env.production.example`](.env.production.example) | Template de variaveis de producao |
+| [`docs/deployment/production-docker.md`](docs/deployment/production-docker.md) | Guia completo de deploy |
+
+Resumo do fluxo:
+
+```mermaid
+sequenceDiagram
+  participant Dev as Push
+  participant GH as GitHub Actions
+  participant Reg as GHCR
+  participant VPS as Docker Server
+  Dev->>GH: altera web/api/worker/db
+  GH->>GH: detecta paths afetados
+  GH->>Reg: publica somente imagens necessarias
+  VPS->>Reg: docker compose pull
+  VPS->>VPS: migrator aplica Prisma migrations
+  VPS->>VPS: app sobe atras do Caddy ou NPM
+```
+
+Leia o guia: [Deploy de producao com Docker](docs/deployment/production-docker.md).
+
+## Variaveis principais
+
+| Grupo | Variaveis |
+| --- | --- |
+| Branding | `NEXT_PUBLIC_BRAND_NAME`, `NEXT_PUBLIC_COMPANY_NAME`, `NEXT_PUBLIC_SUPPORT_EMAIL` |
+| URLs | `NEXT_PUBLIC_WEB_URL`, `NEXT_PUBLIC_API_URL`, `CORS_ORIGIN` |
+| Banco | `DATABASE_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
+| Cache/Fila | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` |
+| Seguranca | `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `APP_ENCRYPTION_KEY` |
+| Storage | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` |
+| Worker | `PDF_MAX_CONCURRENCY`, `BILLING_SCHEDULE_CRON`, `WEBHOOK_SCHEDULER_TIMEZONE` |
+
+## Seguranca
 
 > [!IMPORTANT]
-> The `/setup` route and its API endpoint (`POST /api/v1/setup/admin`) are blocked as soon as the first user exists. There is no admin bypass or fallback credentials built into the application.
-
-### Optional: Dev Seed (fictive data only)
-
-For local development with demo data, run:
-
-```bash
-pnpm db:seed
-```
-
-This populates the database with fictional clients, assets, tickets, and a dev-only administrator (`admin@example.com`). The seeded password is intentionally weak and is **strictly for local development**.
+> Nunca versionar `.env`, senhas, tokens, chaves reais, dados de clientes ou PDFs reais.
 
 > [!WARNING]
-> **CRITICAL SECURITY NOTE**: Seed data is strictly for local homologation. **NEVER** run `pnpm db:seed` in a live or production environment. The seed credentials must never be used as production access.
+> `pnpm db:seed` e apenas para desenvolvimento. Nao rode seed em producao.
 
-### Quick Start
-1. **Clone the repository and go to the root**:
-   ```bash
-   cd C:\Github\peanutos
-   ```
+Boas praticas do projeto:
 
-2. **Copy the Environment variables template**:
-   ```bash
-   cp .env.example .env
-   ```
+- White-label: usar variaveis de ambiente e configuracoes de workspace para marca.
+- RBAC: preservar verificacoes de perfil em APIs e telas sensiveis.
+- Auditoria: registrar acoes relevantes, principalmente dados sensiveis, documentos e status financeiros.
+- Documentos: PDFs gerados devem ser imutaveis e versionados no storage.
 
-3. **Generate your local 32-byte encryption key**:
-   Generate a secure, random key using:
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-   ```
-   Copy the generated base64 string and paste it into the `APP_ENCRYPTION_KEY="..."` variable in your newly created local `.env` file.
+## Links internos
 
-4. **Install all monorepo dependencies**:
-   ```bash
-   pnpm install
-   ```
+| Documento | Link |
+| --- | --- |
+| Arquitetura | [`docs/architecture/overview.md`](docs/architecture/overview.md) |
+| Deploy Docker | [`docs/deployment/production-docker.md`](docs/deployment/production-docker.md) |
+| Handoff tecnico | [`docs/ai-handoff/`](docs/ai-handoff/) |
+| Compose local | [`infra/docker/docker-compose.yml`](infra/docker/docker-compose.yml) |
+| Compose producao | [`infra/docker/docker-compose.production.yml`](infra/docker/docker-compose.production.yml) |
+| Compose NPM | [`infra/docker/docker-compose.npm.yml`](infra/docker/docker-compose.npm.yml) |
 
-5. **Spin up local databases and storage**:
-   ```bash
-   docker-compose -f infra/docker/docker-compose.yml up -d
-   ```
+## Licenca
 
-6. **Initialize your database schema and seed mock data**:
-   ```bash
-   pnpm db:generate
-   pnpm db:migrate
-   pnpm db:seed
-   ```
-
-7. **Launch all workspaces in hot-reload development mode**:
-   ```bash
-   pnpm dev
-   ```
-   - Frontend Panel: `http://localhost:3000`
-   - Backend API: `http://localhost:3001/api/v1`
-
----
-
-## 🛡️ Security Guidelines for Contributors (including AIs)
-1. **White-Label First**: Never hardcode "Borges OS" or specific company names in layout code. Use context variables or `process.env.NEXT_PUBLIC_BRAND_NAME`.
-2. **No Real Data**: The repository is prepared to go public on GitHub. Never commit real CPF, CNPJ, phone numbers, client data, or SMTP credentials.
-3. **No improvising Cryptography**: Always use the stub helpers inside `@peanut/utils` for sensitive asset strings, preparing for robust application-level envelope encryption in Phase 2.
-4. **Never commit `.env` files**: All secret configurations must remain local-only. Keep `.env.example` updated with mock parameters.
+Projeto privado em desenvolvimento.

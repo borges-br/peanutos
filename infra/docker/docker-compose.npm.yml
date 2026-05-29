@@ -1,0 +1,35 @@
+# NGINX Proxy Manager mode.
+#
+# Use this override when another container already owns ports 80/443 and TLS.
+# It keeps Peanut OS internal services private, disables the bundled Caddy
+# service unless explicitly profiled, and attaches web/api to the external
+# Docker network where NGINX Proxy Manager can reach them by service name.
+#
+# Expected NPM proxy hosts:
+# - Main host:         http://peanut-web:3000
+# - Custom /api/v1:   http://peanut-api:3001
+
+services:
+  caddy:
+    # The profile name is intentionally not used by the documented NPM command.
+    # This prevents Caddy from starting and conflicting with NPM on 80/443.
+    profiles:
+      - caddy-disabled
+
+  web:
+    networks:
+      - default
+      - npm_proxy
+
+  api:
+    networks:
+      - default
+      - npm_proxy
+
+networks:
+  npm_proxy:
+    # Create this network once and connect the NPM container to it:
+    # docker network create npm_proxy
+    # docker network connect npm_proxy <nginx-proxy-manager-container>
+    external: true
+    name: ${NPM_NETWORK:-npm_proxy}

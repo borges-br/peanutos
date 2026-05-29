@@ -16,6 +16,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "db:generate": "pnpm --filter @peanut/db generate",
     "db:migrate": "pnpm --filter @peanut/db migrate",
+    "db:migrate:deploy": "pnpm --filter @peanut/db migrate:deploy",
     "db:seed": "pnpm --filter @peanut/db seed"
   },
   "devDependencies": {

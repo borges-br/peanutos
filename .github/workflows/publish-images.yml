@@ -1,0 +1,193 @@
+name: Publish Docker images
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Image to build
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - web
+          - api
+          - worker
+          - migrator
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      any: ${{ steps.matrix.outputs.any }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            common:
+              - "infra/docker/Dockerfile"
+              - ".github/workflows/publish-images.yml"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
+              - "turbo.json"
+              - "tsconfig.base.json"
+              - "packages/config/**"
+            web:
+              - "apps/web/**"
+              - "packages/ui/**"
+              - "packages/types/**"
+              - "packages/utils/**"
+              - "packages/validators/**"
+            api:
+              - "apps/api/**"
+              - "packages/db/**"
+              - "packages/documents/**"
+              - "packages/types/**"
+              - "packages/utils/**"
+              - "packages/validators/**"
+            worker:
+              - "apps/worker/**"
+              - "packages/db/**"
+              - "packages/documents/**"
+              - "packages/types/**"
+              - "packages/utils/**"
+            migrator:
+              - "packages/db/**"
+
+      - name: Build matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          requested="${{ inputs.service || 'auto' }}"
+          common="${{ steps.filter.outputs.common }}"
+          web="${{ steps.filter.outputs.web }}"
+          api="${{ steps.filter.outputs.api }}"
+          worker="${{ steps.filter.outputs.worker }}"
+          migrator="${{ steps.filter.outputs.migrator }}"
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            case "$requested" in
+              all) web=true; api=true; worker=true; migrator=true ;;
+              web) web=true; api=false; worker=false; migrator=false ;;
+              api) web=false; api=true; worker=false; migrator=false ;;
+              worker) web=false; api=false; worker=true; migrator=false ;;
+              migrator) web=false; api=false; worker=false; migrator=true ;;
+            esac
+          elif [[ "$common" == "true" ]]; then
+            web=true
+            api=true
+            worker=true
+            migrator=true
+          fi
+
+          items=()
+          add() {
+            items+=("{\"service\":\"$1\",\"target\":\"$2\",\"image\":\"$3\"}")
+          }
+
+          [[ "$web" == "true" ]] && add "web" "web" "peanut-web"
+          [[ "$api" == "true" ]] && add "api" "api" "peanut-api"
+          [[ "$worker" == "true" ]] && add "worker" "worker" "peanut-worker"
+          [[ "$migrator" == "true" ]] && add "migrator" "migrator" "peanut-migrator"
+
+          if [[ ${#items[@]} -eq 0 ]]; then
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          else
+            joined=$(IFS=,; echo "${items[*]}")
+            echo "matrix={\"include\":[${joined}]}" >> "$GITHUB_OUTPUT"
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build ${{ matrix.service }}
+    needs: changes
+    if: needs.changes.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Normalize image namespace
+        shell: bash
+        run: |
+          echo "IMAGE_NAMESPACE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+          labels: |
+            org.opencontainers.image.title=Peanut OS ${{ matrix.service }}
+            org.opencontainers.image.description=Peanut OS ${{ matrix.service }} container image
+
+      - name: Build and optionally push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          target: ${{ matrix.target }}
+          push: ${{ github.event_name != 'pull_request' }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || '/api/v1' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### Peanut OS image"
+            echo ""
+            echo "- Service: \`${{ matrix.service }}\`"
+            echo "- Target: \`${{ matrix.target }}\`"
+            echo "- Image: \`${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}\`"
+            echo "- Push: \`${{ github.event_name != 'pull_request' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
