@@ -254,6 +254,8 @@ const translations = {
     document: "DOCUMENTO",
     issueDate: "Emissão",
     dueDate: "Vencimento",
+    validUntil: "Validade",
+    scheduledFor: "Agendamento",
     recipient: "Destinatário / Cliente",
     status: "Status do Documento",
     itemDescription: "Item / Descrição",
@@ -262,6 +264,9 @@ const translations = {
     unitPrice: "Valor Unit.",
     total: "Total",
     detailing: "Detalhamento de Serviços e Recursos Cobrados",
+    quoteDetailing: "Escopo Comercial e Itens da Proposta",
+    serviceOrderDetailing: "Execução Técnica, Materiais e Atividades",
+    reportDetailing: "Constatações e Recomendações",
     subtotalServices: "Subtotal Serviços",
     subtotalMaterials: "Subtotal Materiais",
     discount: "Desconto",
@@ -286,6 +291,12 @@ const translations = {
     paid: "Liquidado",
     overdue: "Atrasado",
     cancelled: "Cancelado",
+    sent: "Enviado",
+    accepted: "Aprovado",
+    rejected: "Recusado",
+    scheduled: "Agendada",
+    inProgress: "Em execução",
+    completed: "Concluída",
     serviceType: "Serviço Prestado",
     materialType: "Material / Produto",
   },
@@ -298,6 +309,8 @@ const translations = {
     document: "DOCUMENT",
     issueDate: "Issued",
     dueDate: "Due Date",
+    validUntil: "Valid Until",
+    scheduledFor: "Scheduled For",
     recipient: "Recipient / Client",
     status: "Document Status",
     itemDescription: "Item / Description",
@@ -306,6 +319,9 @@ const translations = {
     unitPrice: "Unit Price",
     total: "Total",
     detailing: "Detailed Services and Materials Billed",
+    quoteDetailing: "Commercial Scope and Proposal Items",
+    serviceOrderDetailing: "Technical Execution, Materials and Activities",
+    reportDetailing: "Findings and Recommendations",
     subtotalServices: "Services Subtotal",
     subtotalMaterials: "Materials Subtotal",
     discount: "Discount",
@@ -330,6 +346,12 @@ const translations = {
     paid: "Paid",
     overdue: "Overdue",
     cancelled: "Cancelled",
+    sent: "Sent",
+    accepted: "Accepted",
+    rejected: "Rejected",
+    scheduled: "Scheduled",
+    inProgress: "In progress",
+    completed: "Completed",
     serviceType: "Service Rendered",
     materialType: "Material / Product",
   }
@@ -400,6 +422,12 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
   else if (rawStatus === 'DRAFT' || rawStatus === 'Rascunho') statusLabel = t.draft;
   else if (rawStatus === 'ISSUED' || rawStatus === 'Pendente') statusLabel = t.issued;
   else if (rawStatus === 'CANCELLED' || rawStatus === 'Cancelado') statusLabel = t.cancelled;
+  else if (rawStatus === 'SENT') statusLabel = t.sent;
+  else if (rawStatus === 'ACCEPTED') statusLabel = t.accepted;
+  else if (rawStatus === 'REJECTED') statusLabel = t.rejected;
+  else if (rawStatus === 'SCHEDULED') statusLabel = t.scheduled;
+  else if (rawStatus === 'IN_PROGRESS') statusLabel = t.inProgress;
+  else if (rawStatus === 'COMPLETED') statusLabel = t.completed;
 
   // Document labels based on type
   let docTypeLabel = t.document;
@@ -410,6 +438,20 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
   else if (documentType === 'REPORT') docTypeLabel = t.report;
 
   const customTitle = data.title ? escapeHtml(data.title) : docTypeLabel;
+  const secondaryDateLabel =
+    documentType === 'QUOTE'
+      ? t.validUntil
+      : documentType === 'SERVICE_ORDER'
+        ? t.scheduledFor
+        : t.dueDate;
+  const detailTitle =
+    documentType === 'QUOTE'
+      ? t.quoteDetailing
+      : documentType === 'SERVICE_ORDER'
+        ? t.serviceOrderDetailing
+        : documentType === 'REPORT'
+          ? t.reportDetailing
+          : t.detailing;
 
   // Build items rows HTML (Toggled display of Item Type via showItemTypeLabel)
   const showItemTypeLabel = templateSettings.settings?.showItemTypeLabel ?? false;
@@ -444,7 +486,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
               <span style="font-size: 14pt; font-weight: bold; color: #0f172a; display: block;">#${docNumber}</span>
               <div style="font-size: 8pt; color: #64748b; margin-top: 4px; line-height: 1.3;">
                 ${t.issueDate}: ${issueDate}<br/>
-                ${t.dueDate}: <strong style="color: #0f172a;">${dueDate}</strong>
+                ${secondaryDateLabel}: <strong style="color: #0f172a;">${dueDate}</strong>
               </div>
             </td>
           </tr>
@@ -520,7 +562,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     itemsTable: () => `
       <div class="block-container block-items-table" style="margin-bottom: 25px;">
         <div style="font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 8px;">
-          ${t.detailing}
+          ${detailTitle}
         </div>
         <table style="width: 100%; border-collapse: collapse; font-family: monospace; font-size: 9pt;">
           <thead>

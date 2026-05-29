@@ -10,6 +10,8 @@ import { InventoryModule } from "./inventory/inventory.module";
 import { TicketsModule } from "./tickets/tickets.module";
 import { ContractsModule } from "./contracts/contracts.module";
 import { FinancialsModule } from "./financials/financials.module";
+import { QuotesModule } from "./quotes/quotes.module";
+import { ServiceOrdersModule } from "./service-orders/service-orders.module";
 import { InvoicesModule } from "./invoices/invoices.module";
 import { SettingsModule } from "./settings/settings.module";
 import { DocumentsModule } from "./documents/documents.module";
@@ -30,6 +32,8 @@ import { DocumentTemplatesModule } from "./document-templates/document-templates
     TicketsModule,
     ContractsModule,
     FinancialsModule,
+    QuotesModule,
+    ServiceOrdersModule,
     InvoicesModule,
     SettingsModule,
     DocumentsModule,

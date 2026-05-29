@@ -84,6 +84,7 @@ export class ClientsController {
     if (body.phone) data.phone = body.phone;
     if (body.website !== undefined) data.website = body.website;
     if (body.notes !== undefined) data.notes = body.notes;
+    if (body.slaPolicyId !== undefined) data.slaPolicyId = body.slaPolicyId;
 
     const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
@@ -91,6 +92,27 @@ export class ClientsController {
     return this.clientsService.update(
       id,
       data,
+      user.workspaceId,
+      user.id,
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  @Roles("OWNER", "ADMIN", "TECHNICIAN")
+  @Patch(":id/sla-policy")
+  async updateSlaPolicy(
+    @Param("id") id: string,
+    @Body() body: { slaPolicyId?: string | null },
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+
+    return this.clientsService.updateSlaPolicy(
+      id,
+      body.slaPolicyId || null,
       user.workspaceId,
       user.id,
       ipAddress,

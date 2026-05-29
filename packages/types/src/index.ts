@@ -75,7 +75,7 @@ export type TicketHistoryEvent =
   | 'SLA_WARNING'
   | 'SLA_BREACHED';
 
-export type DocumentType = 'QUOTE' | 'INVOICE' | 'TICKET_CLOSURE' | 'CONTRACT' | 'REPORT';
+export type DocumentType = 'QUOTE' | 'INVOICE' | 'TICKET_CLOSURE' | 'CONTRACT' | 'REPORT' | 'SERVICE_ORDER';
 
 export type ContractStatus = 'DRAFT' | 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'CANCELLED' | 'TERMINATED';
 export type ContractType = 'RECURRING_SUPPORT' | 'PROJECT' | 'ON_DEMAND' | 'HYBRID';

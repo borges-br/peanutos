@@ -41,6 +41,20 @@ export default function DocumentosPage() {
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Manual upload states
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadDocumentType, setUploadDocumentType] = useState('CONTRACT');
+  const [uploadEntityType, setUploadEntityType] = useState('WORKSPACE');
+  const [uploadEntityId, setUploadEntityId] = useState('');
+  const [uploadVisibility, setUploadVisibility] = useState('PRIVATE');
+  const [uploadDisplayName, setUploadDisplayName] = useState('');
+  const [uploadNotes, setUploadNotes] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [clients, setClients] = useState<any[]>([]);
+
   const handleDownload = async (doc: any) => {
     if (downloadingId || printingId) return;
     setActionError(null);
@@ -98,6 +112,69 @@ export default function DocumentosPage() {
       setActionError(err.message || t.documents.errors.printFailed);
     } finally {
       setPrintingId(null);
+    }
+  };
+
+  const fileToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        resolve(typeof result === 'string' ? result : '');
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+  const resetUploadForm = () => {
+    setUploadFile(null);
+    setUploadDocumentType('CONTRACT');
+    setUploadEntityType('WORKSPACE');
+    setUploadEntityId('');
+    setUploadVisibility('PRIVATE');
+    setUploadDisplayName('');
+    setUploadNotes('');
+    setUploadError(null);
+    setDragActive(false);
+  };
+
+  const handleManualUpload = async () => {
+    if (!uploadFile || uploading) return;
+    if ((uploadDocumentType === 'CONTRACT' || uploadEntityType !== 'WORKSPACE') && !uploadEntityId) {
+      setUploadError('Selecione a entidade vinculada antes de armazenar.');
+      return;
+    }
+
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const data = await fileToBase64(uploadFile);
+      await apiRequest('/documents/upload', {
+        method: 'POST',
+        body: JSON.stringify({
+          documentType: uploadDocumentType,
+          entityType: uploadDocumentType === 'CONTRACT' ? 'CLIENT' : uploadEntityType,
+          entityId:
+            uploadDocumentType === 'CONTRACT'
+              ? uploadEntityId
+              : uploadEntityType === 'WORKSPACE'
+                ? undefined
+                : uploadEntityId,
+          filename: uploadFile.name,
+          mimeType: uploadFile.type || 'application/octet-stream',
+          data,
+          visibility: uploadVisibility,
+          displayName: uploadDisplayName || uploadFile.name,
+          notes: uploadNotes || undefined,
+        }),
+      });
+      setShowUploadModal(false);
+      resetUploadForm();
+      fetchDocuments(1);
+    } catch (err: any) {
+      setUploadError(err.message || 'Falha ao enviar documento.');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -162,6 +239,13 @@ export default function DocumentosPage() {
     }
   }, [selectedDocId]);
 
+  useEffect(() => {
+    if (!showUploadModal || clients.length > 0) return;
+    apiRequest('/clients?limit=100')
+      .then((response: any) => setClients(response.data || response.items || []))
+      .catch(() => setClients([]));
+  }, [showUploadModal, clients.length]);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchDocuments(1);
@@ -225,6 +309,8 @@ export default function DocumentosPage() {
         return <span className="bg-success-container/20 text-success-container border border-success-container/30 px-2 py-0.5 rounded text-[11px] font-semibold">{label}</span>;
       case 'QUOTE':
         return <span className="bg-info-container/20 text-info-container border border-info-container/30 px-2 py-0.5 rounded text-[11px] font-semibold">{label}</span>;
+      case 'SERVICE_ORDER':
+        return <span className="bg-warning/10 text-warning border border-warning/20 px-2 py-0.5 rounded text-[11px] font-semibold">Ordem de Serviço</span>;
       default:
         return <span className="bg-surface-container-high text-on-surface-variant border border-outline-variant/30 px-2 py-0.5 rounded text-[11px] font-semibold">{label}</span>;
     }
@@ -243,7 +329,7 @@ export default function DocumentosPage() {
           </p>
         </div>
         <div className="flex gap-sm">
-          <Button variant="primary" disabled title={t.documents.uploadTooltip}>
+          <Button variant="primary" onClick={() => setShowUploadModal(true)} title={t.documents.uploadTooltip}>
             <span className="material-symbols-outlined text-[16px] mr-1.5">upload</span>
             {t.documents.uploadBtn}
           </Button>
@@ -384,6 +470,7 @@ export default function DocumentosPage() {
               <option value="INVOICE">{t.documents.types.INVOICE}</option>
               <option value="TICKET_CLOSURE">{t.documents.types.TICKET_CLOSURE}</option>
               <option value="CONTRACT">{t.documents.types.CONTRACT}</option>
+              <option value="SERVICE_ORDER">Ordem de Serviço</option>
               <option value="REPORT">{t.documents.types.REPORT}</option>
             </select>
           </div>
@@ -565,16 +652,17 @@ export default function DocumentosPage() {
                             ) : doc.file?.mimeType !== 'application/pdf' ? (
                               <>
                                 <button
-                                  className="material-symbols-outlined text-outline/30 text-[18px] cursor-not-allowed"
-                                  disabled
-                                  title="Download apenas para PDF"
+                                  className={`material-symbols-outlined text-outline hover:text-primary transition-colors text-[18px] disabled:opacity-40 ${downloadingId === doc.id ? 'animate-spin' : ''}`}
+                                  onClick={() => handleDownload(doc)}
+                                  disabled={!!downloadingId || !!printingId}
+                                  title="Baixar arquivo"
                                 >
-                                  download
+                                  {downloadingId === doc.id ? 'sync' : 'download'}
                                 </button>
                                 <button
                                   className="material-symbols-outlined text-outline/30 text-[18px] cursor-not-allowed"
                                   disabled
-                                  title="Impressão apenas para PDF"
+                                  title="Impressão disponível apenas para PDF"
                                 >
                                   print
                                 </button>
@@ -858,10 +946,16 @@ export default function DocumentosPage() {
                       </div>
                     ) : selectedDoc.file?.mimeType !== 'application/pdf' ? (
                       <>
-                        <Button variant="outline" planned title="Apenas arquivos PDF podem ser baixados">
-                          Download
+                        <Button
+                          variant="outline"
+                          loading={downloadingId === selectedDoc.id}
+                          disabled={!!downloadingId || !!printingId}
+                          onClick={() => handleDownload(selectedDoc)}
+                        >
+                          <span className="material-symbols-outlined text-[16px] mr-1">download</span>
+                          Baixar
                         </Button>
-                        <Button variant="outline" planned title="Apenas arquivos PDF podem ser visualizados">
+                        <Button variant="outline" disabled title="Visualização no navegador disponível para PDF">
                           Visualizar
                         </Button>
                       </>
@@ -908,6 +1002,199 @@ export default function DocumentosPage() {
           )}
         </aside>
       </div>
+
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-md">
+          <div className="bg-surface border border-outline-variant rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden">
+            <div className="p-md px-lg border-b border-outline-variant bg-surface-container-high flex items-center justify-between">
+              <h3 className="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-wider">
+                Adicionar documento
+              </h3>
+              <button
+                onClick={() => {
+                  setShowUploadModal(false);
+                  resetUploadForm();
+                }}
+                className="material-symbols-outlined text-outline hover:text-error transition-colors"
+                disabled={uploading}
+              >
+                close
+              </button>
+            </div>
+
+            <div className="p-lg space-y-md">
+              <div
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragActive(false);
+                  const file = event.dataTransfer.files?.[0];
+                  if (file) {
+                    setUploadFile(file);
+                    setUploadDisplayName((prev) => prev || file.name);
+                  }
+                }}
+                className={`border-2 border-dashed rounded-xl p-xl text-center transition-colors ${
+                  dragActive
+                    ? 'border-primary bg-primary/5'
+                    : 'border-outline-variant bg-surface-container/20'
+                }`}
+              >
+                <span className="material-symbols-outlined text-4xl text-primary mb-sm">upload_file</span>
+                <p className="font-semibold text-on-surface">
+                  {uploadFile ? uploadFile.name : 'Arraste o arquivo aqui'}
+                </p>
+                <p className="text-[12px] text-on-surface-variant mt-xs">
+                  PDF, imagens, DOCX, XLSX e texto até 25 MB.
+                </p>
+                <label className="inline-flex mt-md">
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        setUploadFile(file);
+                        setUploadDisplayName((prev) => prev || file.name);
+                      }
+                    }}
+                  />
+                  <span className="inline-flex items-center justify-center font-medium text-body-sm transition-all rounded-lg select-none px-4 py-1.5 bg-surface-container-highest text-on-surface hover:bg-outline-variant border border-outline-variant cursor-pointer">
+                    Escolher arquivo
+                  </span>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                <label className="flex flex-col gap-xs text-[12px] text-on-surface-variant font-semibold">
+                  Tipo do documento
+                  <select
+                    value={uploadDocumentType}
+                    onChange={(event) => {
+                      setUploadDocumentType(event.target.value);
+                      if (event.target.value === 'CONTRACT') {
+                        setUploadEntityType('CLIENT');
+                      }
+                    }}
+                    className="bg-background border border-outline-variant rounded px-sm py-2 text-on-surface"
+                    disabled={uploading}
+                  >
+                    <option value="CONTRACT">Contrato / termo de cliente</option>
+                    <option value="REPORT">Relatório técnico</option>
+                    <option value="SERVICE_ORDER">Ordem de serviço</option>
+                    <option value="QUOTE">Orçamento</option>
+                    <option value="INVOICE">Fatura</option>
+                    <option value="TICKET_CLOSURE">Fechamento de chamado</option>
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-xs text-[12px] text-on-surface-variant font-semibold">
+                  Visibilidade
+                  <select
+                    value={uploadVisibility}
+                    onChange={(event) => setUploadVisibility(event.target.value)}
+                    className="bg-background border border-outline-variant rounded px-sm py-2 text-on-surface"
+                    disabled={uploading}
+                  >
+                    <option value="PRIVATE">Privado</option>
+                    <option value="PUBLIC">Público</option>
+                  </select>
+                </label>
+
+                {uploadDocumentType !== 'CONTRACT' && (
+                  <label className="flex flex-col gap-xs text-[12px] text-on-surface-variant font-semibold">
+                    Vincular a
+                    <select
+                      value={uploadEntityType}
+                      onChange={(event) => {
+                        setUploadEntityType(event.target.value);
+                        setUploadEntityId('');
+                      }}
+                      className="bg-background border border-outline-variant rounded px-sm py-2 text-on-surface"
+                      disabled={uploading}
+                    >
+                      <option value="WORKSPACE">Workspace / geral</option>
+                      <option value="CLIENT">Cliente</option>
+                    </select>
+                  </label>
+                )}
+
+                {(uploadDocumentType === 'CONTRACT' || uploadEntityType === 'CLIENT') && (
+                  <label className="flex flex-col gap-xs text-[12px] text-on-surface-variant font-semibold">
+                    Cliente
+                    <select
+                      value={uploadEntityId}
+                      onChange={(event) => setUploadEntityId(event.target.value)}
+                      className="bg-background border border-outline-variant rounded px-sm py-2 text-on-surface"
+                      disabled={uploading}
+                    >
+                      <option value="">Selecione um cliente...</option>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.tradeName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                <label className="flex flex-col gap-xs text-[12px] text-on-surface-variant font-semibold md:col-span-2">
+                  Nome de exibição
+                  <input
+                    value={uploadDisplayName}
+                    onChange={(event) => setUploadDisplayName(event.target.value)}
+                    className="bg-background border border-outline-variant rounded px-sm py-2 text-on-surface"
+                    disabled={uploading}
+                    placeholder="Ex: Contrato Borges TI assinado"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-xs text-[12px] text-on-surface-variant font-semibold md:col-span-2">
+                  Observações
+                  <textarea
+                    value={uploadNotes}
+                    onChange={(event) => setUploadNotes(event.target.value)}
+                    className="bg-background border border-outline-variant rounded px-sm py-2 text-on-surface resize-y"
+                    rows={3}
+                    disabled={uploading}
+                  />
+                </label>
+              </div>
+
+              {uploadError && (
+                <div className="bg-error/10 border border-error/20 text-error p-sm rounded text-xs">
+                  {uploadError}
+                </div>
+              )}
+            </div>
+
+            <div className="p-md px-lg border-t border-outline-variant bg-surface-container-low flex justify-end gap-sm">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowUploadModal(false);
+                  resetUploadForm();
+                }}
+                disabled={uploading}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleManualUpload}
+                loading={uploading}
+                disabled={!uploadFile || uploading}
+              >
+                Armazenar documento
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Helpful Guidelines */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-lg pt-md">

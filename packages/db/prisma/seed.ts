@@ -262,25 +262,39 @@ async function main() {
   const slaPolicies: Record<string, string> = {};
   for (const prio of priorities) {
     const config = slaConfigs[prio];
-    const policy = await prisma.slaPolicy.upsert({
+    const existingPolicy = await prisma.slaPolicy.findFirst({
       where: {
-        workspaceId_priority: {
-          workspaceId: workspace.id,
-          priority: prio,
-        },
-      },
-      update: {},
-      create: {
         workspaceId: workspace.id,
-        name: config.name,
         priority: prio,
-        firstResponseMinutes: config.response,
-        startMinutes: config.start,
-        resolutionMinutes: config.resolution,
-        businessHoursOnly: false,
-        active: true,
+        isDefault: true,
       },
     });
+    const policy = existingPolicy
+      ? await prisma.slaPolicy.update({
+          where: { id: existingPolicy.id },
+          data: {
+            name: config.name,
+            firstResponseMinutes: config.response,
+            startMinutes: config.start,
+            resolutionMinutes: config.resolution,
+            businessHoursOnly: false,
+            isDefault: true,
+            active: true,
+          },
+        })
+      : await prisma.slaPolicy.create({
+          data: {
+            workspaceId: workspace.id,
+            name: config.name,
+            priority: prio,
+            firstResponseMinutes: config.response,
+            startMinutes: config.start,
+            resolutionMinutes: config.resolution,
+            businessHoursOnly: false,
+            isDefault: true,
+            active: true,
+          },
+        });
     slaPolicies[prio] = policy.id;
   }
 

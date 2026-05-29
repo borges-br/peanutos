@@ -189,7 +189,7 @@ export default function DashboardOverviewPage() {
 
             <div className="h-[1px] bg-outline-variant my-xs"></div>
 
-            <Button variant="secondary" planned onClick={() => router.push('/dashboard/quotes')} className="w-full justify-start text-left gap-md py-2">
+            <Button variant="secondary" onClick={() => router.push('/dashboard/quotes/new')} className="w-full justify-start text-left gap-md py-2">
               <span className="material-symbols-outlined">request_quote</span>
               <span>{t.navigation.quotes}</span>
             </Button>
@@ -199,7 +199,7 @@ export default function DashboardOverviewPage() {
               <span>{t.navigation.invoices}</span>
             </Button>
 
-            <Button variant="secondary" planned onClick={() => router.push('/dashboard/service-orders')} className="w-full justify-start text-left gap-md py-2">
+            <Button variant="secondary" onClick={() => router.push('/dashboard/service-orders/new')} className="w-full justify-start text-left gap-md py-2">
               <span className="material-symbols-outlined">construction</span>
               <span>{t.navigation.serviceOrders}</span>
             </Button>

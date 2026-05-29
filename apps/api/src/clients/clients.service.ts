@@ -73,6 +73,7 @@ export class ClientsService {
     const client = await prisma.client.findFirst({
       where: { id, workspaceId },
       include: {
+        slaPolicy: true,
         contacts: {
           orderBy: { createdAt: "desc" },
         },
@@ -114,6 +115,7 @@ export class ClientsService {
         phone: input.phone,
         website: input.website || null,
         notes: input.notes || null,
+        slaPolicyId: input.slaPolicyId || null,
         status: "ACTIVE",
       },
     });
@@ -184,6 +186,7 @@ export class ClientsService {
     if (input.phone) data.phone = input.phone;
     if (input.website !== undefined) data.website = input.website || null;
     if (input.notes !== undefined) data.notes = input.notes || null;
+    if (input.slaPolicyId !== undefined) data.slaPolicyId = input.slaPolicyId || null;
 
     const updatedClient = await prisma.client.update({
       where: { id },
@@ -215,6 +218,52 @@ export class ClientsService {
         },
       })
       .catch(() => {});
+
+    return updatedClient;
+  }
+
+  async updateSlaPolicy(
+    id: string,
+    slaPolicyId: string | null,
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const client = await prisma.client.findFirst({
+      where: { id, workspaceId },
+    });
+
+    if (!client) {
+      throw new NotFoundException("Cliente não encontrado");
+    }
+
+    if (slaPolicyId) {
+      const policy = await prisma.slaPolicy.findFirst({
+        where: { id: slaPolicyId, workspaceId, active: true },
+      });
+      if (!policy) {
+        throw new BadRequestException("Política de SLA não encontrada");
+      }
+    }
+
+    const updatedClient = await prisma.client.update({
+      where: { id },
+      data: { slaPolicyId },
+      include: { slaPolicy: true },
+    });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "client.sla_policy_updated",
+      entityType: "CLIENT",
+      entityId: id,
+      before: { slaPolicyId: client.slaPolicyId },
+      after: { slaPolicyId },
+      ipAddress,
+      userAgent,
+    });
 
     return updatedClient;
   }

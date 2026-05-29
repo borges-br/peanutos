@@ -7,13 +7,12 @@ import Card from '../../../components/ui/Card';
 import { apiRequest } from '../../../lib/api';
 import Breadcrumbs from '../../../components/layout/Breadcrumbs';
 
-type DocumentType = 'INVOICE' | 'QUOTE' | 'SERVICE_ORDER' | 'CONTRACT' | 'REPORT';
+type DocumentType = 'INVOICE' | 'QUOTE' | 'SERVICE_ORDER' | 'REPORT';
 
 const DOC_TYPES: { id: DocumentType; label: string }[] = [
   { id: 'INVOICE', label: 'Fatura' },
   { id: 'QUOTE', label: 'Orçamento' },
   { id: 'SERVICE_ORDER', label: 'Ordem de Serviço' },
-  { id: 'CONTRACT', label: 'Contrato' },
   { id: 'REPORT', label: 'Relatório' },
 ];
 
@@ -120,23 +119,6 @@ const MOCK_DATA_MAP: Record<DocumentType, MockData> = {
     paymentInfo: "Técnico responsável: Bruno Souza. OS aprovada pelo gerente no local.",
     terms: "Garantia de 90 dias sobre as peças substituídas e 30 dias sobre a mão de obra.",
     observations: "Backup executado com sucesso em mídia local e sincronizado com nuvem corporativa."
-  },
-  CONTRACT: {
-    documentNumber: "CT-2026-012",
-    dateValue: "25/05/2026",
-    clientName: "Logística Avançada Rápida S.A.",
-    clientDocument: "44.333.222/0001-88",
-    clientEmail: "juridico@rapidolog.com.br",
-    items: [
-      { desc: "Suporte de TI Mensal Platinum - Franquia de 30 Horas/mês", qty: 12, value: 3500.00 },
-      { desc: "Serviço de Monitoramento de Rede e Servidores 24x7", qty: 12, value: 800.00 }
-    ],
-    subtotal: 51600.00,
-    tax: 4128.00,
-    total: 55728.00,
-    paymentInfo: "Pagamento mensal recorrente no valor de R$ 4.300,00 via boleto bancário todo dia 10.",
-    terms: "Vigência mínima de 12 meses. Rescisão sem multa mediante aviso prévio de 30 dias.",
-    observations: "Contrato abrange suporte remoto ilimitado e visitas presençais agendadas em horário comercial."
   },
   REPORT: {
     documentNumber: "RL-2026-004",

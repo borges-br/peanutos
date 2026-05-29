@@ -1,106 +1,148 @@
 'use client';
 
-import React from 'react';
-import { useParams } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { apiBlobRequest, apiRequest } from '../../../../../lib/api';
 import A4PreviewShell from '../../../../../components/ui/A4PreviewShell';
 
-export default function ServiceOrderA4PreviewPage() {
+export default function ServiceOrderPreviewPage() {
   const params = useParams();
+  const router = useRouter();
   const serviceOrderId = params.serviceOrderId as string;
+  const [serviceOrder, setServiceOrder] = useState<any>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [existingDoc, setExistingDoc] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await apiRequest<any>(`/service-orders/${serviceOrderId}`);
+        setServiceOrder(data);
+
+        const token = localStorage.getItem('peanut_token');
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+        const url = `${baseUrl.replace(/\/$/, '')}/service-orders/${serviceOrderId}/preview`;
+        const response = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (response.ok) setPreviewHtml(await response.text());
+
+        const docs = await apiRequest<any>(`/documents?entityType=SERVICE_ORDER&entityId=${serviceOrderId}&limit=1`);
+        setExistingDoc(docs.data?.[0] || null);
+      } catch (err: any) {
+        setError(err.message || 'Falha ao carregar preview.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (serviceOrderId) load();
+  }, [serviceOrderId]);
+
+  async function generatePdf() {
+    if (generating) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const response = await apiRequest<any>(`/documents/service-orders/${serviceOrderId}/generate-pdf`, { method: 'POST' });
+      const interval = window.setInterval(async () => {
+        const status = await apiRequest<any>(`/documents/jobs/${response.jobId}`);
+        if (status.status === 'completed') {
+          window.clearInterval(interval);
+          const docs = await apiRequest<any>(`/documents?entityType=SERVICE_ORDER&entityId=${serviceOrderId}&limit=1`);
+          setExistingDoc(docs.data?.[0] || null);
+          setGenerating(false);
+        } else if (status.status === 'failed') {
+          window.clearInterval(interval);
+          setError(status.failedReason || 'Falha ao gerar PDF.');
+          setGenerating(false);
+        }
+      }, 1500);
+    } catch (err: any) {
+      setError(err.message || 'Falha ao iniciar geração de PDF.');
+      setGenerating(false);
+    }
+  }
+
+  async function downloadPdf() {
+    if (!existingDoc || downloading) return;
+    setDownloading(true);
+    try {
+      const blob = await apiBlobRequest(`/documents/${existingDoc.id}/download`);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = existingDoc.file?.originalFilename || `os-${serviceOrder?.number}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err.message || 'Falha ao baixar PDF.');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  if (loading) return <div className="p-xl text-center text-on-surface-variant">Carregando preview...</div>;
 
   return (
     <A4PreviewShell
-      title="Preview A4 da O.S."
-      subtitle="Visualização do documento de relatório de execução técnica oficial."
+      title="Preview A4 da Ordem de Serviço"
+      subtitle="Documento técnico para execução, aceite e histórico operacional."
       documentType="ORDEM DE SERVIÇO"
-      documentNumber="OS-2026-0043"
-      dateLabel="Execução"
-      dateValue="24/05/2026"
-      clientName="Acme Corporation LTDA"
-      clientDocument="10.432.891/0001-44"
-      clientEmail="suporte@acme.com.br"
-      statusBadge={
-        <span className="text-[9px] bg-green-500/10 border border-green-500/20 text-green-700 px-2 py-0.5 rounded font-bold uppercase">
-          Concluída
-        </span>
-      }
+      documentNumber={serviceOrder?.number}
+      dateLabel="Agendamento"
+      dateValue={serviceOrder?.scheduledFor ? new Date(serviceOrder.scheduledFor).toLocaleString('pt-BR') : '--'}
+      clientName={serviceOrder?.client?.tradeName}
+      clientDocument={serviceOrder?.client?.document}
+      clientEmail={serviceOrder?.client?.email}
       backPath={`/dashboard/service-orders/${serviceOrderId}`}
+      documentActions={[
+        existingDoc
+          ? {
+              label: downloading ? 'Baixando...' : 'Baixar PDF',
+              icon: 'download',
+              variant: 'primary' as const,
+              loading: downloading,
+              onClick: downloadPdf,
+            }
+          : {
+              label: generating ? 'Gerando PDF...' : 'Gerar PDF',
+              icon: 'picture_as_pdf',
+              variant: 'primary' as const,
+              loading: generating,
+              onClick: generatePdf,
+            },
+        {
+          label: 'Central',
+          icon: 'folder_shared',
+          variant: 'outline' as const,
+          onClick: () => router.push(`/dashboard/documentos?search=${serviceOrder?.number || ''}`),
+        },
+      ]}
     >
-      <div className="flex flex-col gap-md text-black select-text">
-        <h3 className="font-bold text-xs uppercase text-black/50 border-b border-black/10 pb-1 tracking-wider mt-md">
-          Relatório de Atendimento Técnico Presencial
-        </h3>
-
-        {/* Technical Data Grid */}
-        <div className="grid grid-cols-2 gap-sm text-xs font-mono mb-md">
-          <div className="flex flex-col">
-            <span className="text-black/50 font-sans font-bold uppercase text-[9px]">Técnico Executor</span>
-            <span className="font-bold text-black mt-0.5">Carlos Henrique (Analista de Suporte Sr.)</span>
+      <div className="flex flex-col gap-md text-black select-text w-full">
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-700 p-md rounded-lg text-body-sm">
+            {error}
           </div>
-          <div className="flex flex-col">
-            <span className="text-black/50 font-sans font-bold uppercase text-[9px]">Chamado Vinculado</span>
-            <span className="font-bold text-black mt-0.5">#TKT-10892 (Lentidão Geral na Rede Local)</span>
-          </div>
-        </div>
-
-        {/* Description of Service */}
-        <div className="flex flex-col gap-xs mb-md">
-          <span className="text-[10px] text-black/50 uppercase font-bold tracking-wider">Descrição dos Serviços Realizados</span>
-          <p className="text-xs text-black/80 leading-relaxed font-body-sm bg-black/[0.01] border border-black/5 p-sm rounded-lg">
-            Realizada vistoria no rack central do cliente. Detectado loop de rede físico na porta 12 do Switch HP do rack secundário. Feita readequação física do cabeamento, isolamento do switch secundário danificado por sobrecarga elétrica e substituição preventiva por patch cord Cat6 de homologação Peanut OS. Testes de conectividade lógica e latência interna reestabelecidos aos padrões nominais normais.
-          </p>
-        </div>
-
-        <h3 className="font-bold text-xs uppercase text-black/50 border-b border-black/10 pb-1 tracking-wider">
-          Materiais & Peças Utilizadas
-        </h3>
-        
-        {/* Table of items */}
-        <table className="w-full text-left text-xs border-collapse">
-          <thead>
-            <tr className="border-b border-black/20 text-black/60 font-mono">
-              <th className="py-2">Item / Equipamento</th>
-              <th className="py-2 text-center w-12">Qtd</th>
-              <th className="py-2 text-center w-12">Un</th>
-              <th className="py-2 text-right w-36 font-sans">Status Peça</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-black/5 font-mono">
-            <tr>
-              <td className="py-2">
-                <span className="font-bold block text-black">Cabo de Rede Patch Cord Cat6 Azul - 2.0m</span>
-                <span className="text-[10px] text-black/50 block">Conexão lógica gigabit do switch principal.</span>
-              </td>
-              <td className="py-2 text-center">1</td>
-              <td className="py-2 text-center">UN</td>
-              <td className="py-2 text-right font-sans text-[11px] font-bold text-green-700">Consumido / Contrato</td>
-            </tr>
-            <tr>
-              <td className="py-2">
-                <span className="font-bold block text-black">Conector RJ45 blindado de alta blindagem</span>
-                <span className="text-[10px] text-black/50 block">Crimpage técnica emergencial no rack secundário.</span>
-              </td>
-              <td className="py-2 text-center">2</td>
-              <td className="py-2 text-center">UN</td>
-              <td className="py-2 text-right font-sans text-[11px] font-bold text-green-700">Consumido / Contrato</td>
-            </tr>
-          </tbody>
-        </table>
-
-        {/* Signature Area */}
-        <div className="mt-xl grid grid-cols-2 gap-xl pt-lg border-t border-black/10 font-sans text-[11px]">
-          <div className="flex flex-col items-center gap-1.5 text-center mt-md">
-            <div className="w-48 h-[1px] bg-black/40"></div>
-            <span className="font-bold text-black">Assinatura do Técnico Executor</span>
-            <span className="text-black/50 text-[10px]">Peanut OS Central de TI</span>
-          </div>
-
-          <div className="flex flex-col items-center gap-1.5 text-center mt-md">
-            <div className="w-48 h-[1px] bg-black/40"></div>
-            <span className="font-bold text-black">Aceite e Assinatura do Cliente</span>
-            <span className="text-black/50 text-[10px]">Acme Corporation LTDA</span>
-          </div>
-        </div>
+        )}
+        {previewHtml ? (
+          <iframe
+            srcDoc={previewHtml}
+            className="w-full min-h-[920px] border border-outline-variant/30 rounded-lg shadow-inner bg-white"
+            title="Preview A4 da O.S."
+            sandbox="allow-same-origin"
+          />
+        ) : (
+          <div className="py-xl text-center text-on-surface-variant">Preview indisponível.</div>
+        )}
       </div>
     </A4PreviewShell>
   );

@@ -351,10 +351,16 @@ export default function TicketsPage() {
         title={t.tickets.title}
         description={t.tickets.subtitle}
         primaryActions={
-          <Button variant="primary" onClick={() => router.push('/dashboard/tickets/new')}>
-            <span className="material-symbols-outlined text-[16px] mr-1.5">add_circle</span>
-            {t.tickets.createBtn}
-          </Button>
+          <div className="flex flex-wrap gap-sm">
+            <Button variant="outline" onClick={() => router.push('/dashboard/tickets/settings')}>
+              <span className="material-symbols-outlined text-[16px] mr-1.5">tune</span>
+              Regras e categorias
+            </Button>
+            <Button variant="primary" onClick={() => router.push('/dashboard/tickets/new')}>
+              <span className="material-symbols-outlined text-[16px] mr-1.5">add_circle</span>
+              {t.tickets.createBtn}
+            </Button>
+          </div>
         }
       />
 

@@ -196,6 +196,15 @@ export class ContractsService {
       throw new NotFoundException("Cliente não encontrado");
     }
 
+    if (input.slaPolicyId) {
+      const policy = await prisma.slaPolicy.findFirst({
+        where: { id: input.slaPolicyId, workspaceId, active: true },
+      });
+      if (!policy) {
+        throw new BadRequestException("Política de SLA não encontrada");
+      }
+    }
+
     // Check active subscription overlap
     if (
       input.status === "ACTIVE" &&
@@ -323,6 +332,15 @@ export class ContractsService {
         contract.clientId !== nextClient)
     ) {
       await this.checkOverlap(workspaceId, nextClient, id);
+    }
+
+    if (input.slaPolicyId) {
+      const policy = await prisma.slaPolicy.findFirst({
+        where: { id: input.slaPolicyId, workspaceId, active: true },
+      });
+      if (!policy) {
+        throw new BadRequestException("Política de SLA não encontrada");
+      }
     }
 
     const data: any = {};

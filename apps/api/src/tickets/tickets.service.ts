@@ -13,6 +13,11 @@ import { SlaService } from "./sla.service";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
 import { isValidTransition } from "./ticket-state-machine";
+import {
+  SlaPolicyCreateInput,
+  SlaPolicyUpdateInput,
+  TicketCategoryCreateInput,
+} from "@peanut/validators";
 
 const FORBIDDEN_WORDS = [
   "senha",
@@ -35,7 +40,236 @@ export class TicketsService {
   async listSlaPolicies(workspaceId: string) {
     return prisma.slaPolicy.findMany({
       where: { workspaceId, active: true },
-      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      orderBy: [{ isDefault: "desc" }, { priority: "asc" }, { createdAt: "asc" }],
+    });
+  }
+
+  async createSlaPolicy(
+    workspaceId: string,
+    input: SlaPolicyCreateInput,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const policy = await prisma.$transaction(async (tx) => {
+      if (input.isDefault) {
+        await tx.slaPolicy.updateMany({
+          where: { workspaceId, priority: input.priority, isDefault: true },
+          data: { isDefault: false },
+        });
+      }
+
+      return tx.slaPolicy.create({
+        data: {
+          workspaceId,
+          name: input.name,
+          description: input.description || null,
+          priority: input.priority as any,
+          firstResponseMinutes: input.firstResponseMinutes,
+          startMinutes: input.startMinutes,
+          resolutionMinutes: input.resolutionMinutes,
+          businessHoursOnly: input.businessHoursOnly ?? false,
+          isDefault: input.isDefault ?? false,
+          active: input.active ?? true,
+        },
+      });
+    });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "sla_policy.created",
+      entityType: "SLA_POLICY",
+      entityId: policy.id,
+      after: policy,
+      ipAddress,
+      userAgent,
+    });
+
+    return policy;
+  }
+
+  async updateSlaPolicy(
+    policyId: string,
+    workspaceId: string,
+    input: SlaPolicyUpdateInput,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const existing = await prisma.slaPolicy.findFirst({
+      where: { id: policyId, workspaceId },
+    });
+    if (!existing) throw new NotFoundException("Política de SLA não encontrada.");
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const nextPriority = input.priority || existing.priority;
+      if (input.isDefault) {
+        await tx.slaPolicy.updateMany({
+          where: {
+            workspaceId,
+            priority: nextPriority,
+            isDefault: true,
+            id: { not: policyId },
+          },
+          data: { isDefault: false },
+        });
+      }
+
+      return tx.slaPolicy.update({
+        where: { id: policyId },
+        data: {
+          ...(input.name !== undefined && { name: input.name }),
+          ...(input.description !== undefined && {
+            description: input.description || null,
+          }),
+          ...(input.priority !== undefined && { priority: input.priority as any }),
+          ...(input.firstResponseMinutes !== undefined && {
+            firstResponseMinutes: input.firstResponseMinutes,
+          }),
+          ...(input.startMinutes !== undefined && {
+            startMinutes: input.startMinutes,
+          }),
+          ...(input.resolutionMinutes !== undefined && {
+            resolutionMinutes: input.resolutionMinutes,
+          }),
+          ...(input.businessHoursOnly !== undefined && {
+            businessHoursOnly: input.businessHoursOnly,
+          }),
+          ...(input.isDefault !== undefined && { isDefault: input.isDefault }),
+          ...(input.active !== undefined && { active: input.active }),
+        },
+      });
+    });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "sla_policy.updated",
+      entityType: "SLA_POLICY",
+      entityId: policyId,
+      before: existing,
+      after: updated,
+      ipAddress,
+      userAgent,
+    });
+
+    return updated;
+  }
+
+  async deleteSlaPolicy(
+    policyId: string,
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const existing = await prisma.slaPolicy.findFirst({
+      where: { id: policyId, workspaceId },
+    });
+    if (!existing) throw new NotFoundException("Política de SLA não encontrada.");
+    if (existing.isDefault) {
+      throw new BadRequestException("Defina outro SLA padrão antes de desativar este.");
+    }
+
+    const updated = await prisma.slaPolicy.update({
+      where: { id: policyId },
+      data: { active: false },
+    });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "sla_policy.disabled",
+      entityType: "SLA_POLICY",
+      entityId: policyId,
+      before: existing,
+      after: updated,
+      ipAddress,
+      userAgent,
+    });
+
+    return updated;
+  }
+
+  async listCategories(workspaceId: string) {
+    return prisma.ticketCategory.findMany({
+      where: { workspaceId },
+      orderBy: { name: "asc" },
+      include: { _count: { select: { tickets: true } } },
+    });
+  }
+
+  async createCategory(
+    workspaceId: string,
+    input: TicketCategoryCreateInput,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const category = await this.ensureTicketCategory(workspaceId, input.name);
+    if (!category) {
+      throw new BadRequestException("Categoria inválida.");
+    }
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "ticket_category.upserted",
+      entityType: "TICKET_CATEGORY",
+      entityId: category.id,
+      after: category,
+      ipAddress,
+      userAgent,
+    });
+
+    return category;
+  }
+
+  async deleteCategory(
+    categoryId: string,
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const existing = await prisma.ticketCategory.findFirst({
+      where: { id: categoryId, workspaceId },
+    });
+    if (!existing) throw new NotFoundException("Categoria não encontrada.");
+
+    await prisma.ticketCategory.delete({ where: { id: categoryId } });
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "ticket_category.deleted",
+      entityType: "TICKET_CATEGORY",
+      entityId: categoryId,
+      before: existing,
+      ipAddress,
+      userAgent,
+    });
+
+    return { ok: true };
+  }
+
+  private async ensureTicketCategory(workspaceId: string, name?: string | null) {
+    const normalized = name?.trim();
+    if (!normalized) return null;
+
+    return prisma.ticketCategory.upsert({
+      where: {
+        workspaceId_name: {
+          workspaceId,
+          name: normalized,
+        },
+      },
+      update: {},
+      create: {
+        workspaceId,
+        name: normalized,
+      },
     });
   }
 
@@ -112,6 +346,7 @@ export class TicketsService {
         orderBy: { createdAt: "desc" },
         include: {
           client: { select: { id: true, tradeName: true, legalName: true } },
+          categoryRef: { select: { id: true, name: true } },
           contact: { select: { id: true, name: true, email: true } },
           clientUser: { select: { id: true, fullName: true, email: true } },
           asset: { select: { id: true, name: true, type: true } },
@@ -142,6 +377,7 @@ export class TicketsService {
         contact: true,
         clientUser: true,
         asset: true,
+        categoryRef: true,
         assignedTo: {
           select: { id: true, name: true, email: true, role: true },
         },
@@ -258,6 +494,7 @@ export class TicketsService {
       openedAt,
       data.clientId,
     );
+    const category = await this.ensureTicketCategory(workspaceId, data.category);
 
     // 4. Create Ticket inside Transaction to guarantee history creation
     const ticket = await prisma.$transaction(async (tx) => {
@@ -270,9 +507,12 @@ export class TicketsService {
           assetId: data.assetId || null,
           contractId: sla.contractId,
           slaPolicyId: sla.slaPolicyId,
+          categoryId: category?.id || null,
           number: ticketNumber,
           title: data.title,
           description: data.description,
+          category: data.category?.trim() || null,
+          subcategory: data.subcategory?.trim() || null,
           channel: data.channel,
           priority: data.priority,
           status: "OPEN",
@@ -323,6 +563,9 @@ export class TicketsService {
           status: ticket.status,
           priority: ticket.priority,
           clientId: ticket.clientId,
+          category: ticket.category,
+          slaPolicyId: ticket.slaPolicyId,
+          contractId: ticket.contractId,
         },
       })
       .catch(() => {});
@@ -342,6 +585,8 @@ export class TicketsService {
       contactId?: string | null;
       clientUserId?: string | null;
       assetId?: string | null;
+      category?: string | null;
+      subcategory?: string | null;
     },
     workspaceId: string,
     actorUserId: string,
@@ -355,6 +600,15 @@ export class TicketsService {
 
     if (data.title) updateData.title = data.title;
     if (data.description) updateData.description = data.description;
+
+    if (data.category !== undefined) {
+      const category = await this.ensureTicketCategory(workspaceId, data.category);
+      updateData.categoryId = category?.id || null;
+      updateData.category = data.category?.trim() || null;
+    }
+    if (data.subcategory !== undefined) {
+      updateData.subcategory = data.subcategory?.trim() || null;
+    }
 
     if (data.contactId !== undefined) {
       if (data.contactId) {

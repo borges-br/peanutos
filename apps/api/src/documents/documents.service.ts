@@ -6,14 +6,17 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
-import { DocumentQueryInput } from "@peanut/validators";
+import { DocumentQueryInput, DocumentUploadInput } from "@peanut/validators";
 import { Queue } from "bullmq";
 import {
   S3Client,
   GetObjectCommand,
   HeadBucketCommand,
   CreateBucketCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
+import * as crypto from "crypto";
 
 @Injectable()
 export class DocumentsService {
@@ -103,6 +106,14 @@ export class DocumentsService {
     const uuidRegex =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return uuidRegex.test(val);
+  }
+
+  private safeFilename(filename: string) {
+    return filename.replace(/[^\w.\- ()]/g, "_").slice(0, 180);
+  }
+
+  private stripBase64DataUrl(data: string) {
+    return data.replace(/^data:[^;]+;base64,/, "");
   }
 
   private sanitizeDocument(doc: any, role: string) {
@@ -350,6 +361,189 @@ export class DocumentsService {
     return this.sanitizeDocument(doc, role);
   }
 
+  async uploadManualDocument(
+    input: DocumentUploadInput,
+    workspaceId: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const maxBytes = 25 * 1024 * 1024;
+    const allowedMimes = new Set([
+      "application/pdf",
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/svg+xml",
+      "text/plain",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/octet-stream",
+    ]);
+
+    if (!allowedMimes.has(input.mimeType)) {
+      throw new BadRequestException("Tipo de arquivo não permitido.");
+    }
+
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(this.stripBase64DataUrl(input.data), "base64");
+    } catch {
+      throw new BadRequestException("Arquivo enviado em Base64 inválido.");
+    }
+
+    if (!buffer.length || buffer.length > maxBytes) {
+      throw new BadRequestException(
+        "Arquivo vazio ou acima do limite de 25 MB.",
+      );
+    }
+
+    if (input.mimeType === "image/svg+xml") {
+      const svg = buffer.toString("utf8");
+      const unsafeSvgPattern =
+        /<script|on\w+\s*=|<foreignObject|javascript:|data:text\/html/i;
+      if (!svg.includes("<svg") || unsafeSvgPattern.test(svg)) {
+        throw new BadRequestException("SVG inválido ou potencialmente inseguro.");
+      }
+    }
+
+    const entityType = input.entityType || "WORKSPACE";
+    const entityId = input.entityId || workspaceId;
+    await this.validateManualDocumentEntity(entityType, entityId, workspaceId);
+
+    const originalFilename = this.safeFilename(input.filename);
+    const ext = originalFilename.includes(".")
+      ? originalFilename.split(".").pop()
+      : "bin";
+    const key = `${workspaceId}/manual-documents/${input.documentType.toLowerCase()}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
+    const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
+
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.s3Bucket,
+          Key: key,
+          Body: buffer,
+          ContentType: input.mimeType,
+        }),
+      );
+    } catch (err: any) {
+      console.error("[DocumentsService] Manual upload failed:", err.message);
+      throw new BadRequestException("Falha ao salvar arquivo no armazenamento.");
+    }
+
+    try {
+      const lastDoc = await prisma.generatedDocument.findFirst({
+        where: {
+          workspaceId,
+          entityType,
+          entityId,
+          documentType: input.documentType,
+        },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      });
+      const version = lastDoc ? lastDoc.version + 1 : 1;
+
+      const fileObject = await prisma.fileObject.create({
+        data: {
+          workspaceId,
+          bucket: this.s3Bucket,
+          key,
+          originalFilename,
+          mimeType: input.mimeType,
+          sizeBytes: BigInt(buffer.length),
+          sha256,
+          visibility: input.visibility,
+          createdById: actorUserId,
+        },
+      });
+
+      const generatedDocument = await prisma.generatedDocument.create({
+        data: {
+          workspaceId,
+          entityType,
+          entityId,
+          documentType: input.documentType,
+          version,
+          fileObjectId: fileObject.id,
+          sha256,
+          generatedById: actorUserId,
+          metadata: JSON.stringify({
+            manualUpload: true,
+            displayName: input.displayName || null,
+            notes: input.notes || null,
+            originalFilename,
+            storage: "s3",
+          }),
+        },
+        include: { fileObject: true },
+      });
+
+      await this.auditService.log({
+        workspaceId,
+        actorUserId,
+        action: "document.uploaded",
+        entityType: "DOCUMENT",
+        entityId: generatedDocument.id,
+        after: {
+          documentId: generatedDocument.id,
+          documentType: input.documentType,
+          linkedEntityType: entityType,
+          linkedEntityId: entityId,
+          originalFilename,
+          sizeBytes: buffer.length,
+          visibility: input.visibility,
+        },
+        ipAddress,
+        userAgent,
+        severity: "INFO",
+      });
+
+      return this.sanitizeDocument(generatedDocument, "OWNER");
+    } catch (err: any) {
+      await this.s3Client
+        .send(new DeleteObjectCommand({ Bucket: this.s3Bucket, Key: key }))
+        .catch(() => {});
+      console.error("[DocumentsService] Manual upload DB failed:", err.message);
+      throw new BadRequestException("Falha ao registrar documento no banco.");
+    }
+  }
+
+  private async validateManualDocumentEntity(
+    entityType: string,
+    entityId: string,
+    workspaceId: string,
+  ) {
+    const upperType = entityType.toUpperCase();
+    if (upperType === "WORKSPACE") {
+      if (entityId !== workspaceId) {
+        throw new BadRequestException("Documento de workspace com entidade inválida.");
+      }
+      return;
+    }
+    const exists =
+      upperType === "CLIENT"
+        ? await prisma.client.findFirst({ where: { id: entityId, workspaceId } })
+        : upperType === "TICKET"
+          ? await prisma.ticket.findFirst({ where: { id: entityId, workspaceId } })
+          : upperType === "CONTRACT"
+            ? await prisma.contract.findFirst({ where: { id: entityId, workspaceId } })
+            : upperType === "INVOICE"
+              ? await prisma.invoice.findFirst({ where: { id: entityId, workspaceId } })
+              : upperType === "QUOTE"
+                ? await prisma.quote.findFirst({ where: { id: entityId, workspaceId } })
+                : upperType === "SERVICE_ORDER"
+                  ? await prisma.serviceOrder.findFirst({ where: { id: entityId, workspaceId } })
+                  : null;
+
+    if (!exists) {
+      throw new BadRequestException("Entidade vinculada não encontrada.");
+    }
+  }
+
   private readonly pdfQueue = new Queue("pdf-generation", {
     connection: {
       host: process.env.REDIS_HOST || "localhost",
@@ -363,22 +557,52 @@ export class DocumentsService {
     workspaceId: string,
     actorUserId: string,
   ) {
-    // 1. Validate invoice exists and belongs to the workspace
-    const invoice = await prisma.invoice.findFirst({
-      where: { id: invoiceId, workspaceId },
-    });
+    return this.enqueueEntityPdf("INVOICE", invoiceId, workspaceId, actorUserId);
+  }
 
-    if (!invoice) {
-      throw new NotFoundException("Fatura não encontrada");
+  async enqueueQuotePdf(
+    quoteId: string,
+    workspaceId: string,
+    actorUserId: string,
+  ) {
+    return this.enqueueEntityPdf("QUOTE", quoteId, workspaceId, actorUserId);
+  }
+
+  async enqueueServiceOrderPdf(
+    serviceOrderId: string,
+    workspaceId: string,
+    actorUserId: string,
+  ) {
+    return this.enqueueEntityPdf(
+      "SERVICE_ORDER",
+      serviceOrderId,
+      workspaceId,
+      actorUserId,
+    );
+  }
+
+  private async enqueueEntityPdf(
+    entityType: "INVOICE" | "QUOTE" | "SERVICE_ORDER",
+    entityId: string,
+    workspaceId: string,
+    actorUserId: string,
+  ) {
+    const entity = await this.ensureEntityExists(entityType, entityId, workspaceId);
+    if (!entity) {
+      const labels = {
+        INVOICE: "Fatura",
+        QUOTE: "Orçamento",
+        SERVICE_ORDER: "Ordem de serviço",
+      };
+      throw new NotFoundException(`${labels[entityType]} não encontrada`);
     }
 
-    // 2. Discover next version number
     const lastDoc = await prisma.generatedDocument.findFirst({
       where: {
         workspaceId,
-        entityType: "INVOICE",
-        entityId: invoiceId,
-        documentType: "INVOICE",
+        entityType,
+        entityId,
+        documentType: entityType,
       },
       orderBy: {
         version: "desc",
@@ -396,9 +620,9 @@ export class DocumentsService {
         {
           workspaceId,
           actorUserId,
-          entityType: "INVOICE",
-          entityId: invoiceId,
-          documentType: "INVOICE",
+          entityType,
+          entityId,
+          documentType: entityType,
           version: nextVersion,
         },
         {
@@ -410,7 +634,8 @@ export class DocumentsService {
       return {
         jobId: job.id || "",
         status: "QUEUED" as const,
-        invoiceId,
+        entityType,
+        entityId,
         nextVersion,
       };
     } catch (err: any) {
@@ -422,6 +647,20 @@ export class DocumentsService {
         "Serviço de enfileiramento temporariamente indisponível. Redis offline.",
       );
     }
+  }
+
+  private async ensureEntityExists(
+    entityType: "INVOICE" | "QUOTE" | "SERVICE_ORDER",
+    entityId: string,
+    workspaceId: string,
+  ) {
+    if (entityType === "INVOICE") {
+      return prisma.invoice.findFirst({ where: { id: entityId, workspaceId } });
+    }
+    if (entityType === "QUOTE") {
+      return prisma.quote.findFirst({ where: { id: entityId, workspaceId } });
+    }
+    return prisma.serviceOrder.findFirst({ where: { id: entityId, workspaceId } });
   }
 
   async getJobStatus(jobId: string) {
@@ -588,15 +827,39 @@ export class DocumentsService {
       console.warn("[DocumentsService] Failed to write audit log:", auditErr);
     }
 
-    const safeNumber = doc.metadata
-      ? JSON.parse(doc.metadata)?.invoiceNumber || doc.version.toString()
-      : doc.version.toString();
-    const sanitizedNumber = safeNumber.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const filename = `fatura-${sanitizedNumber}-v${doc.version}.pdf`;
+    let filename = doc.fileObject.originalFilename;
+    if (doc.fileObject.mimeType === "application/pdf" && doc.metadata) {
+      try {
+        const meta = JSON.parse(doc.metadata);
+        const safeNumber =
+          meta.invoiceNumber ||
+          meta.quoteNumber ||
+          meta.serviceOrderNumber ||
+          doc.version.toString();
+        const sanitizedNumber = String(safeNumber).replace(
+          /[^a-zA-Z0-9_-]/g,
+          "_",
+        );
+        const prefix =
+          doc.documentType === "QUOTE"
+            ? "orcamento"
+            : doc.documentType === "SERVICE_ORDER"
+              ? "ordem-servico"
+              : doc.documentType === "REPORT"
+                ? "relatorio"
+                : doc.documentType === "CONTRACT"
+                  ? "contrato"
+                  : "fatura";
+        filename = `${prefix}-${sanitizedNumber}-v${doc.version}.pdf`;
+      } catch {
+        filename = doc.fileObject.originalFilename;
+      }
+    }
 
     return {
       stream: s3Response.Body,
       filename,
+      mimeType: doc.fileObject.mimeType,
     };
   }
 }

@@ -127,6 +127,18 @@ export class WebhookEventsService {
               select: { number: true },
             });
             entityNumber = ctr?.number || null;
+          } else if (entityType === "QUOTE") {
+            const quote = await prisma.quote.findUnique({
+              where: { id: event.entityId },
+              select: { number: true },
+            });
+            entityNumber = quote?.number || null;
+          } else if (entityType === "SERVICE_ORDER") {
+            const serviceOrder = await prisma.serviceOrder.findUnique({
+              where: { id: event.entityId },
+              select: { number: true },
+            });
+            entityNumber = serviceOrder?.number || null;
           } else if (entityType === "CLIENT") {
             const cli = await prisma.client.findUnique({
               where: { id: event.entityId },

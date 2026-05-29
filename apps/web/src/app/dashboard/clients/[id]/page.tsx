@@ -9,6 +9,7 @@ import Button from '../../../../components/ui/Button';
 import Badge from '../../../../components/ui/Badge';
 import Input from '../../../../components/ui/Input';
 import Card from '../../../../components/ui/Card';
+import Select from '../../../../components/ui/Select';
 import ClientContextTabs from '../../../../components/layout/ClientContextTabs';
 import ClientPageHeader from '../../../../components/layout/ClientPageHeader';
 
@@ -21,6 +22,7 @@ export default function ClientDetailPage() {
 
   const [client, setClient] = useState<any>(null);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [slaPolicies, setSlaPolicies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,6 +48,8 @@ export default function ClientDetailPage() {
       const clientData = await apiRequest(`/clients/${clientId}`);
       setClient(clientData);
       setContacts(clientData.contacts || []);
+      const policies = await apiRequest('/tickets/sla-policies');
+      setSlaPolicies(Array.isArray(policies) ? policies : policies.data || []);
     } catch (err: any) {
       setError(err.message || t.states.errorTitle);
     } finally {
@@ -68,6 +72,22 @@ export default function ClientDetailPage() {
       setClient((prev: any) => ({ ...prev, status: updated.status }));
     } catch (err: any) {
       setError(err.message || 'Falha ao atualizar status.');
+    }
+  };
+
+  const handleClientSlaChange = async (slaPolicyId: string) => {
+    try {
+      const updated = await apiRequest(`/clients/${clientId}/sla-policy`, {
+        method: 'PATCH',
+        body: JSON.stringify({ slaPolicyId: slaPolicyId || null }),
+      });
+      setClient((prev: any) => ({
+        ...prev,
+        slaPolicyId: updated.slaPolicyId,
+        slaPolicy: updated.slaPolicy,
+      }));
+    } catch (err: any) {
+      setError(err.message || 'Falha ao atualizar SLA do cliente.');
     }
   };
 
@@ -439,6 +459,24 @@ export default function ClientDetailPage() {
           </div>
 
           <div className="flex flex-col gap-lg lg:col-span-4">
+            <section className="flex flex-col gap-sm rounded-xl border border-outline-variant bg-surface p-lg shadow-xl shadow-black/25">
+              <h4 className="text-sm font-semibold tracking-tight text-primary">SLA do cliente</h4>
+              <p className="text-[12px] leading-relaxed text-on-surface-variant/80 font-body-sm">
+                Usado quando não houver contrato ativo com SLA próprio.
+              </p>
+              <Select
+                value={client.slaPolicyId || ''}
+                onChange={(e) => handleClientSlaChange(e.target.value)}
+                options={[
+                  { value: '', label: 'Usar padrão da prioridade' },
+                  ...slaPolicies.map((policy) => ({
+                    value: policy.id,
+                    label: `${policy.name} (${policy.priority})`,
+                  })),
+                ]}
+              />
+            </section>
+
             <section className="flex flex-col gap-sm rounded-xl border border-outline-variant bg-surface p-lg shadow-xl shadow-black/25">
               <h4 className="text-sm font-semibold tracking-tight text-primary">{t.clients.shortcuts.inventoryTitle}</h4>
               <p className="text-[12px] leading-relaxed text-on-surface-variant/80 font-body-sm">

@@ -18,6 +18,7 @@ export default function NewContractPage() {
   const { user } = useAuth();
   
   const [clients, setClients] = useState<any[]>([]);
+  const [slaPolicies, setSlaPolicies] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +32,7 @@ export default function NewContractPage() {
   const [renewalMode, setRenewalMode] = useState('MONTHLY');
   const [billingDay, setBillingDay] = useState('5');
   const [monthlyAmount, setMonthlyAmount] = useState('');
+  const [slaPolicyId, setSlaPolicyId] = useState('');
   const [maxUsers, setMaxUsers] = useState('');
   const [maxAssets, setMaxAssets] = useState('');
   const [notes, setNotes] = useState('');
@@ -42,6 +44,8 @@ export default function NewContractPage() {
       try {
         const response = await apiRequest<unknown>('/clients?limit=100');
         setClients(extractArray(response));
+        const policies = await apiRequest<unknown>('/tickets/sla-policies');
+        setSlaPolicies(extractArray(policies));
       } catch (err) {
         console.error('Falha ao carregar lista de clientes:', err);
       }
@@ -67,6 +71,7 @@ export default function NewContractPage() {
       billingDay: Number(billingDay),
       monthlyAmountCents: Math.round(parseFloat(monthlyAmount) * 100) || 0,
       currency: 'BRL',
+      slaPolicyId: slaPolicyId || null,
       clientId,
       maxUsers: maxUsers ? Number(maxUsers) : null,
       maxAssets: maxAssets ? Number(maxAssets) : null,
@@ -271,6 +276,21 @@ export default function NewContractPage() {
                 placeholder="5"
                 value={billingDay}
                 onChange={(e) => setBillingDay(e.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-col gap-xs md:col-span-2">
+              <label className="text-[13px] font-semibold text-on-surface-variant">SLA do contrato</label>
+              <Select
+                value={slaPolicyId}
+                onChange={(e) => setSlaPolicyId(e.target.value)}
+                options={[
+                  { value: '', label: 'Usar SLA do cliente ou padrão da prioridade' },
+                  ...slaPolicies.map((policy) => ({
+                    value: policy.id,
+                    label: `${policy.name} (${policy.priority})`,
+                  })),
+                ]}
               />
             </div>
           </div>

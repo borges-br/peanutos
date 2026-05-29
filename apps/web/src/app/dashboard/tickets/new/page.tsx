@@ -17,6 +17,7 @@ export default function NewTicketPage() {
   
   const [clients, setClients] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   
   // Cascading client data states
   const [contacts, setContacts] = useState<any[]>([]);
@@ -51,6 +52,9 @@ export default function NewTicketPage() {
         
         const usersRes = await apiRequest<unknown>('/users');
         setUsers(extractArray(usersRes));
+
+        const categoriesRes = await apiRequest<unknown>('/tickets/categories');
+        setCategories(extractArray(categoriesRes));
       } catch (err: any) {
         setError(t.tickets.form.loadInitialError);
       }
@@ -235,6 +239,17 @@ export default function NewTicketPage() {
     ...users.map(u => ({ value: u.id, label: u.name }))
   ];
 
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!confirm('Excluir esta categoria? Os chamados existentes mantêm o texto histórico.')) return;
+    try {
+      await apiRequest(`/tickets/categories/${categoryId}`, { method: 'DELETE' });
+      const categoriesRes = await apiRequest<unknown>('/tickets/categories');
+      setCategories(extractArray(categoriesRes));
+    } catch (err: any) {
+      setError(err.message || 'Erro ao excluir categoria.');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-lg max-w-4xl mx-auto select-none">
       <ClientPageHeader
@@ -376,12 +391,53 @@ export default function NewTicketPage() {
               <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.categoryLabel}</label>
               <Input
                 type="text"
+                list="ticket-category-options"
                 placeholder={t.tickets.categoryPlaceholder}
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               />
+              <datalist id="ticket-category-options">
+                {categories.map((item) => (
+                  <option key={item.id} value={item.name} />
+                ))}
+              </datalist>
             </div>
           </div>
+
+          {categories.length > 0 && (
+            <div className="flex flex-wrap gap-xs pt-xs">
+              {categories.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setCategory(item.name)}
+                  className="group inline-flex items-center gap-1 rounded-md border border-outline-variant/50 bg-surface-container-low px-2 py-1 text-[11px] text-on-surface-variant hover:border-primary/40 hover:text-on-surface"
+                >
+                  <span>{item.name}</span>
+                  <span className="text-on-surface-variant/50">({item._count?.tickets || 0})</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteCategory(item.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDeleteCategory(item.id);
+                      }
+                    }}
+                    className="ml-1 rounded px-1 text-[10px] text-on-surface-variant/60 hover:bg-error/10 hover:text-error"
+                    aria-label={`Excluir categoria ${item.name}`}
+                  >
+                    ×
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Section 3: Responsibility */}

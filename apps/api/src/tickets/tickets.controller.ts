@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -22,6 +23,9 @@ import {
   ticketAssignSchema,
   ticketCommentCreateSchema,
   ticketTimeEntryCreateSchema,
+  ticketCategoryCreateSchema,
+  slaPolicyCreateSchema,
+  slaPolicyUpdateSchema,
 } from "@peanut/validators";
 import { TicketPriority, TicketStatus } from "@peanut/db";
 
@@ -55,6 +59,121 @@ export class TicketsController {
   @Get("tickets/sla-policies")
   async listSlaPolicies(@CurrentUser() user: any) {
     return this.ticketsService.listSlaPolicies(user.workspaceId);
+  }
+
+  @Roles("OWNER", "ADMIN")
+  @Post("tickets/sla-policies")
+  async createSlaPolicy(
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const parse = slaPolicyCreateSchema.safeParse(body);
+    if (!parse.success) {
+      const messages = parse.error.errors.map((e) => e.message).join(", ");
+      throw new BadRequestException(messages);
+    }
+
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+    return this.ticketsService.createSlaPolicy(
+      user.workspaceId,
+      parse.data,
+      user.id,
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  @Roles("OWNER", "ADMIN")
+  @Patch("tickets/sla-policies/:policyId")
+  async updateSlaPolicy(
+    @Param("policyId") policyId: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const parse = slaPolicyUpdateSchema.safeParse(body);
+    if (!parse.success) {
+      const messages = parse.error.errors.map((e) => e.message).join(", ");
+      throw new BadRequestException(messages);
+    }
+
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+    return this.ticketsService.updateSlaPolicy(
+      policyId,
+      user.workspaceId,
+      parse.data,
+      user.id,
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  @Roles("OWNER", "ADMIN")
+  @Delete("tickets/sla-policies/:policyId")
+  async deleteSlaPolicy(
+    @Param("policyId") policyId: string,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+    return this.ticketsService.deleteSlaPolicy(
+      policyId,
+      user.workspaceId,
+      user.id,
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  @Get("tickets/categories")
+  async listCategories(@CurrentUser() user: any) {
+    return this.ticketsService.listCategories(user.workspaceId);
+  }
+
+  @Roles("OWNER", "ADMIN", "TECHNICIAN")
+  @Post("tickets/categories")
+  async createCategory(
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const parse = ticketCategoryCreateSchema.safeParse(body);
+    if (!parse.success) {
+      const messages = parse.error.errors.map((e) => e.message).join(", ");
+      throw new BadRequestException(messages);
+    }
+
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+    return this.ticketsService.createCategory(
+      user.workspaceId,
+      parse.data,
+      user.id,
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  @Roles("OWNER", "ADMIN")
+  @Delete("tickets/categories/:categoryId")
+  async deleteCategory(
+    @Param("categoryId") categoryId: string,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+    return this.ticketsService.deleteCategory(
+      categoryId,
+      user.workspaceId,
+      user.id,
+      ipAddress,
+      userAgent,
+    );
   }
 
   @Get("tickets/:ticketId")

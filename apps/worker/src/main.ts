@@ -630,30 +630,60 @@ const pdfWorker = new Worker(
     const { workspaceId, actorUserId, entityType, entityId, documentType } = job.data;
     console.log(`[PDF Worker] Processing job ${job.id} for type ${documentType} on entity ${entityId}...`);
 
-    if (entityType !== 'INVOICE') {
+    if (!['INVOICE', 'QUOTE', 'SERVICE_ORDER'].includes(entityType)) {
       throw new Error(`[PDF Worker] Unsupported entity type: ${entityType}`);
     }
 
-    // 1. Fetch invoice
-    const invoice = await prisma.invoice.findFirst({
-      where: { id: entityId, workspaceId },
-      include: {
-        client: true,
-        items: {
-          orderBy: { sortOrder: 'asc' },
-        },
-      },
-    });
+    const typedDocumentType = (documentType || entityType) as 'INVOICE' | 'QUOTE' | 'SERVICE_ORDER';
 
-    if (!invoice) {
-      throw new Error(`[PDF Worker] Invoice with ID ${entityId} not found in workspace ${workspaceId}`);
+    // 1. Fetch source entity and normalize it for the shared A4 renderer
+    let source: any = null;
+    if (entityType === 'INVOICE') {
+      source = await prisma.invoice.findFirst({
+        where: { id: entityId, workspaceId },
+        include: {
+          client: true,
+          items: { orderBy: { sortOrder: 'asc' } },
+        },
+      });
+    } else if (entityType === 'QUOTE') {
+      source = await prisma.quote.findFirst({
+        where: { id: entityId, workspaceId },
+        include: {
+          client: true,
+          items: { orderBy: { sortOrder: 'asc' } },
+        },
+      });
+    } else {
+      source = await prisma.serviceOrder.findFirst({
+        where: { id: entityId, workspaceId },
+        include: {
+          client: true,
+          responsibleUser: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+              documentDisplayName: true,
+              jobTitle: true,
+              signatureImageFileObjectId: true,
+              documentSignatureEnabled: true,
+            },
+          },
+          items: { orderBy: { sortOrder: 'asc' } },
+        },
+      });
+    }
+
+    if (!source) {
+      throw new Error(`[PDF Worker] ${entityType} with ID ${entityId} not found in workspace ${workspaceId}`);
     }
 
     // 2. Fetch workspace (brand settings) + responsible user
     const workspace = await prisma.workspace.findUnique({
       where: { id: workspaceId },
     });
-    const responsibleUser = actorUserId ? await prisma.user.findUnique({ where: { id: actorUserId } }) : null;
+    const responsibleUser = source.responsibleUser || (actorUserId ? await prisma.user.findUnique({ where: { id: actorUserId } }) : null);
 
     if (!workspace) {
       throw new Error(`[PDF Worker] Workspace with ID ${workspaceId} not found`);
@@ -663,9 +693,9 @@ const pdfWorker = new Worker(
     const lastDoc = await prisma.generatedDocument.findFirst({
       where: {
         workspaceId,
-        entityType: 'INVOICE',
+        entityType,
         entityId,
-        documentType: 'INVOICE',
+        documentType: typedDocumentType,
       },
       orderBy: {
         version: 'desc',
@@ -720,67 +750,113 @@ const pdfWorker = new Worker(
 
     // Fetch template settings from database
     const templateSetting = await prisma.documentTemplateSetting.findUnique({
-      where: { workspaceId_documentType: { workspaceId, documentType: 'INVOICE' } },
+      where: { workspaceId_documentType: { workspaceId, documentType: typedDocumentType } },
     });
 
     const templateSnapshot = templateSetting ? {
-      documentType: 'INVOICE',
+      documentType: typedDocumentType,
       templateKey: templateSetting.templateKey,
       layoutVariant: templateSetting.layoutVariant,
       enabledBlocks: templateSetting.enabledBlocks as Record<string, boolean>,
       blockOrder: templateSetting.blockOrder as string[],
       settings: templateSetting.settings || {},
     } : {
-      documentType: 'INVOICE',
+      documentType: typedDocumentType,
       templateKey: 'standard',
       layoutVariant: 'default',
       enabledBlocks: {
         header: true, logo: true, companyInfo: true, clientInfo: true,
         documentTitle: true, itemsTable: true, financialSummary: true,
-        paymentInfo: true, terms: false, observations: true,
-        responsibleSignature: true, clientSignature: false, qrCode: false, footer: true,
+        paymentInfo: typedDocumentType === 'INVOICE', terms: typedDocumentType !== 'INVOICE', observations: true,
+        responsibleSignature: true, clientSignature: typedDocumentType !== 'INVOICE', qrCode: false, footer: true,
       },
-      blockOrder: [
-        "header", "logo", "companyInfo", "clientInfo", "documentTitle",
-        "itemsTable", "financialSummary", "paymentInfo", "observations",
-        "responsibleSignature", "footer",
-      ],
+      blockOrder: typedDocumentType === 'INVOICE'
+        ? [
+            "header", "logo", "companyInfo", "clientInfo", "documentTitle",
+            "itemsTable", "financialSummary", "paymentInfo", "observations",
+            "responsibleSignature", "footer",
+          ]
+        : [
+            "header", "logo", "companyInfo", "clientInfo", "documentTitle",
+            "itemsTable", "financialSummary", "terms", "observations",
+            "responsibleSignature", "clientSignature", "footer",
+          ],
       settings: {},
     };
 
+    const dueDate =
+      typedDocumentType === 'INVOICE'
+        ? source.dueDate
+        : typedDocumentType === 'QUOTE'
+          ? source.validUntil
+          : source.scheduledFor || source.completedAt || source.createdAt;
+    const sourceItems = source.items?.length
+      ? source.items
+      : typedDocumentType === 'SERVICE_ORDER'
+        ? [
+            {
+              type: 'SERVICE',
+              description: source.description,
+              quantity: 1,
+              unit: 'OS',
+              unitPrice: 0,
+              totalPrice: 0,
+            },
+          ]
+        : [];
+    const documentTitle =
+      typedDocumentType === 'QUOTE'
+        ? 'Proposta Comercial'
+        : typedDocumentType === 'SERVICE_ORDER'
+          ? source.title
+          : undefined;
+    const documentTerms =
+      typedDocumentType === 'QUOTE'
+        ? source.terms || workspace.defaultQuoteTerms || null
+        : typedDocumentType === 'SERVICE_ORDER'
+          ? workspace.defaultServiceOrderTerms || null
+          : workspace.defaultContractTerms || null;
+    const documentObservations =
+      typedDocumentType === 'QUOTE'
+        ? source.observations || null
+        : typedDocumentType === 'SERVICE_ORDER'
+          ? source.clientNotes || source.description || null
+          : source.observations || workspace.defaultInvoiceNotes || null;
+
     const renderData = {
-      number: invoice.number,
-      status: invoice.status,
-      issueDate: formatDate(invoice.issueDate),
-      dueDate: formatDate(invoice.dueDate),
-      paymentMethod: invoice.paymentMethod,
-      pixKey: invoice.pixKey,
-      totalAmount: formatCurrency(invoice.totalAmount),
-      items: invoice.items.map(item => ({
+      number: source.number,
+      status: source.status,
+      issueDate: formatDate(source.issueDate || source.createdAt),
+      dueDate: formatDate(dueDate),
+      paymentMethod: typedDocumentType === 'INVOICE' ? source.paymentMethod : null,
+      pixKey: typedDocumentType === 'INVOICE' ? source.pixKey : null,
+      totalAmount: formatCurrency(source.totalAmount || 0),
+      title: documentTitle,
+      items: sourceItems.map((item: any) => ({
         type: item.type,
         description: item.description,
         quantity: item.quantity.toString(),
         unit: item.unit,
-        unitPrice: formatCurrency(item.unitPrice),
-        totalPrice: formatCurrency(item.totalPrice),
+        unitPrice: formatCurrency(item.unitPrice || 0),
+        totalPrice: formatCurrency(item.totalPrice || 0),
       })),
-      terms: workspace.defaultContractTerms || null,
-      observations: invoice.observations || workspace.defaultInvoiceNotes || null,
-      subtotalServices: formatCurrency(invoice.subtotalServices),
-      subtotalMaterials: formatCurrency(invoice.subtotalMaterials),
-      discountAmount: formatCurrency(invoice.discountAmount),
+      terms: documentTerms,
+      observations: documentObservations,
+      subtotalServices: formatCurrency(source.subtotalServices || 0),
+      subtotalMaterials: formatCurrency(source.subtotalMaterials || 0),
+      discountAmount: formatCurrency(source.discountAmount || 0),
     };
 
     // 5. Render dynamic block-based A4 HTML
     const html = renderA4Document({
-      documentType: 'INVOICE',
+      documentType: typedDocumentType,
       brand: brandSnapshot,
       responsible: responsibleSnapshot,
       client: {
-        tradeName: invoice.client.tradeName,
-        legalName: invoice.client.legalName,
-        document: invoice.client.document,
-        email: invoice.client.email,
+        tradeName: source.client.tradeName,
+        legalName: source.client.legalName,
+        document: source.client.document,
+        email: source.client.email,
       },
       data: renderData,
       templateSettings: templateSnapshot,
@@ -815,9 +891,27 @@ const pdfWorker = new Worker(
       throw new Error(`Falha ao gerar o arquivo PDF.`);
     }
 
-    const sanitizedNumber = safeFilename(invoice.number);
-    const fileName = `invoice-${sanitizedNumber}-v${version}.pdf`;
-    const key = `${workspaceId}/invoices/${entityId}/${fileName}`;
+    const sanitizedNumber = safeFilename(source.number);
+    const filePrefix =
+      typedDocumentType === 'QUOTE'
+        ? 'quote'
+        : typedDocumentType === 'SERVICE_ORDER'
+          ? 'service-order'
+          : 'invoice';
+    const displayPrefix =
+      typedDocumentType === 'QUOTE'
+        ? 'orcamento'
+        : typedDocumentType === 'SERVICE_ORDER'
+          ? 'ordem-servico'
+          : 'fatura';
+    const folder =
+      typedDocumentType === 'QUOTE'
+        ? 'quotes'
+        : typedDocumentType === 'SERVICE_ORDER'
+          ? 'service-orders'
+          : 'invoices';
+    const fileName = `${filePrefix}-${sanitizedNumber}-v${version}.pdf`;
+    const key = `${workspaceId}/${folder}/${entityId}/${fileName}`;
 
     // 7. Upload the buffer directly to MinIO
     console.log(`[PDF Worker] Uploading PDF buffer to MinIO bucket "${s3Bucket}" key "${key}"...`);
@@ -847,7 +941,7 @@ const pdfWorker = new Worker(
           workspaceId,
           bucket: s3Bucket,
           key,
-          originalFilename: `fatura-${sanitizedNumber}-v${version}.pdf`,
+          originalFilename: `${displayPrefix}-${sanitizedNumber}-v${version}.pdf`,
           mimeType: 'application/pdf',
           sizeBytes,
           sha256,
@@ -859,16 +953,18 @@ const pdfWorker = new Worker(
       generatedDoc = await prisma.generatedDocument.create({
         data: {
           workspaceId,
-          entityType: 'INVOICE',
+          entityType,
           entityId,
-          documentType: 'INVOICE',
+          documentType: typedDocumentType,
           version,
           fileObjectId: fileObject.id,
           sha256,
           generatedById: actorUserId,
           metadata: JSON.stringify({
-            invoiceNumber: invoice.number,
-            generatedFrom: 'invoice-preview',
+            invoiceNumber: typedDocumentType === 'INVOICE' ? source.number : undefined,
+            quoteNumber: typedDocumentType === 'QUOTE' ? source.number : undefined,
+            serviceOrderNumber: typedDocumentType === 'SERVICE_ORDER' ? source.number : undefined,
+            generatedFrom: `${typedDocumentType.toLowerCase()}-preview`,
             storage: 's3',
             brandSnapshot,
             responsibleSnapshot,
@@ -901,7 +997,7 @@ const pdfWorker = new Worker(
           beforeJson: null,
           afterJson: JSON.stringify({
             documentId: generatedDoc.id,
-            entityType: 'INVOICE',
+            entityType,
             entityId,
             version,
             originalFilename: fileObject.originalFilename,
@@ -925,9 +1021,9 @@ const pdfWorker = new Worker(
       entityId: generatedDoc.id,
       data: {
         documentId: generatedDoc.id,
-        entityType: 'INVOICE',
+        entityType,
         entityId,
-        documentType: 'INVOICE',
+        documentType: typedDocumentType,
         version,
         originalFilename: fileObject.originalFilename,
       },
@@ -1247,6 +1343,9 @@ const slaMonitorWorker = new Worker(
                 ticketId: ticket.id,
                 number: ticket.number,
                 title: ticket.title,
+                clientId: ticket.clientId,
+                contractId: ticket.contractId,
+                slaPolicyId: ticket.slaPolicyId,
                 slaType: 'FIRST_RESPONSE',
                 slaDueAt: ticket.slaDueFirstResponseAt.toISOString(),
               },
@@ -1266,6 +1365,9 @@ const slaMonitorWorker = new Worker(
                   ticketId: ticket.id,
                   number: ticket.number,
                   title: ticket.title,
+                  clientId: ticket.clientId,
+                  contractId: ticket.contractId,
+                  slaPolicyId: ticket.slaPolicyId,
                   slaDueFirstResponseAt: ticket.slaDueFirstResponseAt.toISOString(),
                   remainingMinutes: diffMin,
                 },
@@ -1289,6 +1391,9 @@ const slaMonitorWorker = new Worker(
                 ticketId: ticket.id,
                 number: ticket.number,
                 title: ticket.title,
+                clientId: ticket.clientId,
+                contractId: ticket.contractId,
+                slaPolicyId: ticket.slaPolicyId,
                 slaType: 'RESOLUTION',
                 slaDueAt: ticket.slaDueResolutionAt.toISOString(),
               },
@@ -1308,6 +1413,9 @@ const slaMonitorWorker = new Worker(
                   ticketId: ticket.id,
                   number: ticket.number,
                   title: ticket.title,
+                  clientId: ticket.clientId,
+                  contractId: ticket.contractId,
+                  slaPolicyId: ticket.slaPolicyId,
                   slaDueResolutionAt: ticket.slaDueResolutionAt.toISOString(),
                   remainingMinutes: diffMin,
                 },

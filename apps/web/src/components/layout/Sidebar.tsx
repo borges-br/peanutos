@@ -47,39 +47,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
     );
   };
 
-  const renderPlannedItem = (label: string, icon: string, path?: string) => {
-    const active = path ? isRouteActive(path) : false;
-
-    if (path) {
-      return (
-        <button
-          onClick={() => handleNavigation(path)}
-          className={`flex items-center justify-between w-full px-md py-sm hover:bg-surface-container-high transition-all text-on-surface-variant hover:text-on-surface rounded duration-150 text-left ${active ? 'active-nav font-medium' : ''}`}
-        >
-          <div className="flex items-center gap-md">
-            <span className="material-symbols-outlined text-[18px]">{icon}</span>
-            <span className="font-body-sm">{label}</span>
-          </div>
-          <span className="text-[9px] bg-secondary-container/20 text-on-secondary-container px-1.5 py-0.5 rounded uppercase font-bold tracking-tighter">
-            {t.common.planned}
-          </span>
-        </button>
-      );
-    }
-
-    return (
-      <div className="flex items-center justify-between px-md py-sm hover:bg-surface-container-high transition-all text-on-surface-variant/40 cursor-not-allowed select-none rounded">
-        <div className="flex items-center gap-md">
-          <span className="material-symbols-outlined text-[18px] opacity-40">{icon}</span>
-          <span className="font-body-sm">{label}</span>
-        </div>
-        <span className="text-[9px] bg-secondary-container/20 text-on-secondary-container px-1.5 py-0.5 rounded uppercase font-bold tracking-tighter">
-          {t.common.planned}
-        </span>
-      </div>
-    );
-  };
-
   const [showCropModal, setShowCropModal] = useState(false);
 
   return (
@@ -120,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
             {renderNavItem(t.navigation.clients, 'groups', '/dashboard/clients')}
             {renderNavItem(t.navigation.technicalInventory, 'inventory_2', '/dashboard/inventory')}
             {renderNavItem(t.navigation.tickets, 'confirmation_number', '/dashboard/tickets')}
-            {renderPlannedItem(t.navigation.serviceOrders, 'construction', '/dashboard/service-orders')}
+            {renderNavItem(t.navigation.serviceOrders, 'construction', '/dashboard/service-orders')}
           </div>
         </div>
 
@@ -130,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
             {t.navigation.commercial}
           </p>
           <div className="space-y-base">
-            {renderPlannedItem(t.navigation.quotes, 'request_quote', '/dashboard/quotes')}
+            {renderNavItem(t.navigation.quotes, 'request_quote', '/dashboard/quotes')}
             {renderNavItem(t.navigation.invoices, 'receipt_long', '/dashboard/invoices')}
             {renderNavItem(t.navigation.contracts, 'description', '/dashboard/contracts')}
             {renderNavItem(t.navigation.recurringFinancials, 'account_balance_wallet', '/dashboard/financials')}

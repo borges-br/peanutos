@@ -17,6 +17,7 @@ export const clientSchema = z.object({
   phone: z.string().min(8, { message: 'Telefone inválido' }),
   website: z.string().url().optional().or(z.literal('')),
   notes: z.string().optional(),
+  slaPolicyId: z.string().uuid({ message: 'ID de SLA inválido' }).optional().nullable(),
 });
 
 export type ClientInput = z.infer<typeof clientSchema>;
@@ -127,14 +128,21 @@ export const ticketTimeEntryCreateSchema = z.object({
 
 export type TicketTimeEntryCreateInput = z.infer<typeof ticketTimeEntryCreateSchema>;
 
+export const ticketCategoryCreateSchema = z.object({
+  name: z.string().trim().min(2, { message: 'A categoria deve ter pelo menos 2 caracteres' }).max(100),
+});
+
+export type TicketCategoryCreateInput = z.infer<typeof ticketCategoryCreateSchema>;
+
 export const slaPolicyCreateSchema = z.object({
   name: z.string().min(3, { message: 'O nome da política de SLA deve ter pelo menos 3 caracteres' }),
   description: z.string().optional().nullable(),
   priority: z.enum(ticketPriorities),
-  firstResponseMinutes: z.number().int().min(1, { message: 'Tempo de primeira resposta deve ser de pelo menos 1 minuto' }),
-  startMinutes: z.number().int().min(1, { message: 'Tempo de início deve ser de pelo menos 1 minuto' }),
-  resolutionMinutes: z.number().int().min(1, { message: 'Tempo de resolução deve ser de pelo menos 1 minuto' }),
+  firstResponseMinutes: z.coerce.number().int().min(1, { message: 'Tempo de primeira resposta deve ser de pelo menos 1 minuto' }),
+  startMinutes: z.coerce.number().int().min(1, { message: 'Tempo de início deve ser de pelo menos 1 minuto' }),
+  resolutionMinutes: z.coerce.number().int().min(1, { message: 'Tempo de resolução deve ser de pelo menos 1 minuto' }),
   businessHoursOnly: z.boolean().default(false),
+  isDefault: z.boolean().default(false),
   active: z.boolean().default(true),
 });
 
@@ -455,6 +463,92 @@ export const invoiceStatusUpdateSchema = z.object({
 });
 export type InvoiceStatusUpdateInput = z.infer<typeof invoiceStatusUpdateSchema>;
 
+// --- QUOTES VALIDATORS ---
+
+export const quoteStatusEnum = z.enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "CANCELLED"]);
+export type QuoteStatus = z.infer<typeof quoteStatusEnum>;
+
+export const quoteQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  search: z.string().optional().nullable(),
+  status: quoteStatusEnum.optional().nullable(),
+  clientId: z.string().uuid({ message: 'ID do cliente inválido' }).optional().nullable(),
+});
+export type QuoteQueryInput = z.infer<typeof quoteQuerySchema>;
+
+export const quoteCreateSchema = z.object({
+  clientId: z.string().uuid({ message: 'ID do cliente inválido' }),
+  number: z.string().optional().nullable(),
+  status: quoteStatusEnum.default("DRAFT"),
+  issueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de emissão inválida' }).optional().nullable(),
+  validUntil: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de validade inválida' }),
+  discountAmount: z.coerce.number().min(0, { message: 'O desconto deve ser maior ou igual a zero' }).default(0),
+  terms: z.string().optional().nullable(),
+  observations: z.string().optional().nullable(),
+  items: z.array(invoiceItemCreateSchema).min(1, { message: 'O orçamento deve ter pelo menos 1 item' }),
+});
+export type QuoteCreateInput = z.infer<typeof quoteCreateSchema>;
+
+export const quoteUpdateSchema = z.object({
+  validUntil: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de validade inválida' }).optional(),
+  discountAmount: z.coerce.number().min(0, { message: 'O desconto deve ser maior ou igual a zero' }).optional(),
+  terms: z.string().optional().nullable(),
+  observations: z.string().optional().nullable(),
+  items: z.array(invoiceItemCreateSchema).min(1, { message: 'O orçamento deve ter pelo menos 1 item' }).optional(),
+});
+export type QuoteUpdateInput = z.infer<typeof quoteUpdateSchema>;
+
+export const quoteStatusUpdateSchema = z.object({
+  status: quoteStatusEnum,
+});
+export type QuoteStatusUpdateInput = z.infer<typeof quoteStatusUpdateSchema>;
+
+// --- SERVICE ORDERS VALIDATORS ---
+
+export const serviceOrderStatusEnum = z.enum(["DRAFT", "SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
+export type ServiceOrderStatus = z.infer<typeof serviceOrderStatusEnum>;
+
+export const serviceOrderQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  search: z.string().optional().nullable(),
+  status: serviceOrderStatusEnum.optional().nullable(),
+  clientId: z.string().uuid({ message: 'ID do cliente inválido' }).optional().nullable(),
+  ticketId: z.string().uuid({ message: 'ID do chamado inválido' }).optional().nullable(),
+});
+export type ServiceOrderQueryInput = z.infer<typeof serviceOrderQuerySchema>;
+
+export const serviceOrderItemCreateSchema = invoiceItemCreateSchema;
+export type ServiceOrderItemCreateInput = z.infer<typeof serviceOrderItemCreateSchema>;
+
+export const serviceOrderCreateSchema = z.object({
+  clientId: z.string().uuid({ message: 'ID do cliente inválido' }),
+  ticketId: z.string().uuid({ message: 'ID do chamado inválido' }).optional().nullable(),
+  contractId: z.string().uuid({ message: 'ID do contrato inválido' }).optional().nullable(),
+  responsibleUserId: z.string().uuid({ message: 'ID do responsável inválido' }).optional().nullable(),
+  number: z.string().optional().nullable(),
+  status: serviceOrderStatusEnum.default("DRAFT"),
+  title: z.string().min(3, { message: 'O título da O.S. deve ter pelo menos 3 caracteres' }),
+  description: z.string().min(5, { message: 'A descrição da O.S. deve ter pelo menos 5 caracteres' }),
+  scheduledFor: z.string().refine((val) => !val || !isNaN(Date.parse(val)), { message: 'Data de agendamento inválida' }).optional().nullable().or(z.literal('')),
+  laborMinutes: z.coerce.number().int().min(0).default(0),
+  internalNotes: z.string().optional().nullable(),
+  clientNotes: z.string().optional().nullable(),
+  items: z.array(serviceOrderItemCreateSchema).default([]),
+});
+export type ServiceOrderCreateInput = z.infer<typeof serviceOrderCreateSchema>;
+
+export const serviceOrderUpdateSchema = serviceOrderCreateSchema
+  .omit({ clientId: true, number: true, status: true })
+  .partial();
+export type ServiceOrderUpdateInput = z.infer<typeof serviceOrderUpdateSchema>;
+
+export const serviceOrderStatusUpdateSchema = z.object({
+  status: serviceOrderStatusEnum,
+});
+export type ServiceOrderStatusUpdateInput = z.infer<typeof serviceOrderStatusUpdateSchema>;
+
 // --- WORKSPACE BRAND SETTINGS VALIDATORS ---
 
 const hexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: 'Cor deve ser hexadecimal válido (ex: #1a56db)' }).optional().nullable().or(z.literal(''));
@@ -509,7 +603,7 @@ export type UpdateUserProfileInput = z.infer<typeof updateUserProfileSchema>;
 
 // --- DOCUMENT TEMPLATE VALIDATORS ---
 
-export const TEMPLATE_DOCUMENT_TYPES = ['INVOICE', 'QUOTE', 'SERVICE_ORDER', 'CONTRACT', 'REPORT'] as const;
+export const TEMPLATE_DOCUMENT_TYPES = ['INVOICE', 'QUOTE', 'SERVICE_ORDER', 'REPORT'] as const;
 export type TemplateDocumentType = typeof TEMPLATE_DOCUMENT_TYPES[number];
 
 export const TEMPLATE_BLOCKS = [
@@ -562,6 +656,8 @@ export const WEBHOOK_EVENTS = [
   'document.generated',
   'client.created',
   'client.updated',
+  'service_order.created',
+  'service_order.status_changed',
 
   // COMMERCIAL
   'invoice.created',
@@ -577,6 +673,8 @@ export const WEBHOOK_EVENTS = [
   'contract.renewal_due',
   'billing.event_created',
   'billing.event_skipped',
+  'quote.created',
+  'quote.status_changed',
 ] as const;
 
 export type WebhookEventType = typeof WEBHOOK_EVENTS[number];
@@ -776,7 +874,7 @@ export const WEBHOOK_EVENT_CATALOG: WebhookCatalogEntry[] = [
     type: 'ticket.sla_first_response_due_soon',
     category: 'OPERATION',
     label: 'SLA de Resposta Próximo do Vencimento',
-    description: 'Disparado pelo scheduler quando o chamado está a menos de 30 minutos de violar o SLA de primeira resposta.',
+    description: 'Disparado pelo scheduler quando o chamado está próximo de violar o SLA de primeira resposta calculado por contrato, cliente ou prioridade.',
     entityType: 'TICKET',
     lifecycle: 'scheduled',
     status: 'active',
@@ -784,6 +882,8 @@ export const WEBHOOK_EVENT_CATALOG: WebhookCatalogEntry[] = [
       ticketId: 'tkt_881729',
       number: 'TKT-2026-0045',
       slaDueFirstResponseAt: '2026-05-25T19:30:00Z',
+      slaPolicyId: 'sla_123',
+      contractId: 'ctr_123',
       remainingMinutes: 28
     }
   },
@@ -791,7 +891,7 @@ export const WEBHOOK_EVENT_CATALOG: WebhookCatalogEntry[] = [
     type: 'ticket.sla_resolution_due_soon',
     category: 'OPERATION',
     label: 'SLA de Resolução Próximo do Vencimento',
-    description: 'Disparado pelo scheduler quando o chamado está a menos de 60 minutos de violar o SLA de resolução.',
+    description: 'Disparado pelo scheduler quando o chamado está próximo de violar o SLA de resolução calculado por contrato, cliente ou prioridade.',
     entityType: 'TICKET',
     lifecycle: 'scheduled',
     status: 'active',
@@ -799,6 +899,8 @@ export const WEBHOOK_EVENT_CATALOG: WebhookCatalogEntry[] = [
       ticketId: 'tkt_881729',
       number: 'TKT-2026-0045',
       slaDueResolutionAt: '2026-05-25T20:00:00Z',
+      slaPolicyId: 'sla_123',
+      contractId: 'ctr_123',
       remainingMinutes: 52
     }
   },
@@ -815,6 +917,8 @@ export const WEBHOOK_EVENT_CATALOG: WebhookCatalogEntry[] = [
       number: 'TKT-2026-0045',
       slaType: 'RESOLUTION',
       slaDueAt: '2026-05-25T14:00:00Z',
+      slaPolicyId: 'sla_123',
+      contractId: 'ctr_123',
       breachedAt: '2026-05-25T14:01:00Z'
     }
   },
@@ -901,22 +1005,32 @@ export const WEBHOOK_EVENT_CATALOG: WebhookCatalogEntry[] = [
   {
     type: 'service_order.created',
     category: 'OPERATION',
-    label: 'Ordem de Serviço Criada (Planejado)',
-    description: 'Disparado quando uma OS técnica for criada após a implantação do módulo.',
+    label: 'Ordem de Serviço Criada',
+    description: 'Disparado quando uma ordem de serviço técnica é criada.',
     entityType: 'SERVICE_ORDER',
-    lifecycle: 'future',
-    status: 'planned',
-    payloadExample: {}
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      serviceOrderId: 'os_981273',
+      number: 'OS-2026-0045',
+      status: 'DRAFT',
+      clientId: 'cli_981273'
+    }
   },
   {
     type: 'service_order.status_changed',
     category: 'OPERATION',
-    label: 'Status da OS Alterado (Planejado)',
-    description: 'Disparado na mudança de status técnico da Ordem de Serviço.',
+    label: 'Status da OS Alterado',
+    description: 'Disparado na mudança de status técnico da ordem de serviço.',
     entityType: 'SERVICE_ORDER',
-    lifecycle: 'future',
-    status: 'planned',
-    payloadExample: {}
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      serviceOrderId: 'os_981273',
+      number: 'OS-2026-0045',
+      oldStatus: 'SCHEDULED',
+      newStatus: 'IN_PROGRESS'
+    }
   },
   {
     type: 'service_order.due_today',
@@ -1147,22 +1261,32 @@ export const WEBHOOK_EVENT_CATALOG: WebhookCatalogEntry[] = [
   {
     type: 'quote.created',
     category: 'COMMERCIAL',
-    label: 'Orçamento Criado (Planejado)',
-    description: 'Disparado na criação de uma nova cotação.',
+    label: 'Orçamento Criado',
+    description: 'Disparado na criação de um novo orçamento comercial.',
     entityType: 'QUOTE',
-    lifecycle: 'future',
-    status: 'planned',
-    payloadExample: {}
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      quoteId: 'qte_981273',
+      number: 'ORC-2026-0045',
+      status: 'DRAFT',
+      totalAmount: 6500.00
+    }
   },
   {
     type: 'quote.status_changed',
     category: 'COMMERCIAL',
-    label: 'Status do Orçamento Alterado (Planejado)',
-    description: 'Disparado no envio, expiração ou alteração da proposta.',
+    label: 'Status do Orçamento Alterado',
+    description: 'Disparado quando o orçamento é enviado, aprovado, recusado ou cancelado.',
     entityType: 'QUOTE',
-    lifecycle: 'future',
-    status: 'planned',
-    payloadExample: {}
+    lifecycle: 'realtime',
+    status: 'active',
+    payloadExample: {
+      quoteId: 'qte_981273',
+      number: 'ORC-2026-0045',
+      oldStatus: 'SENT',
+      newStatus: 'ACCEPTED'
+    }
   },
   {
     type: 'quote.expiring_soon',
@@ -1338,7 +1462,7 @@ export type UpdateWorkspaceUserStatusInput = z.infer<typeof updateWorkspaceUserS
 
 // --- DOCUMENT VALIDATORS ---
 
-export const documentTypeEnum = z.enum(["QUOTE", "INVOICE", "TICKET_CLOSURE", "CONTRACT", "REPORT"]);
+export const documentTypeEnum = z.enum(["QUOTE", "INVOICE", "TICKET_CLOSURE", "CONTRACT", "REPORT", "SERVICE_ORDER"]);
 export type DocumentTypeEnum = z.infer<typeof documentTypeEnum>;
 
 export const documentVisibilityEnum = z.enum(["PRIVATE", "PUBLIC"]);
@@ -1357,6 +1481,20 @@ export const documentQuerySchema = z.object({
 });
 
 export type DocumentQueryInput = z.infer<typeof documentQuerySchema>;
+
+export const documentUploadSchema = z.object({
+  documentType: documentTypeEnum,
+  entityType: z.string().trim().min(2).max(50).default("WORKSPACE"),
+  entityId: z.string().uuid({ message: 'ID da entidade inválido' }).optional().nullable(),
+  filename: z.string().min(1).max(255),
+  mimeType: z.string().min(3).max(120),
+  data: z.string().min(1),
+  visibility: documentVisibilityEnum.default("PRIVATE"),
+  displayName: z.string().max(255).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+});
+
+export type DocumentUploadInput = z.infer<typeof documentUploadSchema>;
 
 // --- INBOUND WEBHOOK VALIDATORS ---
 

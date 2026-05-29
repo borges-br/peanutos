@@ -22,8 +22,8 @@ const DEFAULT_SLA_MINUTES: Record<
 export class SlaService {
   /**
    * Calculates dynamic SLA deadlines (response, start, resolution) for a ticket.
-   * If the client has an active contract linking to an SlaPolicy, that policy overrides the standard setup.
-   * Otherwise, falls back to the workspace's default priority SLA policy.
+   * Contract-specific policy wins first, then client-specific policy, then the
+   * workspace default policy for the ticket priority.
    */
   async calculateSla(
     workspaceId: string,
@@ -70,7 +70,40 @@ export class SlaService {
         }
       }
 
-      // 2. Fall back to standard priority SLA policy
+      // 2. Resolve client-specific SLA policy
+      if (!policy && clientId) {
+        const client = await prisma.client.findFirst({
+          where: {
+            id: clientId,
+            workspaceId,
+            slaPolicyId: { not: null },
+          },
+          select: { slaPolicyId: true },
+        });
+
+        if (client?.slaPolicyId) {
+          policy = await prisma.slaPolicy.findFirst({
+            where: {
+              id: client.slaPolicyId,
+              workspaceId,
+              active: true,
+            },
+          });
+        }
+      }
+
+      // 3. Fall back to standard priority SLA policy
+      if (!policy) {
+        policy = await prisma.slaPolicy.findFirst({
+          where: {
+            workspaceId,
+            priority,
+            isDefault: true,
+            active: true,
+          },
+        });
+      }
+
       if (!policy) {
         policy = await prisma.slaPolicy.findFirst({
           where: {
@@ -78,6 +111,7 @@ export class SlaService {
             priority,
             active: true,
           },
+          orderBy: { createdAt: "asc" },
         });
       }
 
