@@ -124,9 +124,12 @@ nano .env.production
 | `NEXT_PUBLIC_API_URL` | Sim | `/api/v1` | URL que o browser usa para chamar a API |
 | `CORS_ORIGIN` | Sim | `https://app.example.com` | Origem aceita pela API |
 | `PEANUT_IMAGE_REGISTRY` | Sim | `ghcr.io` | Registry Docker |
-| `PEANUT_IMAGE_NAMESPACE` | Sim | `owner/repository` | Namespace das imagens no GHCR |
+| `PEANUT_IMAGE_NAMESPACE` | Sim | `borges-br/peanutos` | Namespace das imagens no GHCR, sempre com `owner/repository` |
 | `PEANUT_IMAGE_TAG` | Sim | `latest` ou `sha-abc123` | Tag que o Compose deve baixar |
 | `NPM_NETWORK` | So NPM | `npm_proxy` | Rede Docker externa compartilhada com o NGINX Proxy Manager |
+
+> [!IMPORTANT]
+> O namespace precisa incluir o nome do repositorio. Para este projeto, use `PEANUT_IMAGE_NAMESPACE=borges-br/peanutos`. Se usar apenas `borges-br`, o Docker tentara baixar `ghcr.io/borges-br/peanut-web:latest`, que nao e o caminho publicado pelo workflow.
 
 ## Escolher proxy reverso
 
@@ -197,6 +200,34 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```bash
 docker login ghcr.io
 ```
+
+Se o pacote GHCR estiver privado, use um Personal Access Token com permissao `read:packages`:
+
+```bash
+echo "$GHCR_PAT" | docker login ghcr.io -u SEU_USUARIO --password-stdin
+```
+
+> [!IMPORTANT]
+> Se o deploy for feito pelo Portainer, configure tambem o registry dentro do Portainer. O `docker login` feito no terminal pode nao ser usado pela stack quando o pull e disparado pela interface.
+
+### Portainer + GHCR privado
+
+Se os packages estiverem privados no GitHub Container Registry:
+
+1. Crie um Personal Access Token no GitHub com permissao `read:packages`.
+2. No Portainer, adicione um registry:
+
+| Campo | Valor |
+| --- | --- |
+| Registry type | Custom registry |
+| Name | `ghcr.io` |
+| Registry URL | `ghcr.io` |
+| Username | Seu usuario GitHub |
+| Password | PAT com `read:packages` |
+
+3. No deploy da stack, selecione esse registry/autenticacao para que o Portainer consiga puxar `ghcr.io/borges-br/peanutos/*`.
+
+Alternativa simples: tornar os packages publicos no GitHub em `Packages > Package settings > Change visibility > Public`.
 
 2. Baixar imagens:
 
@@ -388,6 +419,21 @@ Depois repita o primeiro deploy.
 | Healthcheck | `curl https://app.example.com/api/v1/health` |
 | Espaco em disco | `docker system df` |
 | Limpar imagens antigas | `docker image prune -f` |
+
+## Troubleshooting GHCR
+
+| Erro | Causa comum | Como resolver |
+| --- | --- | --- |
+| `denied` em `ghcr.io/borges-br/peanut-web` | Namespace sem o nome do repositorio | Use `PEANUT_IMAGE_NAMESPACE=borges-br/peanutos` |
+| `unauthorized` em `ghcr.io/borges-br/peanutos/peanut-web` | Pacote privado ou servidor/Portainer sem login no GHCR | Configure o registry `ghcr.io` no Portainer com PAT `read:packages`, rode `docker login ghcr.io`, ou torne os packages publicos |
+| `unauthorized` em `ghcr.io/borges-br/peanutos/peanut-worker` | Mesmo problema de autenticacao, mas em outra imagem da stack | A correcao e global: autenticar o registry ou publicar todos os packages |
+| `manifest unknown` | Tag ainda nao publicada | Rode o workflow `Publish Docker images`, aguarde concluir e confira se a tag existe |
+
+Para conferir manualmente:
+
+```bash
+docker manifest inspect ghcr.io/borges-br/peanutos/peanut-web:latest
+```
 
 ## Portas
 

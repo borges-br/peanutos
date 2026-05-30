@@ -1,2 +1,2 @@
 ALTER TABLE "workspaces"
-ADD COLUMN "invoiceDueSoonOffsetHours" INTEGER NOT NULL DEFAULT 72;
+ADD COLUMN IF NOT EXISTS "invoiceDueSoonOffsetHours" INTEGER NOT NULL DEFAULT 72;

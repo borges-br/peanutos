@@ -139,6 +139,9 @@ O projeto ja inclui:
 | [`.env.production.example`](.env.production.example) | Template de variaveis de producao |
 | [`docs/deployment/production-docker.md`](docs/deployment/production-docker.md) | Guia completo de deploy |
 
+> [!IMPORTANT]
+> As imagens GHCR deste repo ficam em `ghcr.io/borges-br/peanutos/<servico>`. Em producao, configure `PEANUT_IMAGE_NAMESPACE=borges-br/peanutos`; usar apenas `borges-br` faz o Docker procurar imagens no caminho errado.
+
 Resumo do fluxo:
 
 ```mermaid
