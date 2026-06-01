@@ -21,7 +21,7 @@ interface PermissionRule {
 const humanPermissionsMatrix: PermissionRule[] = [
   {
     module: 'Clientes',
-    action: 'Visualizar dossiê',
+    action: 'Visualizar resumo',
     scope: 'Geral',
     description: 'Visualizar dados cadastrais, contatos e histórico do cliente.',
     owner: true, admin: true, financial: true, tech: true, readonly: true
@@ -119,7 +119,7 @@ export default function PermissionsPage() {
           badge: 'CONTÁBIL',
           badgeStyle: 'bg-tertiary/10 text-tertiary border-tertiary/20',
           desc: 'Acesso restrito ao painel financeiro comercial, controle de contratos vigentes, agenda de faturamento e exportação de faturas e recibos.',
-          highlights: ['Contratos — gerenciar', 'Contratos — visualizar', 'Clientes — visualizar dossiê']
+          highlights: ['Contratos — gerenciar', 'Contratos — visualizar', 'Clientes — visualizar resumo']
         };
       case 'TECHNICIAN':
         return {
@@ -127,7 +127,7 @@ export default function PermissionsPage() {
           badge: 'OPERACIONAL',
           badgeStyle: 'bg-secondary-container text-on-secondary-container border-outline-variant',
           desc: 'Atendimento operacional e de campo. Gerenciamento do inventário de ativos técnicos, encerramento de chamados de suporte e lançamento de tempos.',
-          highlights: ['Inventário — gerenciar', 'Chamados — atender e atualizar', 'Clientes — visualizar dossiê']
+          highlights: ['Inventário — gerenciar', 'Chamados — atender e atualizar', 'Clientes — visualizar resumo']
         };
       case 'READ_ONLY':
         return {
@@ -135,7 +135,7 @@ export default function PermissionsPage() {
           badge: 'OBSERVADOR',
           badgeStyle: 'bg-outline-variant/30 text-on-surface-variant border-outline-variant/40',
           desc: 'Acesso global de observador no workspace Peanut OS. Permissões estritas de consulta, sem qualquer permissão de gravação, salvamento ou exclusão.',
-          highlights: ['Clientes — visualizar dossiê', 'Inventário — visualizar ativos', 'Contratos — visualizar']
+          highlights: ['Clientes — visualizar resumo', 'Inventário — visualizar ativos', 'Contratos — visualizar']
         };
     }
   };

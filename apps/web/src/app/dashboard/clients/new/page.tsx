@@ -3,16 +3,18 @@
 import React, { useState } from 'react';
 import { apiRequest } from '../../../../lib/api';
 import { useRouter } from 'next/navigation';
-import { clientSchema } from '@peanut/validators';
+import { clientSchema, formatCpfCnpj, formatPhoneNumber } from '@peanut/validators';
 import { useI18n } from '../../../../i18n/useI18n';
 import Button from '../../../../components/ui/Button';
 import Input from '../../../../components/ui/Input';
+import Select from '../../../../components/ui/Select';
 import Card from '../../../../components/ui/Card';
 
 export default function NewClientPage() {
   const router = useRouter();
   const { t } = useI18n();
 
+  const [type, setType] = useState<'LEGAL_PERSON' | 'NATURAL_PERSON'>('LEGAL_PERSON');
   const [legalName, setLegalName] = useState('');
   const [tradeName, setTradeName] = useState('');
   const [documentVal, setDocumentVal] = useState('');
@@ -29,11 +31,12 @@ export default function NewClientPage() {
     setLoading(true);
 
     const payload = {
+      type,
       legalName,
-      tradeName,
-      document: documentVal,
-      email,
-      phone,
+      tradeName: type === 'LEGAL_PERSON' ? tradeName : undefined,
+      document: documentVal || undefined,
+      email: email || undefined,
+      phone: phone || undefined,
       website: website || undefined,
       notes: notes || undefined,
     };
@@ -81,37 +84,49 @@ export default function NewClientPage() {
         {/* Section 1: Identification */}
         <Card title={t.clients.sections.identification}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+            <Select
+              label="Tipo de cliente *"
+              value={type}
+              onChange={(e) => setType(e.target.value as 'LEGAL_PERSON' | 'NATURAL_PERSON')}
+              options={[
+                { value: 'LEGAL_PERSON', label: 'Empresa' },
+                { value: 'NATURAL_PERSON', label: 'Pessoa fisica' },
+              ]}
+              disabled={loading}
+            />
+
             <Input
               id="legalName"
               type="text"
-              label="Razão Social *"
-              placeholder="Razão Social completa"
+              label={type === 'LEGAL_PERSON' ? 'Razao Social / Nome *' : 'Nome *'}
+              placeholder={type === 'LEGAL_PERSON' ? 'Razao social completa' : 'Nome do cliente'}
               value={legalName}
               onChange={(e) => setLegalName(e.target.value)}
               required
               disabled={loading}
             />
 
-            <Input
-              id="tradeName"
-              type="text"
-              label="Nome Fantasia *"
-              placeholder="Nome comercial do cliente"
-              value={tradeName}
-              onChange={(e) => setTradeName(e.target.value)}
-              required
-              disabled={loading}
-            />
+            {type === 'LEGAL_PERSON' && (
+              <Input
+                id="tradeName"
+                type="text"
+                label="Nome Fantasia"
+                placeholder="Nome comercial do cliente"
+                value={tradeName}
+                onChange={(e) => setTradeName(e.target.value)}
+                disabled={loading}
+              />
+            )}
 
-            <div className="md:col-span-2">
+            <div className={type === 'LEGAL_PERSON' ? 'md:col-span-2' : ''}>
               <Input
                 id="document"
                 type="text"
-                label="CNPJ ou CPF (Apenas números) *"
-                placeholder="12345678000199"
+                label={type === 'LEGAL_PERSON' ? 'CNPJ' : 'CPF'}
+                placeholder={type === 'LEGAL_PERSON' ? '12.345.678/0001-90' : '123.456.789-00'}
                 value={documentVal}
                 onChange={(e) => setDocumentVal(e.target.value)}
-                required
+                onBlur={() => setDocumentVal(formatCpfCnpj(documentVal))}
                 disabled={loading}
               />
             </div>
@@ -124,22 +139,21 @@ export default function NewClientPage() {
             <Input
               id="email"
               type="email"
-              label="E-mail Principal *"
+              label="E-mail Principal"
               placeholder="financeiro@empresa.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
               disabled={loading}
             />
 
             <Input
               id="phone"
               type="text"
-              label="Telefone de Contato *"
+              label="Telefone de Contato"
               placeholder="1155550199"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              required
+              onBlur={() => setPhone(formatPhoneNumber(phone))}
               disabled={loading}
             />
 

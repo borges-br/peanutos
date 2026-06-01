@@ -37,6 +37,49 @@ export class ServiceOrdersService {
     private readonly webhookEvents: WebhookEventsService,
   ) {}
 
+  private documentClient(source: any) {
+    return {
+      tradeName: source?.client?.tradeName || source?.clientName || "Cliente",
+      legalName: source?.client?.legalName || source?.clientName || null,
+      document: source?.client?.document || source?.clientDocument || null,
+      email: source?.client?.email || source?.clientEmail || null,
+      phone: source?.client?.phone || source?.clientPhone || null,
+      address: source?.client?.notes || null,
+    };
+  }
+
+  private async resolveClient(input: any, workspaceId: string) {
+    if (input.clientId) {
+      const client = await prisma.client.findFirst({
+        where: { id: input.clientId, workspaceId },
+      });
+      if (!client) throw new NotFoundException("Cliente não encontrado.");
+      return {
+        client,
+        data: {
+          clientId: client.id,
+          clientName: client.tradeName || client.legalName,
+          clientDocument: client.document || null,
+          clientEmail: client.email || null,
+          clientPhone: client.phone || null,
+        },
+      };
+    }
+
+    const clientName = String(input.clientName || "").trim();
+    if (!clientName) throw new BadRequestException("Informe o nome do cliente.");
+    return {
+      client: null,
+      data: {
+        clientId: null,
+        clientName,
+        clientDocument: input.clientDocument || null,
+        clientEmail: input.clientEmail || null,
+        clientPhone: input.clientPhone || null,
+      },
+    };
+  }
+
   private calculateItems(inputItems: any[]) {
     let subtotalServices = new Prisma.Decimal(0);
     let subtotalMaterials = new Prisma.Decimal(0);
@@ -108,6 +151,7 @@ export class ServiceOrdersService {
       where.OR = [
         { number: { contains: query.search, mode: "insensitive" } },
         { title: { contains: query.search, mode: "insensitive" } },
+        { clientName: { contains: query.search, mode: "insensitive" } },
         { client: { tradeName: { contains: query.search, mode: "insensitive" } } },
         { client: { legalName: { contains: query.search, mode: "insensitive" } } },
         { ticket: { number: { contains: query.search, mode: "insensitive" } } },
@@ -157,27 +201,30 @@ export class ServiceOrdersService {
   }
 
   private async validateRelations(input: any, workspaceId: string) {
-    const client = await prisma.client.findFirst({
-      where: { id: input.clientId, workspaceId },
-    });
-    if (!client) throw new NotFoundException("Cliente não encontrado.");
+    const resolvedClient = await this.resolveClient(input, workspaceId);
 
     if (input.ticketId) {
+      if (!resolvedClient.data.clientId) {
+        throw new BadRequestException("Chamados so podem ser vinculados a clientes cadastrados.");
+      }
       const ticket = await prisma.ticket.findFirst({
         where: { id: input.ticketId, workspaceId },
       });
       if (!ticket) throw new BadRequestException("Chamado inválido.");
-      if (ticket.clientId !== input.clientId) {
+      if (ticket.clientId !== resolvedClient.data.clientId) {
         throw new BadRequestException("O chamado pertence a outro cliente.");
       }
     }
 
     if (input.contractId) {
+      if (!resolvedClient.data.clientId) {
+        throw new BadRequestException("Contratos so podem ser vinculados a clientes cadastrados.");
+      }
       const contract = await prisma.contract.findFirst({
         where: { id: input.contractId, workspaceId },
       });
       if (!contract) throw new BadRequestException("Contrato inválido.");
-      if (contract.clientId !== input.clientId) {
+      if (contract.clientId !== resolvedClient.data.clientId) {
         throw new BadRequestException("O contrato pertence a outro cliente.");
       }
     }
@@ -188,6 +235,8 @@ export class ServiceOrdersService {
       });
       if (!user) throw new BadRequestException("Responsável inválido.");
     }
+
+    return resolvedClient;
   }
 
   async create(
@@ -197,7 +246,7 @@ export class ServiceOrdersService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    await this.validateRelations(input, workspaceId);
+    const resolvedClient = await this.validateRelations(input, workspaceId);
     const calculated = this.calculateItems(input.items || []);
 
     let serviceOrder: any;
@@ -212,7 +261,7 @@ export class ServiceOrdersService {
         serviceOrder = await prisma.serviceOrder.create({
           data: {
             workspaceId,
-            clientId: input.clientId,
+            ...resolvedClient.data,
             ticketId: input.ticketId || null,
             contractId: input.contractId || null,
             responsibleUserId: input.responsibleUserId || null,
@@ -289,6 +338,7 @@ export class ServiceOrdersService {
           number: serviceOrder.number,
           status: serviceOrder.status,
           clientId: serviceOrder.clientId,
+          clientName: serviceOrder.clientName,
           ticketId: serviceOrder.ticketId,
         },
       })
@@ -320,9 +370,13 @@ export class ServiceOrdersService {
 
     const relationInput = {
       clientId: serviceOrder.clientId,
-      ticketId: input.ticketId ?? serviceOrder.ticketId,
-      contractId: input.contractId ?? serviceOrder.contractId,
-      responsibleUserId: input.responsibleUserId ?? serviceOrder.responsibleUserId,
+      clientName: serviceOrder.clientName,
+      clientDocument: serviceOrder.clientDocument,
+      clientEmail: serviceOrder.clientEmail,
+      clientPhone: serviceOrder.clientPhone,
+      ticketId: input.ticketId !== undefined ? input.ticketId : serviceOrder.ticketId,
+      contractId: input.contractId !== undefined ? input.contractId : serviceOrder.contractId,
+      responsibleUserId: input.responsibleUserId !== undefined ? input.responsibleUserId : serviceOrder.responsibleUserId,
     };
     await this.validateRelations(relationInput, workspaceId);
 
@@ -673,14 +727,7 @@ export class ServiceOrdersService {
               false,
           }
         : null,
-      client: {
-        tradeName: serviceOrder.client.tradeName,
-        legalName: serviceOrder.client.legalName,
-        document: serviceOrder.client.document,
-        email: serviceOrder.client.email,
-        phone: serviceOrder.client.phone,
-        address: serviceOrder.client.notes,
-      },
+      client: this.documentClient(serviceOrder),
       data: {
         number: serviceOrder.number,
         status: serviceOrder.status,

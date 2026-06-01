@@ -5,6 +5,7 @@ import { apiRequest } from '../../../lib/api';
 import { extractArray, extractRecord } from '../../../lib/api-shape';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '../../../i18n/useI18n';
+import { formatCpfCnpj, formatPhoneNumber } from '@peanut/validators';
 import Button from '../../../components/ui/Button';
 import Badge from '../../../components/ui/Badge';
 import Input from '../../../components/ui/Input';
@@ -59,14 +60,18 @@ export default function ClientsPage() {
     setPage(1);
   };
 
+  const clientDisplayName = (client: any) => client.tradeName || client.legalName || '--';
+
   // DataTable column definitions
   const columns = [
     {
       header: `${t.clients.tradeName} / ${t.clients.legalName}`,
       render: (client: any) => (
         <div className="flex flex-col py-0.5">
-          <span className="font-semibold text-on-surface">{client.tradeName}</span>
-          <span className="text-[11px] text-on-surface-variant/70 mt-0.5">{client.legalName}</span>
+          <span className="font-semibold text-on-surface">{clientDisplayName(client)}</span>
+          <span className="text-[11px] text-on-surface-variant/70 mt-0.5">
+            {client.type === 'NATURAL_PERSON' ? 'Pessoa fisica' : client.legalName}
+          </span>
         </div>
       ),
     },
@@ -74,7 +79,7 @@ export default function ClientsPage() {
       header: t.clients.document,
       render: (client: any) => (
         <span className="font-mono text-technical-data text-on-surface-variant">
-          {client.document || '--'}
+          {client.document ? formatCpfCnpj(client.document) : '--'}
         </span>
       ),
     },
@@ -83,7 +88,7 @@ export default function ClientsPage() {
       render: (client: any) => (
         <div className="flex flex-col py-0.5">
           <span className="text-on-surface">{client.email || '--'}</span>
-          <span className="text-[11px] text-on-surface-variant/70 mt-0.5 font-mono">{client.phone || '--'}</span>
+          <span className="text-[11px] text-on-surface-variant/70 mt-0.5 font-mono">{client.phone ? formatPhoneNumber(client.phone) : '--'}</span>
         </div>
       ),
     },
@@ -131,8 +136,8 @@ export default function ClientsPage() {
       <div className="flex flex-col gap-sm">
         <div className="flex justify-between items-start">
           <div className="flex flex-col">
-            <span className="font-bold text-on-surface">{client.tradeName}</span>
-            <span className="text-[11px] text-on-surface-variant/70">{client.legalName}</span>
+            <span className="font-bold text-on-surface">{clientDisplayName(client)}</span>
+            <span className="text-[11px] text-on-surface-variant/70">{client.type === 'NATURAL_PERSON' ? 'Pessoa fisica' : client.legalName}</span>
           </div>
           <Badge variant={badgeVariant}>{label}</Badge>
         </div>
@@ -140,7 +145,7 @@ export default function ClientsPage() {
         <div className="grid grid-cols-2 gap-xs text-[12px]">
           <div className="flex flex-col">
             <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Documento</span>
-            <span className="font-mono mt-0.5">{client.document || '--'}</span>
+            <span className="font-mono mt-0.5">{client.document ? formatCpfCnpj(client.document) : '--'}</span>
           </div>
           <div className="flex flex-col">
             <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">Contato</span>

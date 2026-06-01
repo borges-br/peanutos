@@ -235,25 +235,15 @@ Alternativa simples: tornar os packages publicos no GitHub em `Packages > Packag
 docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml pull
 ```
 
-3. Subir banco, Redis e MinIO:
-
-```bash
-docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml up -d postgres redis minio
-```
-
-4. Aplicar migracoes:
-
-```bash
-docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml --profile migrate run --rm migrator
-```
-
-5. Subir aplicacao:
+3. Subir aplicacao:
 
 ```bash
 docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml up -d
 ```
 
-6. Validar:
+O servico `migrator` roda automaticamente como um job de inicializacao. Ele aplica as migracoes pendentes, encerra com status `0`, e so entao `peanut-api` e `peanut-worker` iniciam. E normal ele aparecer como `Exited` no Docker/Portainer depois do deploy.
+
+4. Validar:
 
 ```bash
 docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml ps
@@ -286,25 +276,7 @@ docker compose --env-file .env.production \
   pull
 ```
 
-3. Subir banco, Redis e MinIO:
-
-```bash
-docker compose --env-file .env.production \
-  -f infra/docker/docker-compose.production.yml \
-  -f infra/docker/docker-compose.npm.yml \
-  up -d postgres redis minio
-```
-
-4. Aplicar migracoes:
-
-```bash
-docker compose --env-file .env.production \
-  -f infra/docker/docker-compose.production.yml \
-  -f infra/docker/docker-compose.npm.yml \
-  --profile migrate run --rm migrator
-```
-
-5. Subir aplicacao sem Caddy:
+3. Subir aplicacao sem Caddy:
 
 ```bash
 docker compose --env-file .env.production \
@@ -313,7 +285,9 @@ docker compose --env-file .env.production \
   up -d
 ```
 
-6. Configurar o Proxy Host no NPM:
+O servico `migrator` roda automaticamente como um job de inicializacao. Ele aplica as migracoes pendentes, encerra com status `0`, e so entao `peanut-api` e `peanut-worker` iniciam. E normal ele aparecer como `Exited` no Docker/Portainer depois do deploy.
+
+4. Configurar o Proxy Host no NPM:
 
 | Tela do NPM | Valor |
 | --- | --- |
@@ -334,7 +308,7 @@ Em `Custom locations`, adicione:
 | Forward Hostname / IP | `peanut-api` |
 | Forward Port | `3001` |
 
-7. Validar:
+5. Validar:
 
 ```bash
 curl https://app.example.com/api/v1/health
@@ -346,7 +320,6 @@ curl https://app.example.com/api/v1/health
 
 ```bash
 docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml pull
-docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml --profile migrate run --rm migrator
 docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml up -d
 docker image prune -f
 ```
@@ -358,10 +331,6 @@ docker compose --env-file .env.production \
   -f infra/docker/docker-compose.production.yml \
   -f infra/docker/docker-compose.npm.yml \
   pull
-docker compose --env-file .env.production \
-  -f infra/docker/docker-compose.production.yml \
-  -f infra/docker/docker-compose.npm.yml \
-  --profile migrate run --rm migrator
 docker compose --env-file .env.production \
   -f infra/docker/docker-compose.production.yml \
   -f infra/docker/docker-compose.npm.yml \

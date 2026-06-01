@@ -101,7 +101,7 @@ export default function ServiceOrderDetailPage() {
             </Badge>
           </div>
           <p className="text-[12px] text-on-surface-variant font-mono">
-            {serviceOrder.title} · Cliente: {serviceOrder.client?.tradeName}
+            {serviceOrder.title} · Cliente: {serviceOrder.client?.tradeName || serviceOrder.clientName || '--'}
           </p>
         </div>
         <div className="flex flex-wrap gap-sm">
@@ -120,7 +120,7 @@ export default function ServiceOrderDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-md text-[13px]">
           <div>
             <span className="block text-[10px] uppercase text-on-surface-variant font-bold">Cliente</span>
-            <span className="font-semibold">{serviceOrder.client?.tradeName}</span>
+            <span className="font-semibold">{serviceOrder.client?.tradeName || serviceOrder.clientName || '--'}</span>
           </div>
           <div>
             <span className="block text-[10px] uppercase text-on-surface-variant font-bold">Responsável</span>

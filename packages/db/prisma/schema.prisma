@@ -262,10 +262,10 @@ model Client {
   slaPolicyId String?      @db.Uuid
   type        String       @default("LEGAL_PERSON") @db.VarChar(30) // LEGAL_PERSON or NATURAL_PERSON
   legalName   String       @db.VarChar(200)
-  tradeName   String       @db.VarChar(200)
-  document    String       @db.VarChar(20) // CPF or CNPJ
-  email       String       @db.VarChar(150)
-  phone       String       @db.VarChar(30)
+  tradeName   String?      @db.VarChar(200)
+  document    String?      @db.VarChar(20) // CPF or CNPJ, normalized digits
+  email       String?      @db.VarChar(150)
+  phone       String?      @db.VarChar(30)
   website     String?      @db.VarChar(255)
   notes       String?      @db.Text
   status      ClientStatus @default(ACTIVE)
@@ -488,7 +488,11 @@ model TicketClosure {
 model Quote {
   id                 String      @id @default(uuid()) @db.Uuid
   workspaceId        String      @db.Uuid
-  clientId           String      @db.Uuid
+  clientId           String?     @db.Uuid
+  clientName         String?     @db.VarChar(200)
+  clientDocument     String?     @db.VarChar(20)
+  clientEmail        String?     @db.VarChar(150)
+  clientPhone        String?     @db.VarChar(30)
   number             String      @unique @db.VarChar(50)
   status             String      @default("DRAFT") @db.VarChar(20) // DRAFT, SENT, ACCEPTED, REJECTED, CANCELLED
   issueDate          DateTime    @default(now())
@@ -506,7 +510,7 @@ model Quote {
 
   // Relationships
   workspace          Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  client             Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client             Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
   items              QuoteItem[]
   invoices           Invoice[]
 
@@ -537,7 +541,11 @@ model QuoteItem {
 model ServiceOrder {
   id                 String      @id @default(uuid()) @db.Uuid
   workspaceId        String      @db.Uuid
-  clientId           String      @db.Uuid
+  clientId           String?     @db.Uuid
+  clientName         String?     @db.VarChar(200)
+  clientDocument     String?     @db.VarChar(20)
+  clientEmail        String?     @db.VarChar(150)
+  clientPhone        String?     @db.VarChar(30)
   ticketId           String?     @db.Uuid
   contractId         String?     @db.Uuid
   responsibleUserId  String?     @db.Uuid
@@ -561,7 +569,7 @@ model ServiceOrder {
 
   // Relationships
   workspace          Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  client             Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client             Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
   ticket             Ticket?     @relation(fields: [ticketId], references: [id], onDelete: SetNull)
   contract           Contract?   @relation(fields: [contractId], references: [id], onDelete: SetNull)
   responsibleUser    User?       @relation("ServiceOrderResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
@@ -596,7 +604,11 @@ model ServiceOrderItem {
 model Invoice {
   id            String        @id @default(uuid()) @db.Uuid
   workspaceId   String        @db.Uuid
-  clientId      String        @db.Uuid
+  clientId      String?       @db.Uuid
+  clientName    String?       @db.VarChar(200)
+  clientDocument String?      @db.VarChar(20)
+  clientEmail   String?       @db.VarChar(150)
+  clientPhone   String?       @db.VarChar(30)
   quoteId       String?       @db.Uuid
   contractId    String?       @db.Uuid
   ticketId      String?       @db.Uuid
@@ -620,7 +632,7 @@ model Invoice {
 
   // Relationships
   workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client        Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   quote         Quote?        @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   contract      Contract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
   ticket        Ticket?       @relation(fields: [ticketId], references: [id], onDelete: SetNull)

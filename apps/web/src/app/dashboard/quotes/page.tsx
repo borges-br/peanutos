@@ -154,8 +154,8 @@ export default function QuotesPage() {
                     <td className="p-md font-mono font-semibold text-primary">{quote.number}</td>
                     <td className="p-md">
                       <div className="flex flex-col">
-                        <span className="font-semibold text-on-surface">{quote.client?.tradeName}</span>
-                        <span className="text-[11px] text-on-surface-variant">{quote.client?.legalName}</span>
+                        <span className="font-semibold text-on-surface">{quote.client?.tradeName || quote.clientName || '--'}</span>
+                        <span className="text-[11px] text-on-surface-variant">{quote.client?.legalName || (!quote.clientId ? 'Cliente avulso' : '')}</span>
                       </div>
                     </td>
                     <td className="p-md font-mono text-on-surface-variant">

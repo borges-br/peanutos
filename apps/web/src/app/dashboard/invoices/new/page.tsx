@@ -9,6 +9,7 @@ import Button from '../../../../components/ui/Button';
 import Input from '../../../../components/ui/Input';
 import Select from '../../../../components/ui/Select';
 import Card from '../../../../components/ui/Card';
+import { ClientPicker, QuickClientModal } from '../../../../components/clients/ClientPicker';
 
 interface InvoiceItemInput {
   type: 'SERVICE' | 'MATERIAL';
@@ -25,6 +26,7 @@ export default function NewInvoicePage() {
 
   const [clients, setClients] = useState<any[]>([]);
   const [clientId, setClientId] = useState('');
+  const [clientName, setClientName] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('PIX');
   const [pixKey, setPixKey] = useState('');
@@ -35,6 +37,8 @@ export default function NewInvoicePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [clientPromptOpen, setClientPromptOpen] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<any | null>(null);
 
   // Load clients list
   useEffect(() => {
@@ -95,38 +99,9 @@ export default function NewInvoicePage() {
   const grandTotal = servicesSubtotal + materialsSubtotal;
   const netTotal = grandTotal - materialsCost;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!clientId) {
-      setError(t.invoices.errorSelectClient || 'Selecione um cliente.');
-      return;
-    }
-    if (!dueDate) {
-      setError(t.invoices.errorSelectDueDate || 'Selecione uma data de vencimento.');
-      return;
-    }
-    if (items.some((item) => !item.description.trim() || item.unitPrice < 0 || item.quantity <= 0)) {
-      setError(t.invoices.errorFillItems || 'Preencha todos os campos dos itens com valores maiores que zero.');
-      return;
-    }
-
+  const submitInvoice = async (payload: any) => {
     setSaving(true);
     setError(null);
-
-    const payload = {
-      clientId,
-      dueDate: new Date(dueDate).toISOString(),
-      paymentMethod,
-      pixKey: paymentMethod === 'PIX' && pixKey.trim() !== '' ? pixKey : undefined,
-      items: items.map((item) => ({
-        type: item.type,
-        description: item.description,
-        quantity: item.quantity,
-        unit: item.unit,
-        unitPrice: item.unitPrice,
-        unitCost: item.type === 'MATERIAL' ? item.unitCost : 0,
-      })),
-    };
 
     try {
       const response = await apiRequest<any>('/invoices', {
@@ -145,10 +120,46 @@ export default function NewInvoicePage() {
     }
   };
 
-  const clientOptions = [
-    { value: '', label: t.invoices.selectClient || 'Selecione um cliente...' },
-    ...clients.map((c) => ({ value: c.id, label: c.tradeName })),
-  ];
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedClientName = clientName.trim();
+    if (!clientId && !trimmedClientName) {
+      setError(t.invoices.errorSelectClient || 'Selecione um cliente ou informe o nome do cliente.');
+      return;
+    }
+    if (!dueDate) {
+      setError(t.invoices.errorSelectDueDate || 'Selecione uma data de vencimento.');
+      return;
+    }
+    if (items.some((item) => !item.description.trim() || item.unitPrice < 0 || item.quantity <= 0)) {
+      setError(t.invoices.errorFillItems || 'Preencha todos os campos dos itens com valores maiores que zero.');
+      return;
+    }
+
+    const payload = {
+      clientId: clientId || undefined,
+      clientName: clientId ? undefined : trimmedClientName,
+      dueDate: new Date(dueDate).toISOString(),
+      paymentMethod,
+      pixKey: paymentMethod === 'PIX' && pixKey.trim() !== '' ? pixKey : undefined,
+      items: items.map((item) => ({
+        type: item.type,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        unitCost: item.type === 'MATERIAL' ? item.unitCost : 0,
+      })),
+    };
+
+    if (!clientId) {
+      setPendingPayload(payload);
+      setClientPromptOpen(true);
+      return;
+    }
+
+    await submitInvoice(payload);
+  };
 
   const methodOptions = [
     { value: 'PIX', label: t.invoices.paymentMethods.PIX || 'PIX (Chave Pix)' },
@@ -186,13 +197,17 @@ export default function NewInvoicePage() {
         {/* Basic settings */}
         <Card title={t.clients.contextSections.cadastralData || "Identificação & Datas"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-            <Select
+            <ClientPicker
               label={t.invoices.clientLabel || "Cliente *"}
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              options={clientOptions}
+              clients={clients}
+              clientId={clientId}
+              clientName={clientName}
+              onChange={(choice) => {
+                setClientId(choice.clientId);
+                setClientName(choice.clientName);
+              }}
+              loading={loading}
               disabled={loading || saving}
-              required
             />
 
             <Input
@@ -355,6 +370,28 @@ export default function NewInvoicePage() {
           </div>
         </div>
       </form>
+
+      <QuickClientModal
+        open={clientPromptOpen}
+        initialName={clientName}
+        onClose={() => setClientPromptOpen(false)}
+        onCreated={async (client) => {
+          const name = client.tradeName || client.legalName || clientName;
+          setClients((current) => [client, ...current]);
+          setClientId(client.id);
+          setClientName(name);
+          setClientPromptOpen(false);
+          const payload = { ...pendingPayload, clientId: client.id, clientName: undefined };
+          setPendingPayload(null);
+          await submitInvoice(payload);
+        }}
+        onSkip={async () => {
+          setClientPromptOpen(false);
+          const payload = pendingPayload;
+          setPendingPayload(null);
+          if (payload) await submitInvoice(payload);
+        }}
+      />
     </div>
   );
 }

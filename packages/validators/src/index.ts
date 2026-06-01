@@ -1,4 +1,128 @@
+import { cpf, cnpj } from 'cpf-cnpj-validator';
+import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
 import { z } from 'zod';
+
+export type ClientTypeInput = 'LEGAL_PERSON' | 'NATURAL_PERSON';
+
+const emptyToUndefined = (value: unknown) => {
+  if (typeof value === 'string' && value.trim() === '') return undefined;
+  return value;
+};
+
+export function onlyDigits(value: string | null | undefined): string {
+  return (value || '').replace(/\D/g, '');
+}
+
+export function normalizeCpfCnpj(value: string | null | undefined): string | null {
+  const digits = onlyDigits(value);
+  return digits || null;
+}
+
+export function formatCpfCnpj(value: string | null | undefined): string {
+  const digits = onlyDigits(value);
+  if (digits.length === 11) return cpf.format(digits);
+  if (digits.length === 14) return cnpj.format(digits);
+  return value || '';
+}
+
+export function isValidCpfCnpj(
+  value: string | null | undefined,
+  clientType?: ClientTypeInput,
+): boolean {
+  const digits = onlyDigits(value);
+  if (!digits) return true;
+  if (clientType === 'NATURAL_PERSON') return digits.length === 11 && cpf.isValid(digits);
+  if (clientType === 'LEGAL_PERSON') return digits.length === 14 && cnpj.isValid(digits);
+  if (digits.length === 11) return cpf.isValid(digits);
+  if (digits.length === 14) return cnpj.isValid(digits);
+  return false;
+}
+
+export function normalizePhone(
+  value: string | null | undefined,
+  defaultCountry: string = 'BR',
+): string | null {
+  if (!value || !value.trim()) return null;
+  const parsed = parsePhoneNumberFromString(value.trim(), defaultCountry as CountryCode);
+  if (parsed?.isValid()) return parsed.number;
+  const digits = onlyDigits(value);
+  return digits || null;
+}
+
+export function formatPhoneNumber(
+  value: string | null | undefined,
+  defaultCountry: string = 'BR',
+): string {
+  if (!value) return '';
+  const parsed = parsePhoneNumberFromString(value, defaultCountry as CountryCode);
+  if (parsed?.isValid()) return parsed.formatNational();
+
+  const digits = onlyDigits(value);
+  if (digits.length === 13 && digits.startsWith('55')) {
+    return digits.replace(/^55(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3');
+  }
+  if (digits.length === 12 && digits.startsWith('55')) {
+    return digits.replace(/^55(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3');
+  }
+  if (digits.length === 11) return digits.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+  if (digits.length === 10) return digits.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+  return value;
+}
+
+const nullableTrimmedString = (max: number) =>
+  z.preprocess(
+    emptyToUndefined,
+    z.string().trim().max(max).optional().nullable(),
+  );
+
+const nullableEmail = z.preprocess(
+  emptyToUndefined,
+  z.string().trim().email({ message: 'E-mail invalido' }).max(150).optional().nullable(),
+);
+
+const nullableDocument = z.preprocess(
+  (value) => {
+    const digits = normalizeCpfCnpj(typeof value === 'string' ? value : undefined);
+    return digits || undefined;
+  },
+  z.string().max(20).optional().nullable(),
+);
+
+const nullablePhone = z.preprocess(
+  (value) => {
+    const normalized = normalizePhone(typeof value === 'string' ? value : undefined);
+    return normalized || undefined;
+  },
+  z.string().max(30).optional().nullable(),
+);
+
+const nullableClientId = z.preprocess(
+  emptyToUndefined,
+  z.string().uuid({ message: 'ID do cliente invalido' }).optional().nullable(),
+);
+
+const adHocClientName = z.preprocess(
+  emptyToUndefined,
+  z.string().trim().min(2, { message: 'Informe o nome do cliente' }).max(200).optional().nullable(),
+);
+
+const commercialClientFields = {
+  clientId: nullableClientId,
+  clientName: adHocClientName,
+  clientDocument: nullableDocument,
+  clientEmail: nullableEmail,
+  clientPhone: nullablePhone,
+};
+
+const requireCommercialClient = (data: { clientId?: string | null; clientName?: string | null }, ctx: z.RefinementCtx) => {
+  if (!data.clientId && !data.clientName) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['clientName'],
+      message: 'Selecione um cliente cadastrado ou informe o nome do cliente.',
+    });
+  }
+};
 
 // Login Validation Schema
 export const loginSchema = z.object({
@@ -9,18 +133,85 @@ export const loginSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>;
 
 // Client Validation Schema
-export const clientSchema = z.object({
-  legalName: z.string().min(2, { message: 'Razão social é obrigatória' }),
-  tradeName: z.string().min(2, { message: 'Nome fantasia é obrigatório' }),
-  document: z.string().min(11, { message: 'Documento (CPF ou CNPJ) inválido' }),
-  email: z.string().email({ message: 'E-mail de contato inválido' }),
-  phone: z.string().min(8, { message: 'Telefone inválido' }),
-  website: z.string().url().optional().or(z.literal('')),
-  notes: z.string().optional(),
-  slaPolicyId: z.string().uuid({ message: 'ID de SLA inválido' }).optional().nullable(),
+export const clientTypeSchema = z.enum(['LEGAL_PERSON', 'NATURAL_PERSON']);
+
+const clientBaseSchema = z.object({
+    type: clientTypeSchema.default('LEGAL_PERSON'),
+    legalName: z.string().trim().min(2, { message: 'Nome do cliente e obrigatorio' }).max(200),
+    tradeName: nullableTrimmedString(200),
+    document: nullableDocument,
+    email: nullableEmail,
+    phone: nullablePhone,
+    website: z.preprocess(emptyToUndefined, z.string().url().max(255).optional().nullable()),
+    notes: z.string().optional().nullable(),
+    slaPolicyId: z.string().uuid({ message: 'ID de SLA inválido' }).optional().nullable(),
+  });
+
+const refineClientDocument = (data: { document?: string | null; type?: ClientTypeInput }, ctx: z.RefinementCtx) => {
+  if (!isValidCpfCnpj(data.document, data.type || 'LEGAL_PERSON')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['document'],
+      message: data.type === 'NATURAL_PERSON' ? 'CPF invalido' : 'CNPJ invalido',
+    });
+  }
+};
+
+const normalizeClientPayload = <T extends {
+  type?: ClientTypeInput;
+  tradeName?: string | null;
+  document?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  notes?: string | null;
+  slaPolicyId?: string | null;
+}>(data: T) => ({
+  ...data,
+  tradeName: data.type === 'NATURAL_PERSON' ? null : data.tradeName || null,
+  document: data.document || null,
+  email: data.email || null,
+  phone: data.phone || null,
+  website: data.website || null,
+  notes: data.notes || null,
+  slaPolicyId: data.slaPolicyId || null,
 });
 
+const normalizeClientUpdatePayload = <T extends {
+  type?: ClientTypeInput;
+  tradeName?: string | null;
+  document?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  notes?: string | null;
+  slaPolicyId?: string | null;
+}>(data: T) => {
+  const next: any = { ...data };
+  if (data.type === 'NATURAL_PERSON') next.tradeName = null;
+  for (const field of ['tradeName', 'document', 'email', 'phone', 'website', 'notes', 'slaPolicyId']) {
+    if (Object.prototype.hasOwnProperty.call(data, field)) {
+      next[field] = (data as any)[field] || null;
+    }
+  }
+  return next;
+};
+
+export const clientSchema = clientBaseSchema
+  .superRefine((data, ctx) => {
+    refineClientDocument(data, ctx);
+  })
+  .transform(normalizeClientPayload);
+
 export type ClientInput = z.infer<typeof clientSchema>;
+
+export const clientUpdateSchema = clientBaseSchema.partial()
+  .superRefine((data, ctx) => {
+    refineClientDocument(data, ctx);
+  })
+  .transform(normalizeClientUpdatePayload);
+
+export type ClientUpdateInput = z.infer<typeof clientUpdateSchema>;
 
 // Asset Validation Schema
 export const assetSchema = z.object({
@@ -430,7 +621,7 @@ export const invoiceItemCreateSchema = z.object({
 export type InvoiceItemCreateInput = z.infer<typeof invoiceItemCreateSchema>;
 
 export const invoiceCreateSchema = z.object({
-  clientId: z.string().uuid({ message: 'ID do cliente inválido' }),
+  ...commercialClientFields,
   quoteId: z.string().uuid().optional().nullable(),
   contractId: z.string().uuid().optional().nullable(),
   ticketId: z.string().uuid().optional().nullable(),
@@ -444,7 +635,7 @@ export const invoiceCreateSchema = z.object({
   discountReason: z.string().optional().nullable(),
   observations: z.string().optional().nullable(),
   items: z.array(invoiceItemCreateSchema).min(1, { message: 'A fatura deve ter pelo menos 1 item' }),
-});
+}).superRefine(requireCommercialClient);
 export type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 
 export const invoiceUpdateSchema = z.object({
@@ -478,7 +669,7 @@ export const quoteQuerySchema = z.object({
 export type QuoteQueryInput = z.infer<typeof quoteQuerySchema>;
 
 export const quoteCreateSchema = z.object({
-  clientId: z.string().uuid({ message: 'ID do cliente inválido' }),
+  ...commercialClientFields,
   number: z.string().optional().nullable(),
   status: quoteStatusEnum.default("DRAFT"),
   issueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de emissão inválida' }).optional().nullable(),
@@ -487,7 +678,7 @@ export const quoteCreateSchema = z.object({
   terms: z.string().optional().nullable(),
   observations: z.string().optional().nullable(),
   items: z.array(invoiceItemCreateSchema).min(1, { message: 'O orçamento deve ter pelo menos 1 item' }),
-});
+}).superRefine(requireCommercialClient);
 export type QuoteCreateInput = z.infer<typeof quoteCreateSchema>;
 
 export const quoteUpdateSchema = z.object({
@@ -522,8 +713,8 @@ export type ServiceOrderQueryInput = z.infer<typeof serviceOrderQuerySchema>;
 export const serviceOrderItemCreateSchema = invoiceItemCreateSchema;
 export type ServiceOrderItemCreateInput = z.infer<typeof serviceOrderItemCreateSchema>;
 
-export const serviceOrderCreateSchema = z.object({
-  clientId: z.string().uuid({ message: 'ID do cliente inválido' }),
+const serviceOrderCreateBaseSchema = z.object({
+  ...commercialClientFields,
   ticketId: z.string().uuid({ message: 'ID do chamado inválido' }).optional().nullable(),
   contractId: z.string().uuid({ message: 'ID do contrato inválido' }).optional().nullable(),
   responsibleUserId: z.string().uuid({ message: 'ID do responsável inválido' }).optional().nullable(),
@@ -537,10 +728,12 @@ export const serviceOrderCreateSchema = z.object({
   clientNotes: z.string().optional().nullable(),
   items: z.array(serviceOrderItemCreateSchema).default([]),
 });
+
+export const serviceOrderCreateSchema = serviceOrderCreateBaseSchema.superRefine(requireCommercialClient);
 export type ServiceOrderCreateInput = z.infer<typeof serviceOrderCreateSchema>;
 
-export const serviceOrderUpdateSchema = serviceOrderCreateSchema
-  .omit({ clientId: true, number: true, status: true })
+export const serviceOrderUpdateSchema = serviceOrderCreateBaseSchema
+  .omit({ clientId: true, clientName: true, clientDocument: true, clientEmail: true, clientPhone: true, number: true, status: true })
   .partial();
 export type ServiceOrderUpdateInput = z.infer<typeof serviceOrderUpdateSchema>;
 

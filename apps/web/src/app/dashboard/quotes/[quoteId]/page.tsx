@@ -104,7 +104,7 @@ export default function QuoteDetailPage() {
             </Badge>
           </div>
           <p className="text-[12px] text-on-surface-variant font-mono">
-            Cliente: {quote.client?.tradeName} · Validade: {new Date(quote.validUntil).toLocaleDateString('pt-BR')}
+            Cliente: {quote.client?.tradeName || quote.clientName || '--'} · Validade: {new Date(quote.validUntil).toLocaleDateString('pt-BR')}
           </p>
         </div>
         <div className="flex flex-wrap gap-sm">
@@ -123,7 +123,7 @@ export default function QuoteDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-md text-[13px]">
           <div>
             <span className="block text-[10px] uppercase text-on-surface-variant font-bold">Cliente</span>
-            <span className="font-semibold">{quote.client?.tradeName}</span>
+            <span className="font-semibold">{quote.client?.tradeName || quote.clientName || '--'}</span>
           </div>
           <div>
             <span className="block text-[10px] uppercase text-on-surface-variant font-bold">Serviços</span>

@@ -255,7 +255,7 @@ export default function InvoiceDetailPage() {
             </Badge>
           </div>
           <p className="text-[12px] text-on-surface-variant font-mono">
-            {t.invoices.client}: {invoice.client?.tradeName} &bull; {t.invoices.issueDate || 'Emissão'}: {new Date(invoice.issueDate).toLocaleDateString('pt-BR')}
+            {t.invoices.client}: {invoice.client?.tradeName || invoice.clientName || '--'} &bull; {t.invoices.issueDate || 'Emissão'}: {new Date(invoice.issueDate).toLocaleDateString('pt-BR')}
           </p>
         </div>
         
@@ -326,8 +326,8 @@ export default function InvoiceDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-md text-[13px] text-on-surface">
               <div className="flex flex-col gap-xs">
                 <span className="text-[10px] uppercase font-bold text-on-surface-variant opacity-60">{t.invoices.client}</span>
-                <span className="font-semibold text-on-surface">{invoice.client?.tradeName}</span>
-                <span className="text-[11px] text-on-surface-variant/70 font-mono">{invoice.client?.legalName}</span>
+                <span className="font-semibold text-on-surface">{invoice.client?.tradeName || invoice.clientName || '--'}</span>
+                <span className="text-[11px] text-on-surface-variant/70 font-mono">{invoice.client?.legalName || (!invoice.clientId ? 'Cliente avulso' : '')}</span>
               </div>
               <div className="flex flex-col gap-xs">
                 <span className="text-[10px] uppercase font-bold text-on-surface-variant opacity-60">{t.invoices.dueDate}</span>

@@ -175,11 +175,12 @@ export interface User {
 export interface Client {
   id: string;
   workspaceId: string;
+  type: 'LEGAL_PERSON' | 'NATURAL_PERSON';
   legalName: string;
-  tradeName: string;
-  document: string;
-  email: string;
-  phone: string;
+  tradeName?: string | null;
+  document?: string | null;
+  email?: string | null;
+  phone?: string | null;
   status: ClientStatus;
   createdAt: Date;
   updatedAt: Date;

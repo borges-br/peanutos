@@ -86,6 +86,8 @@ services:
     container_name: peanut-api
     restart: unless-stopped
     depends_on:
+      migrator:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -103,6 +105,8 @@ services:
     container_name: peanut-worker
     restart: unless-stopped
     depends_on:
+      migrator:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -113,9 +117,10 @@ services:
       <<: *app-env
 
   migrator:
+    # One-shot startup job. It applies pending Prisma migrations, exits 0, and
+    # then api/worker are allowed to start. Re-running it is safe.
     image: ${PEANUT_IMAGE_REGISTRY:-ghcr.io}/${PEANUT_IMAGE_NAMESPACE:-owner/peanutos}/peanut-migrator:${PEANUT_IMAGE_TAG:-latest}
-    profiles:
-      - migrate
+    restart: "no"
     depends_on:
       postgres:
         condition: service_healthy

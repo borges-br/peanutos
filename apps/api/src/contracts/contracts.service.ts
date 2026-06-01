@@ -214,9 +214,10 @@ export class ContractsService {
     }
 
     // Generate contract number if not provided
+    const clientCodeSource = client.tradeName || client.legalName || "CLI";
     const contractNumber =
       input.number ||
-      `CTR-${client.tradeName.substring(0, 3).toUpperCase()}-${Date.now().toString().substring(6)}`;
+      `CTR-${clientCodeSource.substring(0, 3).toUpperCase()}-${Date.now().toString().substring(6)}`;
 
     const newContract = await prisma.contract.create({
       data: {

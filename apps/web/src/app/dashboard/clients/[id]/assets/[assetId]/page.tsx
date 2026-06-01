@@ -157,7 +157,7 @@ export default function AssetDetailPage() {
 
   return (
     <div className="flex flex-col gap-lg select-none select-text">
-      {/* Dossie Breadcrumbs & Header */}
+      {/* Resumo Breadcrumbs & Header */}
       <header className="flex flex-col md:flex-row md:justify-between md:items-start gap-md border-b border-outline-variant/30 pb-lg">
         <div className="flex flex-col gap-xs flex-1">
           {/* Breadcrumbs */}

@@ -102,7 +102,7 @@ export default function InvoicesPage() {
       header: t.invoices.client || 'Cliente',
       render: (invoice: any) => (
         <span className="text-on-surface font-medium">
-          {invoice.client?.tradeName || '--'}
+          {invoice.client?.tradeName || invoice.clientName || '--'}
         </span>
       ),
     },
@@ -147,7 +147,7 @@ export default function InvoicesPage() {
       <div className="flex justify-between items-start">
         <div className="flex flex-col">
           <span className="font-bold text-on-surface text-[14px]">{invoice.number}</span>
-          <span className="text-[11px] text-on-surface-variant/70 font-medium mt-0.5">{invoice.client?.tradeName}</span>
+          <span className="text-[11px] text-on-surface-variant/70 font-medium mt-0.5">{invoice.client?.tradeName || invoice.clientName || '--'}</span>
         </div>
         {getStatusBadge(invoice.status)}
       </div>
@@ -297,4 +297,3 @@ export default function InvoicesPage() {
     </div>
   );
 }
-

@@ -6,7 +6,12 @@ import {
 import { prisma, ClientStatus } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
-import { ClientInput, ClientContactInput } from "@peanut/validators";
+import {
+  ClientInput,
+  ClientUpdateInput,
+  ClientContactInput,
+  normalizeCpfCnpj,
+} from "@peanut/validators";
 
 @Injectable()
 export class ClientsService {
@@ -14,6 +19,26 @@ export class ClientsService {
     private readonly auditService: AuditService,
     private readonly webhookEvents: WebhookEventsService,
   ) {}
+
+  private async findByNormalizedDocument(
+    workspaceId: string,
+    document: string | null | undefined,
+    excludeClientId?: string,
+  ) {
+    const normalized = normalizeCpfCnpj(document);
+    if (!normalized) return null;
+
+    const clients = await prisma.client.findMany({
+      where: {
+        workspaceId,
+        document: { not: null },
+        ...(excludeClientId ? { id: { not: excludeClientId } } : {}),
+      },
+      select: { id: true, document: true },
+    });
+
+    return clients.find((client) => normalizeCpfCnpj(client.document) === normalized) || null;
+  }
 
   async list(
     workspaceId: string,
@@ -94,9 +119,7 @@ export class ClientsService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const existing = await prisma.client.findFirst({
-      where: { workspaceId, document: input.document },
-    });
+    const existing = await this.findByNormalizedDocument(workspaceId, input.document);
 
     if (existing) {
       throw new BadRequestException(
@@ -107,12 +130,12 @@ export class ClientsService {
     const newClient = await prisma.client.create({
       data: {
         workspaceId,
-        type: "LEGAL_PERSON",
+        type: input.type,
         legalName: input.legalName,
-        tradeName: input.tradeName,
-        document: input.document,
-        email: input.email,
-        phone: input.phone,
+        tradeName: input.tradeName || null,
+        document: input.document || null,
+        email: input.email || null,
+        phone: input.phone || null,
         website: input.website || null,
         notes: input.notes || null,
         slaPolicyId: input.slaPolicyId || null,
@@ -151,7 +174,7 @@ export class ClientsService {
 
   async update(
     id: string,
-    input: Partial<ClientInput>,
+    input: ClientUpdateInput,
     workspaceId: string,
     actorUserId: string,
     ipAddress?: string,
@@ -168,9 +191,7 @@ export class ClientsService {
     const before = { ...client };
 
     if (input.document && input.document !== client.document) {
-      const existing = await prisma.client.findFirst({
-        where: { workspaceId, document: input.document, id: { not: id } },
-      });
+      const existing = await this.findByNormalizedDocument(workspaceId, input.document, id);
       if (existing) {
         throw new BadRequestException(
           "Já existe um cliente cadastrado com este documento",
@@ -179,14 +200,16 @@ export class ClientsService {
     }
 
     const data: any = {};
+    if (input.type !== undefined) data.type = input.type;
     if (input.legalName) data.legalName = input.legalName;
-    if (input.tradeName) data.tradeName = input.tradeName;
-    if (input.document) data.document = input.document;
-    if (input.email) data.email = input.email;
-    if (input.phone) data.phone = input.phone;
+    if (input.tradeName !== undefined) data.tradeName = input.tradeName || null;
+    if (input.document !== undefined) data.document = input.document || null;
+    if (input.email !== undefined) data.email = input.email || null;
+    if (input.phone !== undefined) data.phone = input.phone || null;
     if (input.website !== undefined) data.website = input.website || null;
     if (input.notes !== undefined) data.notes = input.notes || null;
     if (input.slaPolicyId !== undefined) data.slaPolicyId = input.slaPolicyId || null;
+    if (data.type === "NATURAL_PERSON") data.tradeName = null;
 
     const updatedClient = await prisma.client.update({
       where: { id },

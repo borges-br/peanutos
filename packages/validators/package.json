@@ -10,6 +10,8 @@
     "dev": "tsc -w"
   },
   "dependencies": {
+    "cpf-cnpj-validator": "^2.1.2",
+    "libphonenumber-js": "^1.13.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {

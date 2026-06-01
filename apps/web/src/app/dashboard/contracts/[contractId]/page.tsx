@@ -7,6 +7,8 @@ import { useAuth } from '../../../../context/AuthContext';
 import { useI18n } from '../../../../i18n/useI18n';
 import Button from '../../../../components/ui/Button';
 import Badge from '../../../../components/ui/Badge';
+import Input from '../../../../components/ui/Input';
+import Select from '../../../../components/ui/Select';
 import ErrorState from '../../../../components/ui/ErrorState';
 import RestrictedState from '../../../../components/ui/RestrictedState';
 
@@ -24,6 +26,13 @@ export default function ContractDetailPage() {
   const [quota, setQuota] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusValue, setStatusValue] = useState('');
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [lineItemSaving, setLineItemSaving] = useState(false);
+  const [lineItemDescription, setLineItemDescription] = useState('');
+  const [lineItemType, setLineItemType] = useState('SERVICE');
+  const [lineItemQuantity, setLineItemQuantity] = useState('1');
+  const [lineItemUnitPrice, setLineItemUnitPrice] = useState('0');
 
   const hasFinancialPrivilege = user ? ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role) : false;
 
@@ -31,6 +40,7 @@ export default function ContractDetailPage() {
     try {
       const data = await apiRequest(`/contracts/${contractId}`);
       setContract(data);
+      setStatusValue(data.status);
       
       // Fetch dynamic quota if this is an active support/hybrid contract
       if (['RECURRING_SUPPORT', 'HYBRID'].includes(data.type)) {
@@ -62,6 +72,77 @@ export default function ContractDetailPage() {
   const formatCurrency = (amountCents: number) => {
     if (!hasFinancialPrivilege) return t.contracts.protectedValue;
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amountCents / 100);
+  };
+
+  const changeContractStatus = async () => {
+    if (!contract || !statusValue || statusValue === contract.status) return;
+    setStatusSaving(true);
+    try {
+      const updated = await apiRequest<any>(`/contracts/${contractId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: statusValue }),
+      });
+      setContract((prev: any) => ({ ...prev, status: updated.status }));
+      setStatusValue(updated.status);
+    } catch (err: any) {
+      window.alert(err.message || 'Falha ao alterar status do contrato.');
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const addLineItem = async () => {
+    if (!lineItemDescription.trim()) {
+      window.alert('Informe a descrição do item do contrato.');
+      return;
+    }
+    const quantity = Number(lineItemQuantity);
+    const unitPriceCents = Math.round((Number(lineItemUnitPrice) || 0) * 100);
+    if (!quantity || quantity <= 0 || unitPriceCents < 0) {
+      window.alert('Informe quantidade positiva e valor válido.');
+      return;
+    }
+
+    setLineItemSaving(true);
+    try {
+      const item = await apiRequest<any>(`/contracts/${contractId}/line-items`, {
+        method: 'POST',
+        body: JSON.stringify({
+          description: lineItemDescription.trim(),
+          itemType: lineItemType,
+          quantity,
+          unitPriceCents,
+          recurring: true,
+        }),
+      });
+      setContract((prev: any) => ({
+        ...prev,
+        lineItems: [...(prev.lineItems || []), item],
+      }));
+      setLineItemDescription('');
+      setLineItemType('SERVICE');
+      setLineItemQuantity('1');
+      setLineItemUnitPrice('0');
+    } catch (err: any) {
+      window.alert(err.message || 'Falha ao adicionar item ao contrato.');
+    } finally {
+      setLineItemSaving(false);
+    }
+  };
+
+  const deleteLineItem = async (lineItemId: string) => {
+    if (!window.confirm('Remover este item do contrato?')) return;
+    try {
+      await apiRequest(`/contracts/${contractId}/line-items/${lineItemId}`, {
+        method: 'DELETE',
+      });
+      setContract((prev: any) => ({
+        ...prev,
+        lineItems: (prev.lineItems || []).filter((item: any) => item.id !== lineItemId),
+      }));
+    } catch (err: any) {
+      window.alert(err.message || 'Falha ao remover item do contrato.');
+    }
   };
 
   const getStatusVariant = (contractStatus: string) => {
@@ -118,7 +199,34 @@ export default function ContractDetailPage() {
           </h2>
         </div>
 
-        <div className="flex items-center gap-sm">
+        <div className="flex flex-wrap items-center gap-sm">
+          {hasFinancialPrivilege && (
+            <div className="flex items-center gap-xs">
+              <Select
+                value={statusValue}
+                onChange={(event) => setStatusValue(event.target.value)}
+                options={[
+                  { value: 'DRAFT', label: t.enums.contractStatus.DRAFT },
+                  { value: 'ACTIVE', label: t.enums.contractStatus.ACTIVE },
+                  { value: 'SUSPENDED', label: t.enums.contractStatus.SUSPENDED },
+                  { value: 'EXPIRED', label: t.enums.contractStatus.EXPIRED },
+                  { value: 'CANCELLED', label: t.enums.contractStatus.CANCELLED },
+                  { value: 'TERMINATED', label: t.enums.contractStatus.TERMINATED },
+                ]}
+                disabled={statusSaving}
+                className="min-w-[160px] py-1"
+              />
+              <Button
+                variant="secondary"
+                onClick={changeContractStatus}
+                loading={statusSaving}
+                disabled={statusSaving || statusValue === contract.status}
+                className="py-1 px-3"
+              >
+                Alterar
+              </Button>
+            </div>
+          )}
           <Badge variant={getStatusVariant(contract.status)}>
             {t.enums.contractStatus[contract.status as keyof typeof t.enums.contractStatus] || contract.status}
           </Badge>
@@ -196,6 +304,63 @@ export default function ContractDetailPage() {
               {t.contracts.contractItems}
             </h3>
 
+            {hasFinancialPrivilege && (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-sm items-end border border-outline-variant/50 bg-surface-container-low/40 rounded-lg p-md">
+                <div className="md:col-span-4">
+                  <Input
+                    label="Descrição"
+                    value={lineItemDescription}
+                    onChange={(event) => setLineItemDescription(event.target.value)}
+                    disabled={lineItemSaving}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Select
+                    label="Tipo"
+                    value={lineItemType}
+                    onChange={(event) => setLineItemType(event.target.value)}
+                    options={[
+                      { value: 'SERVICE', label: 'Serviço' },
+                      { value: 'LICENSE', label: 'Licença' },
+                      { value: 'STORAGE', label: 'Storage' },
+                      { value: 'SUPPORT', label: 'Suporte' },
+                      { value: 'MONITORING', label: 'Monitoramento' },
+                      { value: 'BACKUP', label: 'Backup' },
+                      { value: 'OTHER', label: 'Outro' },
+                    ]}
+                    disabled={lineItemSaving}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Input
+                    label="Qtd"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={lineItemQuantity}
+                    onChange={(event) => setLineItemQuantity(event.target.value)}
+                    disabled={lineItemSaving}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Input
+                    label="Unit. (R$)"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={lineItemUnitPrice}
+                    onChange={(event) => setLineItemUnitPrice(event.target.value)}
+                    disabled={lineItemSaving}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Button variant="primary" onClick={addLineItem} loading={lineItemSaving} className="w-full">
+                    Adicionar
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {(!contract.lineItems || contract.lineItems.length === 0) ? (
               <p className="text-sm font-medium text-on-surface-variant/50 text-center py-6">Nenhum item registrado para este contrato.</p>
             ) : (
@@ -208,6 +373,7 @@ export default function ContractDetailPage() {
                       <th className="p-sm px-md font-semibold text-right">Qtd</th>
                       <th className="p-sm px-md font-semibold text-right">Valor Unitário</th>
                       <th className="p-sm px-md font-semibold text-right">Valor Total</th>
+                      {hasFinancialPrivilege && <th className="p-sm px-md font-semibold text-right">Ações</th>}
                     </tr>
                   </thead>
                   <tbody className="text-on-surface font-medium">
@@ -222,6 +388,13 @@ export default function ContractDetailPage() {
                         <td className="p-sm px-md text-right">{item.quantity}</td>
                         <td className="p-sm px-md text-right">{formatCurrency(item.unitPriceCents)}</td>
                         <td className="p-sm px-md text-right text-primary font-bold">{formatCurrency(item.totalPriceCents)}</td>
+                        {hasFinancialPrivilege && (
+                          <td className="p-sm px-md text-right">
+                            <Button variant="ghost" onClick={() => deleteLineItem(item.id)} className="py-1 px-2 text-error">
+                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                            </Button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

@@ -41,6 +41,54 @@ export class QuotesService {
     return ["OWNER", "ADMIN", "FINANCIAL"].includes(role);
   }
 
+  private documentClient(source: any) {
+    return {
+      tradeName: source?.client?.tradeName || source?.clientName || "Cliente",
+      legalName: source?.client?.legalName || source?.clientName || null,
+      document: source?.client?.document || source?.clientDocument || null,
+      email: source?.client?.email || source?.clientEmail || null,
+      phone: source?.client?.phone || source?.clientPhone || null,
+      address: source?.client?.notes || null,
+    };
+  }
+
+  private async resolveClient(input: any, workspaceId: string) {
+    if (input.clientId) {
+      const client = await prisma.client.findFirst({
+        where: { id: input.clientId, workspaceId },
+      });
+      if (!client) {
+        throw new NotFoundException("Cliente não encontrado neste workspace.");
+      }
+      return {
+        client,
+        data: {
+          clientId: client.id,
+          clientName: client.tradeName || client.legalName,
+          clientDocument: client.document || null,
+          clientEmail: client.email || null,
+          clientPhone: client.phone || null,
+        },
+      };
+    }
+
+    const clientName = String(input.clientName || "").trim();
+    if (!clientName) {
+      throw new BadRequestException("Informe o nome do cliente.");
+    }
+
+    return {
+      client: null,
+      data: {
+        clientId: null,
+        clientName,
+        clientDocument: input.clientDocument || null,
+        clientEmail: input.clientEmail || null,
+        clientPhone: input.clientPhone || null,
+      },
+    };
+  }
+
   private mapQuoteForRole(quote: any, role: string) {
     if (!quote || this.hasFinancialPrivilege(role)) return quote;
 
@@ -131,6 +179,7 @@ export class QuotesService {
     if (query.search) {
       where.OR = [
         { number: { contains: query.search, mode: "insensitive" } },
+        { clientName: { contains: query.search, mode: "insensitive" } },
         { client: { tradeName: { contains: query.search, mode: "insensitive" } } },
         { client: { legalName: { contains: query.search, mode: "insensitive" } } },
       ];
@@ -186,12 +235,7 @@ export class QuotesService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const client = await prisma.client.findFirst({
-      where: { id: input.clientId, workspaceId },
-    });
-    if (!client) {
-      throw new NotFoundException("Cliente não encontrado neste workspace.");
-    }
+    const resolvedClient = await this.resolveClient(input, workspaceId);
 
     const calculated = this.calculateItems(input.items || []);
     const discountAmount = new Prisma.Decimal(input.discountAmount || 0);
@@ -216,7 +260,7 @@ export class QuotesService {
         quote = await prisma.quote.create({
           data: {
             workspaceId,
-            clientId: input.clientId,
+            ...resolvedClient.data,
             number,
             status: input.status || "DRAFT",
             issueDate: input.issueDate ? new Date(input.issueDate) : new Date(),
@@ -284,6 +328,7 @@ export class QuotesService {
           number: quote.number,
           status: quote.status,
           clientId: quote.clientId,
+          clientName: quote.clientName,
           validUntil: quote.validUntil,
           totalAmount: Number(quote.totalAmount),
         },
@@ -594,14 +639,7 @@ export class QuotesService {
         signatureName: workspace.signatureName,
       },
       responsible: null,
-      client: {
-        tradeName: quote.client.tradeName,
-        legalName: quote.client.legalName,
-        document: quote.client.document,
-        email: quote.client.email,
-        phone: quote.client.phone,
-        address: quote.client.notes,
-      },
+      client: this.documentClient(quote),
       data: {
         number: quote.number,
         status: quote.status,

@@ -16,7 +16,7 @@ import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { clientSchema, clientContactSchema } from "@peanut/validators";
+import { clientSchema, clientUpdateSchema, clientContactSchema } from "@peanut/validators";
 import { ClientStatus } from "@peanut/db";
 
 @UseGuards(AuthGuard, RolesGuard)
@@ -76,22 +76,20 @@ export class ClientsController {
     @CurrentUser() user: any,
     @Req() req: any,
   ) {
-    const data: any = {};
-    if (body.legalName) data.legalName = body.legalName;
-    if (body.tradeName) data.tradeName = body.tradeName;
-    if (body.document) data.document = body.document;
-    if (body.email) data.email = body.email;
-    if (body.phone) data.phone = body.phone;
-    if (body.website !== undefined) data.website = body.website;
-    if (body.notes !== undefined) data.notes = body.notes;
-    if (body.slaPolicyId !== undefined) data.slaPolicyId = body.slaPolicyId;
+    const validationResult = clientUpdateSchema.safeParse(body);
+    if (!validationResult.success) {
+      const messages = validationResult.error.errors
+        .map((e) => e.message)
+        .join(", ");
+      throw new BadRequestException(messages);
+    }
 
     const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
     const userAgent = req.headers?.["user-agent"] || "Unknown";
 
     return this.clientsService.update(
       id,
-      data,
+      validationResult.data,
       user.workspaceId,
       user.id,
       ipAddress,

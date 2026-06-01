@@ -267,9 +267,9 @@ export default function InvoiceA4PreviewPage() {
       documentNumber={invoice.number}
       dateLabel={t.invoices.dueDate || "Vencimento"}
       dateValue={new Date(invoice.dueDate).toLocaleDateString('pt-BR')}
-      clientName={invoice.client?.tradeName}
-      clientDocument={invoice.client?.document}
-      clientEmail={invoice.client?.email}
+      clientName={invoice.client?.tradeName || invoice.clientName}
+      clientDocument={invoice.client?.document || invoice.clientDocument}
+      clientEmail={invoice.client?.email || invoice.clientEmail}
       statusBadge={getStatusBadge(invoice.status)}
       backPath={`/dashboard/invoices/${invoiceId}`}
       companyName={brandSettings?.brandName}

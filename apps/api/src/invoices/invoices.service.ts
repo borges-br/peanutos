@@ -37,6 +37,56 @@ export class InvoicesService {
     private readonly webhookEvents: WebhookEventsService,
   ) {}
 
+  private documentClient(source: any) {
+    return {
+      tradeName: source?.client?.tradeName || source?.clientName || "Cliente",
+      legalName: source?.client?.legalName || source?.clientName || null,
+      document: source?.client?.document || source?.clientDocument || null,
+      email: source?.client?.email || source?.clientEmail || null,
+      phone: source?.client?.phone || source?.clientPhone || null,
+      address: source?.client?.notes || null,
+    };
+  }
+
+  private async resolveClient(input: any, workspaceId: string) {
+    if (input.clientId) {
+      const client = await prisma.client.findFirst({
+        where: { id: input.clientId, workspaceId },
+      });
+      if (!client) {
+        throw new NotFoundException(
+          "Cliente não encontrado ou não pertence a este workspace.",
+        );
+      }
+      return {
+        client,
+        data: {
+          clientId: client.id,
+          clientName: client.tradeName || client.legalName,
+          clientDocument: client.document || null,
+          clientEmail: client.email || null,
+          clientPhone: client.phone || null,
+        },
+      };
+    }
+
+    const clientName = String(input.clientName || "").trim();
+    if (!clientName) {
+      throw new BadRequestException("Informe o nome do cliente.");
+    }
+
+    return {
+      client: null,
+      data: {
+        clientId: null,
+        clientName,
+        clientDocument: input.clientDocument || null,
+        clientEmail: input.clientEmail || null,
+        clientPhone: input.clientPhone || null,
+      },
+    };
+  }
+
   private async fileObjectToDataUri(
     fileObjectId: string | null | undefined,
     workspaceId: string,
@@ -141,6 +191,7 @@ export class InvoicesService {
     if (query.search) {
       where.OR = [
         { number: { contains: query.search, mode: "insensitive" } },
+        { clientName: { contains: query.search, mode: "insensitive" } },
         {
           client: {
             tradeName: { contains: query.search, mode: "insensitive" },
@@ -224,15 +275,8 @@ export class InvoicesService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    // 1. Verify client exists and belongs to the workspace
-    const client = await prisma.client.findFirst({
-      where: { id: input.clientId, workspaceId },
-    });
-    if (!client) {
-      throw new NotFoundException(
-        "Cliente não encontrado ou não pertence a este workspace.",
-      );
-    }
+    // 1. Resolve registered or ad-hoc client display data.
+    const resolvedClient = await this.resolveClient(input, workspaceId);
 
     // 2. Cross-workspace / cross-client validation for quotes, contracts, and tickets
     if (input.quoteId) {
@@ -244,7 +288,7 @@ export class InvoicesService {
           "O orçamento informado não existe ou não pertence a este workspace.",
         );
       }
-      if (quote.clientId !== input.clientId) {
+      if (quote.clientId && quote.clientId !== resolvedClient.data.clientId) {
         throw new BadRequestException(
           "O orçamento informado pertence a outro cliente.",
         );
@@ -252,6 +296,11 @@ export class InvoicesService {
     }
 
     if (input.contractId) {
+      if (!resolvedClient.data.clientId) {
+        throw new BadRequestException(
+          "Contratos so podem ser vinculados a clientes cadastrados.",
+        );
+      }
       const contract = await prisma.contract.findFirst({
         where: { id: input.contractId, workspaceId },
       });
@@ -260,7 +309,7 @@ export class InvoicesService {
           "O contrato informado não existe ou não pertence a este workspace.",
         );
       }
-      if (contract.clientId !== input.clientId) {
+      if (contract.clientId !== resolvedClient.data.clientId) {
         throw new BadRequestException(
           "O contrato informado pertence a outro cliente.",
         );
@@ -268,6 +317,11 @@ export class InvoicesService {
     }
 
     if (input.ticketId) {
+      if (!resolvedClient.data.clientId) {
+        throw new BadRequestException(
+          "Chamados so podem ser vinculados a clientes cadastrados.",
+        );
+      }
       const ticket = await prisma.ticket.findFirst({
         where: { id: input.ticketId, workspaceId },
       });
@@ -276,7 +330,7 @@ export class InvoicesService {
           "O chamado informado não existe ou não pertence a este workspace.",
         );
       }
-      if (ticket.clientId !== input.clientId) {
+      if (ticket.clientId !== resolvedClient.data.clientId) {
         throw new BadRequestException(
           "O chamado informado pertence a outro cliente.",
         );
@@ -342,7 +396,7 @@ export class InvoicesService {
         newInvoice = await prisma.invoice.create({
           data: {
             workspaceId,
-            clientId: input.clientId,
+            ...resolvedClient.data,
             quoteId: input.quoteId || null,
             contractId: input.contractId || null,
             ticketId: input.ticketId || null,
@@ -430,6 +484,7 @@ export class InvoicesService {
           number: newInvoice.number,
           status: newInvoice.status,
           clientId: newInvoice.clientId,
+          clientName: newInvoice.clientName,
           dueDate: newInvoice.dueDate,
         },
       })
@@ -859,14 +914,7 @@ export class InvoicesService {
       documentType: "INVOICE",
       brand: brandSnapshot,
       responsible: null,
-      client: {
-        tradeName: invoice.client.tradeName,
-        legalName: invoice.client.legalName,
-        document: invoice.client.document,
-        email: invoice.client.email,
-        phone: invoice.client.phone,
-        address: invoice.client.notes,
-      },
+      client: this.documentClient(invoice),
       data: renderData,
       templateSettings: templateSnapshot,
       generatedAt: new Date().toLocaleString("pt-BR"),

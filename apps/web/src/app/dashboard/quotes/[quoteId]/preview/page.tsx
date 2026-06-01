@@ -110,9 +110,9 @@ export default function QuotePreviewPage() {
       documentNumber={quote?.number}
       dateLabel="Validade"
       dateValue={quote ? new Date(quote.validUntil).toLocaleDateString('pt-BR') : '--'}
-      clientName={quote?.client?.tradeName}
-      clientDocument={quote?.client?.document}
-      clientEmail={quote?.client?.email}
+      clientName={quote?.client?.tradeName || quote?.clientName}
+      clientDocument={quote?.client?.document || quote?.clientDocument}
+      clientEmail={quote?.client?.email || quote?.clientEmail}
       backPath={`/dashboard/quotes/${quoteId}`}
       documentActions={[
         existingDoc

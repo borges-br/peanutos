@@ -10,7 +10,7 @@ export const ptBR = {
     loading: "Carregando informações...",
     noRecords: "Nenhum registro encontrado.",
     actions: "Ações",
-    details: "Ver dossiê",
+    details: "Ver resumo",
     edit: "Editar",
     changeStatus: "Alterar status",
     clearFilters: "Limpar filtros",
@@ -137,7 +137,7 @@ export const ptBR = {
     },
     pages: {
       summaryTitle: "Resumo do Cliente",
-      summaryDescription: "Dossiê geral de cadastro, observações internas e atalhos operacionais de {name}.",
+      summaryDescription: "Resumo geral de cadastro, observações internas e atalhos operacionais de {name}.",
       contactsTitle: "Contatos do Cliente",
       contactsDescription: "Pontos focais, responsáveis e contatos operacionais de {name}.",
       usersTitle: "Usuários do Cliente",
@@ -215,7 +215,7 @@ export const ptBR = {
     serialAssetTag: "Serial / Patrimônio",
     serialShort: "Serial",
     saveAsset: "Salvar ativo",
-    emptyDescription: "Nenhum equipamento cadastrado ou encontrado. Para cadastrar novos ativos, acesse o dossiê de um cliente e vá para a aba de Inventário.",
+    emptyDescription: "Nenhum equipamento cadastrado ou encontrado. Para cadastrar novos ativos, acesse o resumo de um cliente e vá para a aba de Inventário.",
     pagination: "Mostrando {count} de {total} ativos (Pág. {page} de {totalPages})",
     filters: {
       searchPlaceholder: "Buscar por nome, host, série, patrimônio ou local...",

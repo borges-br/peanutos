@@ -154,7 +154,7 @@ export default function ServiceOrdersPage() {
                         )}
                       </div>
                     </td>
-                    <td className="p-md">{serviceOrder.client?.tradeName}</td>
+                    <td className="p-md">{serviceOrder.client?.tradeName || serviceOrder.clientName || '--'}</td>
                     <td className="p-md font-mono text-on-surface-variant">
                       {serviceOrder.scheduledFor
                         ? new Date(serviceOrder.scheduledFor).toLocaleString('pt-BR')

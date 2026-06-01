@@ -8,6 +8,7 @@ import Button from '../../../../components/ui/Button';
 import Card from '../../../../components/ui/Card';
 import Input from '../../../../components/ui/Input';
 import Select from '../../../../components/ui/Select';
+import { ClientPicker, QuickClientModal } from '../../../../components/clients/ClientPicker';
 
 interface QuoteItemInput {
   type: 'SERVICE' | 'MATERIAL';
@@ -22,6 +23,7 @@ export default function NewQuotePage() {
   const router = useRouter();
   const [clients, setClients] = useState<any[]>([]);
   const [clientId, setClientId] = useState('');
+  const [clientName, setClientName] = useState('');
   const [validUntil, setValidUntil] = useState('');
   const [discountAmount, setDiscountAmount] = useState(0);
   const [terms, setTerms] = useState('');
@@ -32,6 +34,8 @@ export default function NewQuotePage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clientPromptOpen, setClientPromptOpen] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<any | null>(null);
 
   useEffect(() => {
     async function loadClients() {
@@ -89,10 +93,27 @@ export default function NewQuotePage() {
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
+  const submitQuote = async (payload: any) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await apiRequest<any>('/quotes', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      router.push(`/dashboard/quotes/${response.id}`);
+    } catch (err: any) {
+      setError(err.message || 'Falha ao criar orçamento.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!clientId) {
-      setError('Selecione um cliente.');
+    const trimmedClientName = clientName.trim();
+    if (!clientId && !trimmedClientName) {
+      setError('Selecione um cliente ou informe o nome do cliente.');
       return;
     }
     if (!validUntil) {
@@ -104,33 +125,30 @@ export default function NewQuotePage() {
       return;
     }
 
-    setSaving(true);
-    setError(null);
-    try {
-      const response = await apiRequest<any>('/quotes', {
-        method: 'POST',
-        body: JSON.stringify({
-          clientId,
-          validUntil: new Date(validUntil).toISOString(),
-          discountAmount,
-          terms: terms.trim() || undefined,
-          observations: observations.trim() || undefined,
-          items: items.map((item) => ({
-            type: item.type,
-            description: item.description,
-            quantity: item.quantity,
-            unit: item.unit,
-            unitPrice: item.unitPrice,
-            unitCost: item.type === 'MATERIAL' ? item.unitCost : 0,
-          })),
-        }),
-      });
-      router.push(`/dashboard/quotes/${response.id}`);
-    } catch (err: any) {
-      setError(err.message || 'Falha ao criar orçamento.');
-    } finally {
-      setSaving(false);
+    const payload = {
+      clientId: clientId || undefined,
+      clientName: clientId ? undefined : trimmedClientName,
+      validUntil: new Date(validUntil).toISOString(),
+      discountAmount,
+      terms: terms.trim() || undefined,
+      observations: observations.trim() || undefined,
+      items: items.map((item) => ({
+        type: item.type,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        unitCost: item.type === 'MATERIAL' ? item.unitCost : 0,
+      })),
+    };
+
+    if (!clientId) {
+      setPendingPayload(payload);
+      setClientPromptOpen(true);
+      return;
     }
+
+    await submitQuote(payload);
   }
 
   return (
@@ -159,16 +177,16 @@ export default function NewQuotePage() {
       <form onSubmit={handleSubmit} className="flex flex-col gap-lg">
         <Card title="Identificação">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-            <Select
-              label="Cliente *"
-              value={clientId}
-              onChange={(event) => setClientId(event.target.value)}
-              options={[
-                { value: '', label: loading ? 'Carregando clientes...' : 'Selecione um cliente...' },
-                ...clients.map((client) => ({ value: client.id, label: client.tradeName })),
-              ]}
+            <ClientPicker
+              clients={clients}
+              clientId={clientId}
+              clientName={clientName}
+              onChange={(choice) => {
+                setClientId(choice.clientId);
+                setClientName(choice.clientName);
+              }}
+              loading={loading}
               disabled={loading || saving}
-              required
             />
             <Input
               label="Validade *"
@@ -325,6 +343,28 @@ export default function NewQuotePage() {
           </div>
         </div>
       </form>
+
+      <QuickClientModal
+        open={clientPromptOpen}
+        initialName={clientName}
+        onClose={() => setClientPromptOpen(false)}
+        onCreated={async (client) => {
+          const name = client.tradeName || client.legalName || clientName;
+          setClients((current) => [client, ...current]);
+          setClientId(client.id);
+          setClientName(name);
+          setClientPromptOpen(false);
+          const payload = { ...pendingPayload, clientId: client.id, clientName: undefined };
+          setPendingPayload(null);
+          await submitQuote(payload);
+        }}
+        onSkip={async () => {
+          setClientPromptOpen(false);
+          const payload = pendingPayload;
+          setPendingPayload(null);
+          if (payload) await submitQuote(payload);
+        }}
+      />
     </div>
   );
 }

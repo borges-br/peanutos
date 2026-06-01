@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { clientContactSchema } from '@peanut/validators';
+import { clientContactSchema, formatCpfCnpj, formatPhoneNumber } from '@peanut/validators';
 import { apiRequest } from '../../../../lib/api';
 import { useI18n } from '../../../../i18n/useI18n';
 import Button from '../../../../components/ui/Button';
@@ -401,7 +401,7 @@ export default function ClientDetailPage() {
                   <span className="text-[10px] uppercase font-label-caps text-on-surface-variant opacity-60 tracking-wider">
                     {t.clients.labels.document}
                   </span>
-                  <span className="font-mono font-medium text-on-surface">{client.document || '--'}</span>
+                  <span className="font-mono font-medium text-on-surface">{client.document ? formatCpfCnpj(client.document) : '--'}</span>
                 </div>
                 <div className="flex flex-col gap-xs">
                   <span className="text-[10px] uppercase font-label-caps text-on-surface-variant opacity-60 tracking-wider">
@@ -413,7 +413,7 @@ export default function ClientDetailPage() {
                   <span className="text-[10px] uppercase font-label-caps text-on-surface-variant opacity-60 tracking-wider">
                     {t.clients.labels.commercialPhone}
                   </span>
-                  <span className="font-mono font-medium text-on-surface">{client.phone || '--'}</span>
+                  <span className="font-mono font-medium text-on-surface">{client.phone ? formatPhoneNumber(client.phone) : '--'}</span>
                 </div>
                 {client.website && (
                   <div className="mt-xs flex flex-col gap-xs border-t border-outline-variant/20 pt-sm md:col-span-3">

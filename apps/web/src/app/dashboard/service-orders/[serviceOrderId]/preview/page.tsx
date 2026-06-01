@@ -99,9 +99,9 @@ export default function ServiceOrderPreviewPage() {
       documentNumber={serviceOrder?.number}
       dateLabel="Agendamento"
       dateValue={serviceOrder?.scheduledFor ? new Date(serviceOrder.scheduledFor).toLocaleString('pt-BR') : '--'}
-      clientName={serviceOrder?.client?.tradeName}
-      clientDocument={serviceOrder?.client?.document}
-      clientEmail={serviceOrder?.client?.email}
+      clientName={serviceOrder?.client?.tradeName || serviceOrder?.clientName}
+      clientDocument={serviceOrder?.client?.document || serviceOrder?.clientDocument}
+      clientEmail={serviceOrder?.client?.email || serviceOrder?.clientEmail}
       backPath={`/dashboard/service-orders/${serviceOrderId}`}
       documentActions={[
         existingDoc
