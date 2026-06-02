@@ -39,6 +39,7 @@ export default function DocumentosPage() {
   // S3 File operations states
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Manual upload states
@@ -86,7 +87,7 @@ export default function DocumentosPage() {
   };
 
   const handlePrint = async (doc: any) => {
-    if (downloadingId || printingId) return;
+    if (downloadingId || printingId || regeneratingId) return;
     setActionError(null);
 
     if (doc.documentType === 'INVOICE') {
@@ -112,6 +113,62 @@ export default function DocumentosPage() {
       setActionError(err.message || t.documents.errors.printFailed);
     } finally {
       setPrintingId(null);
+    }
+  };
+
+  const canRegenerateDocument = (doc: any) => {
+    if (!doc?.entityId) return false;
+    if (!['INVOICE', 'QUOTE', 'SERVICE_ORDER'].includes(doc.documentType)) return false;
+    if (doc.documentType === 'SERVICE_ORDER') {
+      return ['OWNER', 'ADMIN', 'FINANCIAL', 'TECHNICIAN'].includes(user?.role || '');
+    }
+    return ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user?.role || '');
+  };
+
+  const getRegenerateEndpoint = (doc: any) => {
+    if (doc.documentType === 'INVOICE') return `/documents/invoices/${doc.entityId}/generate-pdf`;
+    if (doc.documentType === 'QUOTE') return `/documents/quotes/${doc.entityId}/generate-pdf`;
+    if (doc.documentType === 'SERVICE_ORDER') return `/documents/service-orders/${doc.entityId}/generate-pdf`;
+    return null;
+  };
+
+  const waitForGeneratedDocument = async (jobId: string) => {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const status = await apiRequest<any>(`/documents/jobs/${jobId}`);
+      if (status.status === 'completed') return status.result || null;
+      if (status.status === 'failed') {
+        throw new Error(status.failedReason || 'Falha ao gerar nova versao do documento.');
+      }
+    }
+    throw new Error('A geracao foi enfileirada, mas ainda nao terminou. Atualize a listagem em alguns instantes.');
+  };
+
+  const handleRegenerate = async (doc: any) => {
+    if (downloadingId || printingId || regeneratingId) return;
+    if (!canRegenerateDocument(doc)) {
+      setActionError('Este documento nao pode ser gerado novamente pela Central de Documentos.');
+      return;
+    }
+
+    const endpoint = getRegenerateEndpoint(doc);
+    if (!endpoint) return;
+
+    setRegeneratingId(doc.id);
+    setActionError(null);
+    try {
+      const response = await apiRequest<any>(endpoint, { method: 'POST' });
+      const result = response.jobId ? await waitForGeneratedDocument(response.jobId) : null;
+      await fetchDocuments(page);
+      const nextDocumentId = result?.generatedDocumentId;
+      if (nextDocumentId) {
+        setSelectedDocId(nextDocumentId);
+        await fetchDetails(nextDocumentId);
+      }
+    } catch (err: any) {
+      setActionError(err.message || 'Falha ao gerar nova versao do documento.');
+    } finally {
+      setRegeneratingId(null);
     }
   };
 
@@ -516,9 +573,9 @@ export default function DocumentosPage() {
       {/* Main Grid: Data Table + Details Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-lg items-start">
         {/* Document List Table */}
-        <div className="lg:col-span-8 bg-surface border border-outline-variant rounded-lg overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-[13px]">
+        <div className="lg:col-span-8 min-w-0 bg-surface border border-outline-variant rounded-lg overflow-hidden shadow-xl">
+          <div className="overflow-x-auto overscroll-x-contain">
+            <table className="min-w-[1180px] w-full text-left border-collapse text-[13px]">
               <thead>
                 <tr className="bg-surface-container-low border-b border-outline-variant">
                   <th className="p-md font-label-caps text-on-surface-variant uppercase font-semibold whitespace-nowrap">
@@ -654,7 +711,7 @@ export default function DocumentosPage() {
                                 <button
                                   className={`material-symbols-outlined text-outline hover:text-primary transition-colors text-[18px] disabled:opacity-40 ${downloadingId === doc.id ? 'animate-spin' : ''}`}
                                   onClick={() => handleDownload(doc)}
-                                  disabled={!!downloadingId || !!printingId}
+                                  disabled={!!downloadingId || !!printingId || !!regeneratingId}
                                   title="Baixar arquivo"
                                 >
                                   {downloadingId === doc.id ? 'sync' : 'download'}
@@ -672,7 +729,7 @@ export default function DocumentosPage() {
                                 <button
                                   className={`material-symbols-outlined text-outline hover:text-primary transition-colors text-[18px] disabled:opacity-40 ${downloadingId === doc.id ? 'animate-spin' : ''}`}
                                   onClick={() => handleDownload(doc)}
-                                  disabled={!!downloadingId || !!printingId}
+                                  disabled={!!downloadingId || !!printingId || !!regeneratingId}
                                   title="Baixar PDF"
                                 >
                                   {downloadingId === doc.id ? 'sync' : 'download'}
@@ -680,12 +737,22 @@ export default function DocumentosPage() {
                                 <button
                                   className={`material-symbols-outlined text-outline hover:text-primary transition-colors text-[18px] disabled:opacity-40 ${printingId === doc.id ? 'animate-spin' : ''}`}
                                   onClick={() => handlePrint(doc)}
-                                  disabled={!!downloadingId || !!printingId}
+                                  disabled={!!downloadingId || !!printingId || !!regeneratingId}
                                   title="Imprimir PDF"
                                 >
                                   {printingId === doc.id ? 'sync' : 'print'}
                                 </button>
                               </>
+                            )}
+                            {canRegenerateDocument(doc) && (
+                              <button
+                                className={`material-symbols-outlined text-outline hover:text-primary transition-colors text-[18px] disabled:opacity-40 ${regeneratingId === doc.id ? 'animate-spin' : ''}`}
+                                onClick={() => handleRegenerate(doc)}
+                                disabled={!!downloadingId || !!printingId || !!regeneratingId}
+                                title="Gerar nova versao"
+                              >
+                                {regeneratingId === doc.id ? 'sync' : 'autorenew'}
+                              </button>
                             )}
                             <button
                               className="material-symbols-outlined text-outline hover:text-primary transition-colors text-[18px]"
@@ -949,7 +1016,7 @@ export default function DocumentosPage() {
                         <Button
                           variant="outline"
                           loading={downloadingId === selectedDoc.id}
-                          disabled={!!downloadingId || !!printingId}
+                          disabled={!!downloadingId || !!printingId || !!regeneratingId}
                           onClick={() => handleDownload(selectedDoc)}
                         >
                           <span className="material-symbols-outlined text-[16px] mr-1">download</span>
@@ -964,7 +1031,7 @@ export default function DocumentosPage() {
                         <Button
                           variant="outline"
                           loading={downloadingId === selectedDoc.id}
-                          disabled={!!downloadingId || !!printingId}
+                          disabled={!!downloadingId || !!printingId || !!regeneratingId}
                           onClick={() => handleDownload(selectedDoc)}
                         >
                           <span className="material-symbols-outlined text-[16px] mr-1">download</span>
@@ -973,13 +1040,25 @@ export default function DocumentosPage() {
                         <Button
                           variant="outline"
                           loading={printingId === selectedDoc.id}
-                          disabled={!!downloadingId || !!printingId}
+                          disabled={!!downloadingId || !!printingId || !!regeneratingId}
                           onClick={() => handlePrint(selectedDoc)}
                         >
                           <span className="material-symbols-outlined text-[16px] mr-1">print</span>
                           Imprimir
                         </Button>
                       </>
+                    )}
+                    {canRegenerateDocument(selectedDoc) && (
+                      <Button
+                        variant="primary"
+                        loading={regeneratingId === selectedDoc.id}
+                        disabled={!!downloadingId || !!printingId || !!regeneratingId}
+                        onClick={() => handleRegenerate(selectedDoc)}
+                        className="col-span-2"
+                      >
+                        <span className="material-symbols-outlined text-[16px] mr-1">autorenew</span>
+                        Gerar nova versao
+                      </Button>
                     )}
                   </div>
                 </div>
