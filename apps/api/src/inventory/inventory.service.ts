@@ -74,6 +74,285 @@ export class InventoryService {
     });
   }
 
+  private normalizeCsvKey(value: string) {
+    return value
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+  }
+
+  private parseCsv(csvText: string) {
+    const normalized = csvText
+      .replace(/^\uFEFF/, "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n");
+
+    if (!normalized.trim()) {
+      throw new BadRequestException("CSV vazio.");
+    }
+
+    const firstLine = normalized.split("\n")[0] || "";
+    const delimiter =
+      (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length
+        ? ";"
+        : ",";
+
+    const rows: Array<{ values: string[]; lineNumber: number }> = [];
+    let values: string[] = [];
+    let current = "";
+    let insideQuotes = false;
+    let lineNumber = 1;
+    let rowStartLine = 1;
+
+    const pushValue = () => {
+      values.push(current.trim());
+      current = "";
+    };
+
+    const pushRow = () => {
+      if (values.some((value) => value.trim())) {
+        rows.push({ values, lineNumber: rowStartLine });
+      }
+      values = [];
+    };
+
+    for (let index = 0; index < normalized.length; index++) {
+      const char = normalized[index];
+      const next = normalized[index + 1];
+
+      if (char === '"' && insideQuotes && next === '"') {
+        current += '"';
+        index++;
+        continue;
+      }
+
+      if (char === '"') {
+        insideQuotes = !insideQuotes;
+        continue;
+      }
+
+      if (char === delimiter && !insideQuotes) {
+        pushValue();
+        continue;
+      }
+
+      if (char === "\n") {
+        if (insideQuotes) {
+          current += char;
+          lineNumber++;
+          continue;
+        }
+
+        pushValue();
+        pushRow();
+        lineNumber++;
+        rowStartLine = lineNumber;
+        continue;
+      }
+
+      current += char;
+    }
+
+    if (current || values.length) {
+      pushValue();
+      pushRow();
+    }
+
+    if (rows.length < 2) {
+      throw new BadRequestException("CSV sem dados para importar.");
+    }
+
+    const headerRow = rows[0];
+    if (!headerRow) {
+      throw new BadRequestException("CSV sem cabecalho.");
+    }
+
+    const headers = headerRow.values.map((header) => header.trim());
+    return rows.slice(1).map(({ values: rowValues, lineNumber: rowLine }) => {
+      const row: Record<string, string> = {};
+      headers.forEach((header, headerIndex) => {
+        row[header] = rowValues[headerIndex]?.trim() || "";
+      });
+      return { row, lineNumber: rowLine };
+    });
+  }
+
+  private getCsvValue(row: Record<string, string>, keys: string[]) {
+    const normalizedMap = new Map<string, string>();
+    for (const [key, value] of Object.entries(row)) {
+      normalizedMap.set(this.normalizeCsvKey(key), value);
+    }
+
+    for (const key of keys) {
+      const value = normalizedMap.get(this.normalizeCsvKey(key));
+      if (value?.trim()) return value.trim();
+    }
+
+    return "";
+  }
+
+  private isTrueish(value: string) {
+    return ["true", "1", "sim", "yes", "online", "running", "enabled"].includes(
+      value.trim().toLowerCase(),
+    );
+  }
+
+  private isFalseish(value: string) {
+    return [
+      "false",
+      "0",
+      "nao",
+      "não",
+      "no",
+      "offline",
+      "off",
+      "disabled",
+      "stopped",
+    ].includes(value.trim().toLowerCase());
+  }
+
+  private truncate(value: string, max: number) {
+    const trimmed = value.trim();
+    return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
+  }
+
+  private isUsefulIdentifier(value: string | null | undefined) {
+    const normalized = (value || "").trim().toLowerCase();
+    return Boolean(
+      normalized &&
+        !["-", "--", "0", "n/a", "na", "none", "null", "unknown", "desconhecido"].includes(
+          normalized,
+        ),
+    );
+  }
+
+  private pickFirstListValue(value: string) {
+    return (
+      value
+        .split(/[;,\n]/)
+        .map((item) => item.trim())
+        .find(Boolean) || ""
+    );
+  }
+
+  private mapAssetType(typeValue: string, operatingSystem: string): AssetType {
+    const text = `${typeValue} ${operatingSystem}`.toLowerCase();
+    if (text.includes("hyper-v") || text.includes("vm ") || text.includes("virtual")) {
+      return "VIRTUAL_MACHINE";
+    }
+    if (text.includes("server") || text.includes("servidor")) return "SERVER";
+    if (text.includes("notebook") || text.includes("laptop")) return "NOTEBOOK";
+    if (text.includes("printer") || text.includes("impressora")) return "PRINTER";
+    if (text.includes("switch")) return "SWITCH";
+    if (text.includes("router") || text.includes("roteador")) return "ROUTER";
+    if (text.includes("firewall")) return "FIREWALL";
+    if (text.includes("nas")) return "NAS";
+    if (text.includes("storage")) return "STORAGE";
+    if (text.includes("mobile") || text.includes("celular")) return "MOBILE_DEVICE";
+    if (text.includes("estacao") || text.includes("estação") || text.includes("workstation")) {
+      return "WORKSTATION";
+    }
+    return "OTHER";
+  }
+
+  private mapAssetStatus(row: Record<string, string>): AssetStatus {
+    const enabledAd = this.getCsvValue(row, ["EnabledAD", "Enabled"]);
+    const online = this.getCsvValue(row, ["Online"]);
+    const vmState = this.getCsvValue(row, ["VMState"]);
+
+    if (enabledAd && this.isFalseish(enabledAd)) return "RETIRED";
+    if (vmState && this.isTrueish(vmState)) return "OPERATIONAL";
+    if (online && this.isTrueish(online)) return "OPERATIONAL";
+    if ((online && this.isFalseish(online)) || (vmState && this.isFalseish(vmState))) {
+      return "PENDING_VALIDATION";
+    }
+    return "PENDING_VALIDATION";
+  }
+
+  private buildImportedNotes(row: Record<string, string>) {
+    const parts = [
+      this.getCsvValue(row, ["ChaveInventario"]) &&
+        `Chave inventario: ${this.getCsvValue(row, ["ChaveInventario"])}`,
+      this.getCsvValue(row, ["Origem"]) && `Origem: ${this.getCsvValue(row, ["Origem"])}`,
+      this.getCsvValue(row, ["Dominio"]) && `Dominio: ${this.getCsvValue(row, ["Dominio"])}`,
+      this.getCsvValue(row, ["IPv4_AD"]) && `IPv4 AD: ${this.getCsvValue(row, ["IPv4_AD"])}`,
+      this.getCsvValue(row, ["IPsDetectados"]) &&
+        `IPs detectados: ${this.getCsvValue(row, ["IPsDetectados"])}`,
+      this.getCsvValue(row, ["IPsHyperV"]) && `IPs Hyper-V: ${this.getCsvValue(row, ["IPsHyperV"])}`,
+      this.getCsvValue(row, ["MACsHyperV"]) && `MACs Hyper-V: ${this.getCsvValue(row, ["MACsHyperV"])}`,
+      this.getCsvValue(row, ["OU"]) && `OU: ${this.getCsvValue(row, ["OU"])}`,
+      this.getCsvValue(row, ["CanonicalName"]) &&
+        `CanonicalName: ${this.getCsvValue(row, ["CanonicalName"])}`,
+      this.getCsvValue(row, ["DistinguishedName"]) &&
+        `DistinguishedName: ${this.getCsvValue(row, ["DistinguishedName"])}`,
+      this.getCsvValue(row, ["DescricaoAD", "DescriçãoAD"]) &&
+        `Descricao AD: ${this.getCsvValue(row, ["DescricaoAD", "DescriçãoAD"])}`,
+      this.getCsvValue(row, ["LocalizacaoAD", "LocalizaçãoAD"]) &&
+        `Localizacao AD: ${this.getCsvValue(row, ["LocalizacaoAD", "LocalizaçãoAD"])}`,
+      this.getCsvValue(row, ["ManagedBy"]) && `ManagedBy: ${this.getCsvValue(row, ["ManagedBy"])}`,
+      this.getCsvValue(row, ["LastLogonDate"]) &&
+        `Ultimo logon: ${this.getCsvValue(row, ["LastLogonDate"])}`,
+      this.getCsvValue(row, ["PasswordLastSet"]) &&
+        `Senha alterada em: ${this.getCsvValue(row, ["PasswordLastSet"])}`,
+      this.getCsvValue(row, ["HyperVHost"]) &&
+        `Hyper-V host: ${this.getCsvValue(row, ["HyperVHost"])}`,
+      this.getCsvValue(row, ["VMState"]) && `VM state: ${this.getCsvValue(row, ["VMState"])}`,
+      this.getCsvValue(row, ["VMSwitches"]) &&
+        `VM switches: ${this.getCsvValue(row, ["VMSwitches"])}`,
+      this.getCsvValue(row, ["VMPath"]) && `VM path: ${this.getCsvValue(row, ["VMPath"])}`,
+      this.getCsvValue(row, ["CIMStatus"]) && `CIM status: ${this.getCsvValue(row, ["CIMStatus"])}`,
+      this.getCsvValue(row, ["Observacoes", "Observações"]) &&
+        `Observacoes: ${this.getCsvValue(row, ["Observacoes", "Observações"])}`,
+    ].filter(Boolean);
+
+    return parts.join("\n");
+  }
+
+  private mergeImportedNotes(existingNotes: string | null, importedNotes: string) {
+    const marker = "--- Dados importados do CSV de inventario ---";
+    const [baseNotes = ""] = (existingNotes || "").split(marker);
+    const base = baseNotes.trim();
+    const importBlock = importedNotes ? `${marker}\n${importedNotes}` : "";
+    return [base, importBlock].filter(Boolean).join("\n\n") || null;
+  }
+
+  private mapCsvRowToAsset(row: Record<string, string>) {
+    const name =
+      this.getCsvValue(row, ["Nome"]) ||
+      this.getCsvValue(row, ["NomeDNS"]) ||
+      this.getCsvValue(row, ["ChaveInventario"]);
+    const dnsName = this.getCsvValue(row, ["NomeDNS"]);
+    const hostname = dnsName || name;
+    const operatingSystem =
+      this.getCsvValue(row, ["SistemaOperacionalCIM"]) ||
+      this.getCsvValue(row, ["SistemaOperacionalAD"]);
+    const serialNumber = this.getCsvValue(row, ["Serial"]);
+    const assetTag = this.getCsvValue(row, ["ChaveInventario"]);
+    const macAddress =
+      this.pickFirstListValue(this.getCsvValue(row, ["MACsHyperV"])) ||
+      this.pickFirstListValue(this.getCsvValue(row, ["MACAddress", "MacAddress"]));
+
+    return {
+      name: this.truncate(name, 150),
+      hostname: this.truncate(hostname, 100),
+      type: this.mapAssetType(this.getCsvValue(row, ["TipoProvavel"]), operatingSystem),
+      status: this.mapAssetStatus(row),
+      manufacturer: this.truncate(this.getCsvValue(row, ["Fabricante"]), 100),
+      model: this.truncate(this.getCsvValue(row, ["Modelo"]), 100),
+      serialNumber: this.truncate(serialNumber, 100),
+      assetTag: this.truncate(assetTag, 50),
+      macAddress: this.truncate(macAddress, 50),
+      operatingSystem: this.truncate(operatingSystem, 100),
+      location: this.truncate(
+        this.getCsvValue(row, ["LocalizacaoAD", "LocalizaçãoAD"]) ||
+          this.getCsvValue(row, ["OU"]),
+        100,
+      ),
+      notes: this.buildImportedNotes(row),
+    };
+  }
+
   async listGlobal(
     workspaceId: string,
     query: {
@@ -86,7 +365,7 @@ export class InventoryService {
     },
   ) {
     const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
+    const limit = Math.max(1, Math.min(1000, Number(query.limit) || 10));
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -191,6 +470,156 @@ export class InventoryService {
     }
 
     return asset;
+  }
+
+  async importCsv(
+    workspaceId: string,
+    clientId: string,
+    csvText: string,
+    actorUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    await this.validateClient(clientId, workspaceId);
+
+    if (!csvText || csvText.length > 10 * 1024 * 1024) {
+      throw new BadRequestException("CSV vazio ou acima do limite de 10 MB.");
+    }
+
+    const parsedRows = this.parseCsv(csvText);
+    const summary = {
+      totalRows: parsedRows.length,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [] as Array<{ line: number; message: string }>,
+    };
+
+    for (const { row, lineNumber } of parsedRows) {
+      const mapped = this.mapCsvRowToAsset(row);
+
+      if (!mapped.name || mapped.name.length < 2) {
+        summary.skipped++;
+        summary.errors.push({
+          line: lineNumber,
+          message: "Nome do ativo ausente ou invalido.",
+        });
+        continue;
+      }
+
+      try {
+        const matchConditions: any[] = [];
+        if (this.isUsefulIdentifier(mapped.serialNumber)) {
+          matchConditions.push({ serialNumber: mapped.serialNumber });
+        }
+        if (this.isUsefulIdentifier(mapped.hostname)) {
+          matchConditions.push({ hostname: { equals: mapped.hostname, mode: "insensitive" } });
+        }
+        if (this.isUsefulIdentifier(mapped.assetTag)) {
+          matchConditions.push({ assetTag: mapped.assetTag });
+        }
+        if (matchConditions.length === 0) {
+          matchConditions.push({ name: { equals: mapped.name, mode: "insensitive" } });
+        }
+
+        const existing = await prisma.asset.findFirst({
+          where: {
+            workspaceId,
+            clientId,
+            OR: matchConditions,
+          },
+        });
+
+        if (
+          (!existing && this.isQuotaCountedStatus(mapped.status)) ||
+          (existing &&
+            this.isQuotaCountedStatus(mapped.status) &&
+            !this.isQuotaCountedStatus(existing.status))
+        ) {
+          await this.contractsQuotaService.validateAssetQuota(
+            workspaceId,
+            clientId,
+            actorUserId,
+            ipAddress,
+            userAgent,
+          );
+        }
+
+        const data = {
+          name: mapped.name,
+          hostname: mapped.hostname || null,
+          type: mapped.type,
+          status: mapped.status,
+          manufacturer: mapped.manufacturer || null,
+          model: mapped.model || null,
+          serialNumber: mapped.serialNumber || null,
+          assetTag: mapped.assetTag || null,
+          macAddress: mapped.macAddress || null,
+          operatingSystem: mapped.operatingSystem || null,
+          location: mapped.location || null,
+          notes: this.mergeImportedNotes(existing?.notes || null, mapped.notes),
+        };
+
+        if (existing) {
+          const updated = await prisma.asset.update({
+            where: { id: existing.id },
+            data,
+          });
+
+          await this.logAssetHistory({
+            workspaceId,
+            clientId,
+            assetId: updated.id,
+            actorUserId,
+            event: "ASSET_IMPORTED_UPDATED",
+            description: `Ativo atualizado por importacao CSV: ${updated.name}`,
+            before: existing,
+            after: updated,
+          });
+
+          summary.updated++;
+        } else {
+          const created = await prisma.asset.create({
+            data: {
+              workspaceId,
+              clientId,
+              ...data,
+            },
+          });
+
+          await this.logAssetHistory({
+            workspaceId,
+            clientId,
+            assetId: created.id,
+            actorUserId,
+            event: "ASSET_IMPORTED",
+            description: `Ativo criado por importacao CSV: ${created.name}`,
+            after: created,
+          });
+
+          summary.created++;
+        }
+      } catch (err: any) {
+        summary.skipped++;
+        summary.errors.push({
+          line: lineNumber,
+          message: err.message || "Falha ao importar linha.",
+        });
+      }
+    }
+
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "asset.imported",
+      entityType: "ASSET",
+      entityId: clientId,
+      after: summary,
+      ipAddress,
+      userAgent,
+    });
+
+    return summary;
   }
 
   async create(

@@ -37,6 +37,7 @@ export class InventoryController {
     @Query("search") search: string,
     @Query("status") status: string,
     @Query("type") type: string,
+    @Query("clientId") clientId: string,
     @CurrentUser() user: any,
   ) {
     return this.inventoryService.listGlobal(user.workspaceId, {
@@ -45,6 +46,7 @@ export class InventoryController {
       search,
       status,
       type,
+      clientId,
     });
   }
 
@@ -76,6 +78,31 @@ export class InventoryController {
     @CurrentUser() user: any,
   ) {
     return this.inventoryService.getById(user.workspaceId, clientId, assetId);
+  }
+
+  @Roles("OWNER", "ADMIN", "TECHNICIAN")
+  @Post("clients/:clientId/assets/import-csv")
+  async importCsv(
+    @Param("clientId") clientId: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    if (!body?.csvText || typeof body.csvText !== "string") {
+      throw new BadRequestException("Envie o conteudo do arquivo CSV.");
+    }
+
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+
+    return this.inventoryService.importCsv(
+      user.workspaceId,
+      clientId,
+      body.csvText,
+      user.id,
+      ipAddress,
+      userAgent,
+    );
   }
 
   @Roles("OWNER", "ADMIN", "TECHNICIAN")

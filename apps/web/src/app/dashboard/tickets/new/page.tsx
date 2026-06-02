@@ -9,6 +9,7 @@ import { useI18n } from '../../../../i18n/useI18n';
 import Button from '../../../../components/ui/Button';
 import Input from '../../../../components/ui/Input';
 import Select from '../../../../components/ui/Select';
+import SearchableSelect from '../../../../components/ui/SearchableSelect';
 import ClientPageHeader from '../../../../components/layout/ClientPageHeader';
 
 export default function NewTicketPage() {
@@ -47,7 +48,7 @@ export default function NewTicketPage() {
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const clientsRes = await apiRequest<unknown>('/clients?limit=100');
+        const clientsRes = await apiRequest<unknown>('/clients?limit=500');
         setClients(extractArray(clientsRes));
         
         const usersRes = await apiRequest<unknown>('/users');
@@ -81,8 +82,8 @@ export default function NewTicketPage() {
       try {
         const [contactsRes, usersRes, assetsRes] = await Promise.all([
           apiRequest<unknown>(`/clients/${clientId}/contacts`),
-          apiRequest<unknown>(`/clients/${clientId}/users`),
-          apiRequest<unknown>(`/clients/${clientId}/assets?limit=100`),
+          apiRequest<unknown>(`/clients/${clientId}/users?limit=1000`),
+          apiRequest<unknown>(`/clients/${clientId}/assets?limit=1000`),
         ]);
 
         const contactsData = extractArray<any>(contactsRes);
@@ -317,21 +318,23 @@ export default function NewTicketPage() {
 
             <div className="flex flex-col gap-xs">
               <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.clientUserLabel}</label>
-              <Select
+              <SearchableSelect
                 disabled={fetchingCascades || !clientId}
                 value={clientUserId}
-                onChange={(e) => setClientUserId(e.target.value)}
+                onChange={setClientUserId}
                 options={clientUserOptions}
+                searchPlaceholder="Buscar usuario..."
               />
             </div>
 
             <div className="flex flex-col gap-xs">
               <label className="text-[13px] font-semibold text-on-surface-variant">{t.tickets.assetLabel}</label>
-              <Select
+              <SearchableSelect
                 disabled={fetchingCascades || !clientId}
                 value={assetId}
-                onChange={(e) => setAssetId(e.target.value)}
+                onChange={setAssetId}
                 options={assetOptions}
+                searchPlaceholder="Buscar ativo..."
               />
             </div>
           </div>

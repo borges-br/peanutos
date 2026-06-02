@@ -9,10 +9,12 @@ import Button from '../../../../../components/ui/Button';
 import Badge from '../../../../../components/ui/Badge';
 import Input from '../../../../../components/ui/Input';
 import Select from '../../../../../components/ui/Select';
+import SearchableSelect from '../../../../../components/ui/SearchableSelect';
 import DataTable from '../../../../../components/ui/DataTable';
 import EmptyState from '../../../../../components/ui/EmptyState';
 import ClientContextTabs from '../../../../../components/layout/ClientContextTabs';
 import ClientPageHeader from '../../../../../components/layout/ClientPageHeader';
+import AssetCsvImportModal from '../../../../../components/inventory/AssetCsvImportModal';
 
 type BadgeVariant = 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'purple';
 
@@ -36,6 +38,7 @@ export default function ClientInventoryPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [showModal, setShowModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
 
@@ -107,7 +110,7 @@ export default function ClientInventoryPage() {
 
   const fetchClientUsers = async () => {
     try {
-      const response = await apiRequest<unknown>(`/clients/${clientId}/users?limit=100`);
+      const response = await apiRequest<unknown>(`/clients/${clientId}/users?limit=1000`);
       setClientUsers(extractArray(response));
     } catch (err) {
       console.error('Falha ao buscar usuários para dropdown', err);
@@ -424,10 +427,16 @@ export default function ClientInventoryPage() {
         title={t.clients.pages.inventoryTitle}
         description={t.clients.pages.inventoryDescription.replace('{name}', clientName)}
         primaryActions={
-          <Button variant="primary" onClick={openCreateModal}>
-            <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">add_circle</span>
-            {t.clients.actions.newAsset}
-          </Button>
+          <div className="flex flex-wrap gap-sm">
+            <Button variant="outline" onClick={() => setShowImportModal(true)}>
+              <span className="material-symbols-outlined text-[16px] mr-1.5">upload_file</span>
+              Importar CSV
+            </Button>
+            <Button variant="primary" onClick={openCreateModal}>
+              <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">add_circle</span>
+              {t.clients.actions.newAsset}
+            </Button>
+          </div>
         }
         tabs={<ClientContextTabs clientId={clientId} />}
       />
@@ -565,14 +574,15 @@ export default function ClientInventoryPage() {
                 <Input label="Sistema Operacional" placeholder="Ex: Windows 11 Pro" value={operatingSystem} onChange={(e) => setOperatingSystem(e.target.value)} />
                 <Input label="Localização / Setor" placeholder="Ex: Recepção ou Prédio A - Sala 3" value={location} onChange={(e) => setLocation(e.target.value)} />
                 <Input label="ID Acesso Remoto (RustDesk/AnyDesk)" placeholder="Ex: RustDesk ID: 482 199 432" value={remoteAccessId} onChange={(e) => setRemoteAccessId(e.target.value)} />
-                <Select
+                <SearchableSelect
                   label="Atribuir a Usuário"
                   value={assignedClientUserId}
-                  onChange={(e) => setAssignedClientUserId(e.target.value)}
+                  onChange={setAssignedClientUserId}
                   options={[
                     { value: '', label: t.common.notAssigned },
                     ...clientUsers.map(u => ({ value: u.id, label: u.fullName })),
                   ]}
+                  searchPlaceholder="Buscar usuario..."
                 />
               </div>
 
@@ -609,6 +619,15 @@ export default function ClientInventoryPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {showImportModal && (
+        <AssetCsvImportModal
+          clientId={clientId}
+          clientName={clientName}
+          onClose={() => setShowImportModal(false)}
+          onImported={fetchAssets}
+        />
       )}
     </div>
   );

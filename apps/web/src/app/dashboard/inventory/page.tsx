@@ -9,10 +9,12 @@ import Button from '../../../components/ui/Button';
 import Badge from '../../../components/ui/Badge';
 import Input from '../../../components/ui/Input';
 import Select from '../../../components/ui/Select';
+import SearchableSelect from '../../../components/ui/SearchableSelect';
 import DataTable from '../../../components/ui/DataTable';
 import EmptyState from '../../../components/ui/EmptyState';
 import ErrorState from '../../../components/ui/ErrorState';
 import ClientPageHeader from '../../../components/layout/ClientPageHeader';
+import AssetCsvImportModal from '../../../components/inventory/AssetCsvImportModal';
 
 export default function InventoryPage() {
   const router = useRouter();
@@ -31,10 +33,11 @@ export default function InventoryPage() {
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const fetchClients = async () => {
     try {
-      const response = await apiRequest<unknown>('/clients?limit=100');
+      const response = await apiRequest<unknown>('/clients?limit=500');
       setClients(extractArray(response));
     } catch (err) {
       console.error('Falha ao buscar clientes para filtros', err);
@@ -238,7 +241,7 @@ export default function InventoryPage() {
 
   const clientOptions = [
     { value: '', label: t.inventory.filters.allClients },
-    ...clients.map(c => ({ value: c.id, label: c.tradeName })),
+    ...clients.map(c => ({ value: c.id, label: c.tradeName || c.legalName })),
   ];
 
   const typeOptions = [
@@ -260,6 +263,12 @@ export default function InventoryPage() {
         ]}
         title={t.navigation.technicalInventory}
         description={t.inventory.subtitle}
+        primaryActions={
+          <Button variant="outline" onClick={() => setShowImportModal(true)}>
+            <span className="material-symbols-outlined text-[16px] mr-1.5">upload_file</span>
+            Importar CSV
+          </Button>
+        }
       />
 
       {/* Filter and Search Bar */}
@@ -279,14 +288,15 @@ export default function InventoryPage() {
 
         <div className="flex flex-wrap gap-md items-center justify-between w-full">
           <div className="flex flex-wrap gap-sm items-center flex-1">
-            <Select
+            <SearchableSelect
               value={clientId}
-              onChange={(e) => {
-                setClientId(e.target.value);
+              onChange={(value) => {
+                setClientId(value);
                 setPage(1);
               }}
               options={clientOptions}
               className="min-w-[160px]"
+              searchPlaceholder="Buscar cliente..."
             />
 
             <Select
@@ -372,6 +382,17 @@ export default function InventoryPage() {
             </div>
           </div>
         )
+      )}
+
+      {showImportModal && (
+        <AssetCsvImportModal
+          clients={clients.map((client) => ({
+            id: client.id,
+            label: client.tradeName || client.legalName,
+          }))}
+          onClose={() => setShowImportModal(false)}
+          onImported={fetchAssets}
+        />
       )}
     </div>
   );
