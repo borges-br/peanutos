@@ -15,6 +15,79 @@ import ErrorState from '../../../../../components/ui/ErrorState';
 import ClientContextTabs from '../../../../../components/layout/ClientContextTabs';
 import ClientPageHeader from '../../../../../components/layout/ClientPageHeader';
 
+const AD_EXPORT_COMMAND = `Get-ADUser -Filter * -Properties * |
+Select-Object \`
+Name,
+SamAccountName,
+UserPrincipalName,
+Enabled,
+EmailAddress,
+GivenName,
+Surname,
+DisplayName,
+Description,
+Department,
+Title,
+Office,
+Company,
+Manager,
+Created,
+Modified,
+LastLogonDate,
+PasswordLastSet,
+PasswordNeverExpires,
+CannotChangePassword,
+LockedOut |
+Export-Csv "C:\\Temp\\usuarios_ad.csv" -NoTypeInformation -Encoding UTF8`;
+
+const CSV_TEMPLATE_HEADERS = [
+  'Name',
+  'SamAccountName',
+  'UserPrincipalName',
+  'Enabled',
+  'EmailAddress',
+  'GivenName',
+  'Surname',
+  'DisplayName',
+  'Description',
+  'Department',
+  'Title',
+  'Office',
+  'Company',
+  'Manager',
+  'Created',
+  'Modified',
+  'LastLogonDate',
+  'PasswordLastSet',
+  'PasswordNeverExpires',
+  'CannotChangePassword',
+  'LockedOut',
+];
+
+const CSV_TEMPLATE_PLACEHOLDER = [
+  'Maria Souza',
+  'maria.souza',
+  'maria.souza@empresa.local',
+  'True',
+  'maria.souza@empresa.com.br',
+  'Maria',
+  'Souza',
+  'Maria Souza',
+  'Colaboradora ativa',
+  'Financeiro',
+  'Analista Financeiro',
+  'Matriz',
+  'Empresa Exemplo',
+  'CN=Gestor Exemplo,OU=Usuarios,DC=empresa,DC=local',
+  '2026-01-01 09:00:00',
+  '2026-01-15 09:00:00',
+  '2026-02-01 09:00:00',
+  '2026-01-10 09:00:00',
+  'False',
+  'False',
+  'False',
+];
+
 export default function ClientUsersPage() {
   const params = useParams();
   const { t } = useI18n();
@@ -32,6 +105,8 @@ export default function ClientUsersPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [showModal, setShowModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showImportHelp, setShowImportHelp] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
@@ -45,6 +120,11 @@ export default function ClientUsersPage() {
 
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importSubmitting, setImportSubmitting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<any>(null);
+  const [commandCopied, setCommandCopied] = useState(false);
 
   const fetchClientDetails = async () => {
     try {
@@ -105,6 +185,13 @@ export default function ClientUsersPage() {
     setNotes('');
     setFormError(null);
     setShowModal(true);
+  };
+
+  const openImportModal = () => {
+    setImportFile(null);
+    setImportError(null);
+    setImportResult(null);
+    setShowImportModal(true);
   };
 
   const openEditModal = (user: any) => {
@@ -185,6 +272,57 @@ export default function ClientUsersPage() {
     } catch (err: any) {
       console.error(err.message || t.clientUsers.statusChangeError);
     }
+  };
+
+  const fileToText = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file, 'utf-8');
+    });
+
+  const handleImportCsv = async () => {
+    if (!importFile || importSubmitting) return;
+    setImportSubmitting(true);
+    setImportError(null);
+    setImportResult(null);
+    try {
+      const csvText = await fileToText(importFile);
+      const result = await apiRequest(`/clients/${clientId}/users/import-csv`, {
+        method: 'POST',
+        body: JSON.stringify({ csvText, filename: importFile.name }),
+      });
+      setImportResult(result);
+      await fetchUsers();
+    } catch (err: any) {
+      setImportError(err.message || 'Falha ao importar CSV.');
+    } finally {
+      setImportSubmitting(false);
+    }
+  };
+
+  const copyAdCommand = async () => {
+    await navigator.clipboard.writeText(AD_EXPORT_COMMAND);
+    setCommandCopied(true);
+    window.setTimeout(() => setCommandCopied(false), 2000);
+  };
+
+  const downloadCsvTemplate = () => {
+    const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const csv = [
+      CSV_TEMPLATE_HEADERS.map(escape).join(','),
+      CSV_TEMPLATE_PLACEHOLDER.map(escape).join(','),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'modelo_usuarios_ad.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   };
 
   const clientUserStatuses = [
@@ -326,10 +464,16 @@ export default function ClientUsersPage() {
         title={t.clients.pages.usersTitle}
         description={t.clients.pages.usersDescription.replace('{name}', clientName)}
         primaryActions={
-          <Button variant="primary" onClick={openCreateModal}>
-            <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">person_add</span>
-            {t.clients.actions.newUser}
-          </Button>
+          <div className="flex flex-wrap gap-sm">
+            <Button variant="outline" onClick={openImportModal}>
+              <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">upload_file</span>
+              Importar CSV
+            </Button>
+            <Button variant="primary" onClick={openCreateModal}>
+              <span className="material-symbols-outlined text-[16px] mr-1.5 font-bold">person_add</span>
+              {t.clients.actions.newUser}
+            </Button>
+          </div>
         }
         tabs={<ClientContextTabs clientId={clientId} />}
       />
@@ -513,6 +657,140 @@ export default function ClientUsersPage() {
                 </Button>
               </footer>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-all duration-200 p-md">
+          <div className="bg-surface border border-outline-variant rounded-2xl w-full max-w-2xl p-lg shadow-2xl relative flex flex-col gap-md animate-in fade-in duration-200 max-h-[90vh] overflow-y-auto">
+            <header className="flex justify-between items-center w-full border-b border-outline-variant/30 pb-sm">
+              <div>
+                <h3 className="font-title-sm text-sm font-bold text-on-surface">Importar usuarios via CSV</h3>
+                <p className="text-[12px] text-on-surface-variant mt-1">
+                  Importe usuarios exportados do Active Directory para {clientName}.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowImportModal(false)}
+                className="h-8 w-8 px-0 py-0 text-xl leading-none"
+                disabled={importSubmitting}
+              >
+                &times;
+              </Button>
+            </header>
+
+            {importError && (
+              <div className="bg-error-container/10 border border-error-container/20 text-error p-sm rounded-xl text-xs font-semibold">
+                {importError}
+              </div>
+            )}
+
+            {importResult && (
+              <div className="bg-success-container/10 border border-success-container/20 text-success-container p-md rounded-xl text-sm">
+                <p className="font-bold">Importacao concluida</p>
+                <p className="mt-1">
+                  Linhas: {importResult.totalRows} | Criados: {importResult.created} | Atualizados: {importResult.updated} | Pulados: {importResult.skipped}
+                </p>
+                {importResult.errors?.length > 0 && (
+                  <div className="mt-sm max-h-32 overflow-y-auto text-xs text-on-surface-variant">
+                    {importResult.errors.slice(0, 8).map((item: any, index: number) => (
+                      <p key={index}>Linha {item.line}: {item.message}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-sm">
+              <label className="text-[12px] font-semibold text-on-surface-variant">Arquivo CSV</label>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => setImportFile(event.target.files?.[0] || null)}
+                disabled={importSubmitting}
+                className="bg-surface-container-low border border-outline-variant rounded-xl p-md text-sm text-on-surface"
+              />
+              <p className="text-[12px] text-on-surface-variant">
+                Aceita CSV separado por virgula ou ponto-e-virgula, com cabecalhos em ingles do PowerShell ou em portugues do relatorio documentado.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-sm justify-between border-t border-outline-variant/30 pt-md">
+              <Button type="button" variant="outline" onClick={() => setShowImportHelp(true)}>
+                <span className="material-symbols-outlined text-[16px] mr-1.5">help</span>
+                Ajuda
+              </Button>
+              <div className="flex flex-col sm:flex-row gap-sm">
+                <Button type="button" variant="outline" onClick={() => setShowImportModal(false)} disabled={importSubmitting}>
+                  Fechar
+                </Button>
+                <Button type="button" variant="primary" onClick={handleImportCsv} disabled={!importFile || importSubmitting}>
+                  {importSubmitting ? 'Importando...' : 'Importar usuarios'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImportHelp && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm transition-all duration-200 p-md">
+          <div className="bg-surface border border-outline-variant rounded-2xl w-full max-w-3xl p-lg shadow-2xl relative flex flex-col gap-md animate-in fade-in duration-200 max-h-[90vh] overflow-y-auto">
+            <header className="flex justify-between items-center w-full border-b border-outline-variant/30 pb-sm">
+              <div>
+                <h3 className="font-title-sm text-sm font-bold text-on-surface">Como importar usuarios do Active Directory</h3>
+                <p className="text-[12px] text-on-surface-variant mt-1">
+                  Execute o comando abaixo no PowerShell do Windows Server com o modulo Active Directory instalado.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowImportHelp(false)}
+                className="h-8 w-8 px-0 py-0 text-xl leading-none"
+              >
+                &times;
+              </Button>
+            </header>
+
+            <div className="bg-surface-container-low border border-outline-variant rounded-xl p-md">
+              <div className="flex items-center justify-between gap-sm mb-sm">
+                <span className="text-[11px] uppercase font-bold text-on-surface-variant">PowerShell - Windows Server</span>
+                <Button type="button" variant="outline" onClick={copyAdCommand} className="py-1 px-3 text-xs">
+                  <span className="material-symbols-outlined text-[14px] mr-1">content_copy</span>
+                  {commandCopied ? 'Copiado' : 'Copiar comando'}
+                </Button>
+              </div>
+              <pre className="text-[12px] text-on-surface font-mono whitespace-pre-wrap overflow-x-auto select-text">
+                {AD_EXPORT_COMMAND}
+              </pre>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-md text-sm text-on-surface-variant">
+              <div className="bg-surface-container-low border border-outline-variant rounded-xl p-md">
+                <h4 className="font-bold text-on-surface mb-xs">Formato aceito</h4>
+                <p>Campos principais: Name, SamAccountName, UserPrincipalName, Enabled, EmailAddress, DisplayName, Department, Title, Office, Company e Manager.</p>
+                <p className="mt-xs">Tambem sao aceitos os cabecalhos em portugues do relatorio documentado, como Nome, NomeExibicao, UsuarioSamAccountName, Ativo, Email, Departamento e Cargo.</p>
+              </div>
+              <div className="bg-surface-container-low border border-outline-variant rounded-xl p-md">
+                <h4 className="font-bold text-on-surface mb-xs">Como o PeanutOS importa</h4>
+                <p>Usuarios ativos entram como ACTIVE. Usuarios desativados entram como INACTIVE. Registros com descricao de desligamento entram como TERMINATED.</p>
+                <p className="mt-xs">Se ja existir usuario com mesmo e-mail ou nome, ele sera atualizado em vez de duplicado.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-end gap-sm border-t border-outline-variant/30 pt-md">
+              <Button type="button" variant="outline" onClick={downloadCsvTemplate}>
+                <span className="material-symbols-outlined text-[16px] mr-1.5">download</span>
+                Baixar modelo CSV
+              </Button>
+              <Button type="button" variant="primary" onClick={() => setShowImportHelp(false)}>
+                Entendi
+              </Button>
+            </div>
           </div>
         </div>
       )}

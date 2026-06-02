@@ -84,6 +84,31 @@ export class ClientUsersController {
   }
 
   @Roles("OWNER", "ADMIN", "TECHNICIAN")
+  @Post("import-csv")
+  async importCsv(
+    @Param("clientId") clientId: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    if (!body?.csvText || typeof body.csvText !== "string") {
+      throw new BadRequestException("Envie o conteúdo do arquivo CSV.");
+    }
+
+    const ipAddress = req.ip || req.headers?.["x-forwarded-for"] || "127.0.0.1";
+    const userAgent = req.headers?.["user-agent"] || "Unknown";
+
+    return this.clientUsersService.importCsv(
+      user.workspaceId,
+      clientId,
+      body.csvText,
+      user.id,
+      ipAddress,
+      userAgent,
+    );
+  }
+
+  @Roles("OWNER", "ADMIN", "TECHNICIAN")
   @Patch(":userId")
   async update(
     @Param("clientId") clientId: string,
