@@ -9,8 +9,29 @@ import { LoginInput } from "@peanut/validators";
 export class AuthService {
   private readonly jwtSecret =
     process.env.JWT_SECRET || "change-me-in-production-at-least-32-chars-long";
+  private readonly jwtExpiresIn = (process.env.JWT_EXPIRES_IN || "30m") as any;
 
   constructor(private readonly auditService: AuditService) {}
+
+  private signAccessToken(user: {
+    id: string;
+    workspaceId: string;
+    role: string;
+    name: string;
+    email: string;
+  }) {
+    const payload = {
+      sub: user.id,
+      workspaceId: user.workspaceId,
+      role: user.role,
+      name: user.name,
+      email: user.email,
+    };
+
+    return jwt.sign(payload, this.jwtSecret, {
+      expiresIn: this.jwtExpiresIn,
+    });
+  }
 
   async login(input: LoginInput, ipAddress?: string, userAgent?: string) {
     const { email, password } = input;
@@ -54,18 +75,7 @@ export class AuthService {
       throw new UnauthorizedException("Credenciais inválidas");
     }
 
-    // Generate JWT token
-    const payload = {
-      sub: user.id,
-      workspaceId: user.workspaceId,
-      role: user.role,
-      name: user.name,
-      email: user.email,
-    };
-
-    const accessToken = jwt.sign(payload, this.jwtSecret, {
-      expiresIn: (process.env.JWT_EXPIRES_IN || "15m") as any,
-    });
+    const accessToken = this.signAccessToken(user);
 
     // Log successful login
     await this.auditService.log({
@@ -93,6 +103,10 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        avatarFileObjectId: user.avatarFileObjectId,
+        avatarUrl: user.avatarFileObjectId
+          ? `/api/v1/files/${user.avatarFileObjectId}`
+          : null,
       },
     };
   }
@@ -120,5 +134,29 @@ export class AuthService {
     } catch (err) {
       return null;
     }
+  }
+
+  async refreshToken(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.status !== "ACTIVE") {
+      throw new UnauthorizedException("Sessão expirada");
+    }
+
+    return {
+      accessToken: this.signAccessToken(user),
+      user: {
+        id: user.id,
+        workspaceId: user.workspaceId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatarUrl: user.avatarFileObjectId
+          ? `/api/v1/files/${user.avatarFileObjectId}`
+          : null,
+      },
+    };
   }
 }

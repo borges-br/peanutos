@@ -50,6 +50,13 @@ export class AuthController {
     };
   }
 
+  @UseGuards(AuthGuard)
+  @Post("refresh")
+  @HttpCode(HttpStatus.OK)
+  async refresh(@CurrentUser() user: any) {
+    return this.authService.refreshToken(user.id);
+  }
+
   @Post("logout")
   @HttpCode(HttpStatus.OK)
   async logout() {

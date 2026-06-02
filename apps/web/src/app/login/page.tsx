@@ -20,6 +20,19 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const expiredByQuery = params.get('session') === 'expired';
+    const expiredByStorage = sessionStorage.getItem('peanut_session_expired') === 'true';
+    if (expiredByQuery || expiredByStorage) {
+      setError('Sua sessão expirou. Faça login novamente para continuar.');
+      sessionStorage.removeItem('peanut_session_expired');
+      if (expiredByQuery) {
+        window.history.replaceState(null, '', '/login');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     async function checkSetup() {
       try {
         const { requiresSetup } = await apiRequest<{ requiresSetup: boolean }>(

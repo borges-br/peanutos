@@ -1,4 +1,5 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const SESSION_EXPIRED_EVENT = 'peanut-session-expired';
 
 function getTargetUrl(endpoint: string): string {
   const baseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
@@ -10,6 +11,20 @@ function getTargetUrl(endpoint: string): string {
   }
 
   return `${baseUrl}${cleanEndpoint}`;
+}
+
+function handleUnauthorized(endpoint: string) {
+  if (typeof window === 'undefined') return;
+  if (endpoint.includes('/auth/login') || endpoint.includes('/setup/status')) return;
+
+  localStorage.removeItem('peanut_token');
+  sessionStorage.setItem('peanut_session_expired', 'true');
+  window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+
+  const loginPath = '/login?session=expired';
+  if (!window.location.pathname.startsWith('/login')) {
+    window.location.href = loginPath;
+  }
 }
 
 export async function apiRequest<T = any>(
@@ -41,6 +56,9 @@ export async function apiRequest<T = any>(
       errorMessage = errorData.message || errorMessage;
     } catch (e) {
       // Ignored
+    }
+    if (response.status === 401) {
+      handleUnauthorized(endpoint);
     }
     throw new Error(errorMessage);
   }
@@ -80,6 +98,9 @@ export async function apiBlobRequest(
       errorMessage = errorData.message || errorMessage;
     } catch {
       // ignore
+    }
+    if (response.status === 401) {
+      handleUnauthorized(endpoint);
     }
     throw new Error(errorMessage);
   }

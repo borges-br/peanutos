@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiRequest } from '../lib/api';
 
@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,6 +21,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const applySession = useCallback((data: any) => {
+    localStorage.setItem('peanut_token', data.accessToken);
+    setToken(data.accessToken);
+    setUser(data.user);
+  }, []);
+
+  const expireSession = useCallback(() => {
+    localStorage.removeItem('peanut_token');
+    setToken(null);
+    setUser(null);
+    router.replace('/login?session=expired');
+  }, [router]);
 
   useEffect(() => {
     async function loadUser() {
@@ -41,6 +55,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadUser();
   }, []);
 
+  useEffect(() => {
+    const onExpired = () => expireSession();
+    window.addEventListener('peanut-session-expired', onExpired);
+    return () => window.removeEventListener('peanut-session-expired', onExpired);
+  }, [expireSession]);
+
   const refreshUser = async () => {
     try {
       const userData = await apiRequest('/auth/me');
@@ -50,6 +70,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshSession = useCallback(async () => {
+    const savedToken = localStorage.getItem('peanut_token');
+    if (!savedToken) return;
+    try {
+      const data = await apiRequest('/auth/refresh', { method: 'POST' });
+      applySession(data);
+    } catch (e) {
+      console.error('Failed to refresh session', e);
+    }
+  }, [applySession]);
+
+  useEffect(() => {
+    if (!token || !user) return;
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        refreshSession();
+      }
+    }, 5 * 60 * 1000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSession();
+      }
+    };
+
+    window.addEventListener('focus', refreshSession);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshSession);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [token, user, refreshSession]);
+
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
@@ -58,9 +114,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
 
-      localStorage.setItem('peanut_token', data.accessToken);
-      setToken(data.accessToken);
-      setUser(data.user);
+      sessionStorage.removeItem('peanut_session_expired');
+      applySession(data);
       setLoading(false);
       router.refresh();
       router.replace('/dashboard');
@@ -72,13 +127,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem('peanut_token');
+    sessionStorage.removeItem('peanut_session_expired');
     setToken(null);
     setUser(null);
     router.push('/login');
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, refreshUser, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );
