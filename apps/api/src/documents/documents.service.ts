@@ -61,43 +61,62 @@ export class DocumentsService {
     forcePathStyle: this.s3ForcePathStyle,
   });
 
-  private async ensureBucketExists() {
-    const isProduction = process.env.NODE_ENV === "production";
-    const autoCreate = process.env.S3_AUTO_CREATE_BUCKET === "true";
+  private isMissingBucketError(err: any): boolean {
+    return (
+      err?.name === "NoSuchBucket" ||
+      err?.name === "NotFound" ||
+      err?.$metadata?.httpStatusCode === 404
+    );
+  }
 
-    if (!isProduction && autoCreate) {
+  private isBucketAlreadyAvailableError(err: any): boolean {
+    return (
+      err?.name === "BucketAlreadyOwnedByYou" ||
+      err?.name === "BucketAlreadyExists"
+    );
+  }
+
+  private createBucketCommand() {
+    const input: any = { Bucket: this.s3Bucket };
+    if (this.s3Region && this.s3Region !== "us-east-1") {
+      input.CreateBucketConfiguration = {
+        LocationConstraint: this.s3Region,
+      };
+    }
+    return new CreateBucketCommand(input);
+  }
+
+  private async ensureBucketExists() {
+    console.log(
+      `[S3 API Initialize] Checking bucket "${this.s3Bucket}" existence...`,
+    );
+    try {
+      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }));
+      console.log(`[S3 API Initialize] Bucket "${this.s3Bucket}" is ready.`);
+    } catch (err: any) {
+      if (!this.isMissingBucketError(err)) {
+        console.warn(
+          "[S3 API Initialize] HeadBucket query failed (safe bypass):",
+          err.message,
+        );
+        return;
+      }
+
       console.log(
-        `[S3 API Initialize] Checking bucket "${this.s3Bucket}" existence...`,
+        `[S3 API Initialize] Bucket "${this.s3Bucket}" not found. Creating dynamically...`,
       );
       try {
-        await this.s3Client.send(
-          new HeadBucketCommand({ Bucket: this.s3Bucket }),
+        await this.s3Client.send(this.createBucketCommand());
+        console.log(
+          `[S3 API Initialize] Bucket "${this.s3Bucket}" created successfully.`,
         );
-        console.log(`[S3 API Initialize] Bucket "${this.s3Bucket}" is ready.`);
-      } catch (err: any) {
-        if (err.name === "NotFound" || err.$metadata?.httpStatusCode === 404) {
-          console.log(
-            `[S3 API Initialize] Bucket "${this.s3Bucket}" not found. Creating dynamically...`,
-          );
-          try {
-            await this.s3Client.send(
-              new CreateBucketCommand({ Bucket: this.s3Bucket }),
-            );
-            console.log(
-              `[S3 API Initialize] Bucket "${this.s3Bucket}" created successfully.`,
-            );
-          } catch (createErr: any) {
-            console.error(
-              `[S3 API Initialize] Failed to create bucket "${this.s3Bucket}":`,
-              createErr.message,
-            );
-          }
-        } else {
-          console.warn(
-            `[S3 API Initialize] HeadBucket query failed (safe bypass):`,
-            err.message,
-          );
-        }
+      } catch (createErr: any) {
+        if (this.isBucketAlreadyAvailableError(createErr)) return;
+        console.error(
+          `[S3 API Initialize] Failed to create bucket "${this.s3Bucket}":`,
+          createErr.message,
+        );
+        throw createErr;
       }
     }
   }
@@ -421,6 +440,7 @@ export class DocumentsService {
     const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
 
     try {
+      await this.ensureBucketExists();
       await this.s3Client.send(
         new PutObjectCommand({
           Bucket: this.s3Bucket,

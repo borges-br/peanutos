@@ -71,33 +71,54 @@ async function fileObjectToDataUri(fileObjectId: string | null | undefined, work
   }
 }
 
+function isMissingBucketError(err: any): boolean {
+  return (
+    err?.name === 'NoSuchBucket' ||
+    err?.name === 'NotFound' ||
+    err?.$metadata?.httpStatusCode === 404
+  );
+}
+
+function isBucketAlreadyAvailableError(err: any): boolean {
+  return (
+    err?.name === 'BucketAlreadyOwnedByYou' ||
+    err?.name === 'BucketAlreadyExists'
+  );
+}
+
+function createBucketCommand() {
+  const input: any = { Bucket: s3Bucket };
+  if (s3Region && s3Region !== 'us-east-1') {
+    input.CreateBucketConfiguration = {
+      LocationConstraint: s3Region,
+    };
+  }
+  return new CreateBucketCommand(input);
+}
+
 /**
- * Auto-create target S3 bucket in non-production environments
+ * Auto-create target S3 bucket when it is missing.
  */
 async function ensureBucketExists() {
-  const isProduction = process.env.NODE_ENV === 'production';
-  const autoCreate = process.env.S3_AUTO_CREATE_BUCKET === 'true';
-
-  if (!isProduction && autoCreate) {
-    console.log(`[S3 Initialize] Checking bucket "${s3Bucket}" existence...`);
-    try {
-      await s3Client.send(new HeadBucketCommand({ Bucket: s3Bucket }));
-      console.log(`[S3 Initialize] Bucket "${s3Bucket}" is ready.`);
-    } catch (err: any) {
-      if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
-        console.log(`[S3 Initialize] Bucket "${s3Bucket}" not found. Creating it dynamically...`);
-        try {
-          await s3Client.send(new CreateBucketCommand({ Bucket: s3Bucket }));
-          console.log(`[S3 Initialize] Bucket "${s3Bucket}" created successfully.`);
-        } catch (createErr: any) {
-          console.error(`[S3 Initialize] Failed to create bucket "${s3Bucket}":`, createErr.message);
-        }
-      } else {
-        console.warn(`[S3 Initialize] HeadBucket query failed (safe bypass):`, err.message);
-      }
+  console.log(`[S3 Initialize] Checking bucket "${s3Bucket}" existence...`);
+  try {
+    await s3Client.send(new HeadBucketCommand({ Bucket: s3Bucket }));
+    console.log(`[S3 Initialize] Bucket "${s3Bucket}" is ready.`);
+  } catch (err: any) {
+    if (!isMissingBucketError(err)) {
+      console.warn(`[S3 Initialize] HeadBucket query failed (safe bypass):`, err.message);
+      return;
     }
-  } else {
-    console.log(`[S3 Initialize] Dynamic bucket auto-creation bypassed. Production = ${isProduction}, AutoCreate = ${autoCreate}`);
+
+    console.log(`[S3 Initialize] Bucket "${s3Bucket}" not found. Creating it dynamically...`);
+    try {
+      await s3Client.send(createBucketCommand());
+      console.log(`[S3 Initialize] Bucket "${s3Bucket}" created successfully.`);
+    } catch (createErr: any) {
+      if (isBucketAlreadyAvailableError(createErr)) return;
+      console.error(`[S3 Initialize] Failed to create bucket "${s3Bucket}":`, createErr.message);
+      throw createErr;
+    }
   }
 }
 
@@ -917,6 +938,7 @@ const pdfWorker = new Worker(
     // 7. Upload the buffer directly to MinIO
     console.log(`[PDF Worker] Uploading PDF buffer to MinIO bucket "${s3Bucket}" key "${key}"...`);
     try {
+      await ensureBucketExists();
       await s3Client.send(new PutObjectCommand({
         Bucket: s3Bucket,
         Key: key,
