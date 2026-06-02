@@ -351,9 +351,9 @@ export class QuotesService {
       include: { items: true },
     });
     if (!quote) throw new NotFoundException("Orçamento não encontrado");
-    if (quote.status !== "DRAFT") {
+    if (["REJECTED", "CANCELLED"].includes(quote.status)) {
       throw new BadRequestException(
-        "Apenas orçamentos em rascunho podem ser editados.",
+        "Orçamentos recusados ou cancelados não podem ser editados.",
       );
     }
 
