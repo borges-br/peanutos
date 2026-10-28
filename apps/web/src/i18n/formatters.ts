@@ -2,13 +2,15 @@ import { DEFAULT_LOCALE } from './config';
 
 export function formatDateTime(
   date: Date | string | number | null | undefined,
-  locale: string = DEFAULT_LOCALE
+  locale: string = DEFAULT_LOCALE,
+  timeZone: string = 'America/Sao_Paulo'
 ): string {
   if (!date) return '--';
   const parsedDate = new Date(date);
   if (isNaN(parsedDate.getTime())) return '--';
 
   return new Intl.DateTimeFormat(locale, {
+    timeZone,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

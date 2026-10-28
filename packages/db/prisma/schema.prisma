@@ -161,6 +161,7 @@ model Workspace {
   name      String   @db.VarChar(100)
   slug      String   @unique @db.VarChar(100)
   status    String   @default("ACTIVE") @db.VarChar(20)
+  timeZone  String   @default("America/Sao_Paulo") @db.VarChar(100)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -185,9 +186,17 @@ model Workspace {
   signatureName              String? @db.VarChar(150)
   logoFileObjectId           String? @db.Uuid
   invoiceDueSoonOffsetHours  Int     @default(72)
+  contractEndingSoonDays     Int     @default(15)
+  ticketFeedbackAfterHours   Int     @default(24)
+  automationIntervalMinutes Int     @default(60)
+  lastAutomationSweepAt      DateTime?
+  webhookMaxAttempts         Int     @default(5)
+  webhookTimeoutMs           Int     @default(10000)
+  sessionDurationMinutes     Int     @default(45)
 
   // Relationships
   users                    User[]
+  emailSettings            WorkspaceEmailSettings?
   clients                  Client[]
   clientUsers         ClientUser[]
   assets              Asset[]
@@ -217,6 +226,27 @@ model Workspace {
   documentTemplateSettings DocumentTemplateSetting[]
 
   @@map("workspaces")
+}
+
+model WorkspaceEmailSettings {
+  workspaceId String @id @db.Uuid
+  enabled Boolean @default(false)
+  host String @default("") @db.VarChar(253)
+  port Int @default(587)
+  security String @default("STARTTLS") @db.VarChar(20)
+  username String @default("") @db.VarChar(254)
+  passwordEncrypted String? @db.Text
+  fromEmail String @default("") @db.VarChar(254)
+  fromName String @default("") @db.VarChar(150)
+  replyTo String? @db.VarChar(254)
+  revision Int @default(1)
+  lastTestAt DateTime?
+  lastTestStatus String? @db.VarChar(20)
+  lastTestError String? @db.VarChar(255)
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_email_settings")
 }
 
 model User {
@@ -426,6 +456,7 @@ model Ticket {
   serviceOrders ServiceOrder[]
   history       TicketHistory[]
   timeEntries   TicketTimeEntry[]
+  billingExtras InvoiceItem[] @relation("InvoiceItemTicket")
 
   @@index([workspaceId, status, priority])
   @@index([workspaceId, categoryId])
@@ -575,6 +606,8 @@ model ServiceOrder {
   responsibleUser    User?       @relation("ServiceOrderResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
   items              ServiceOrderItem[]
 
+  billingExtras InvoiceItem[] @relation("InvoiceItemServiceOrder")
+
   @@index([workspaceId, status, scheduledFor])
   @@index([workspaceId, clientId])
   @@index([ticketId])
@@ -637,6 +670,7 @@ model Invoice {
   contract      Contract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
   ticket        Ticket?       @relation(fields: [ticketId], references: [id], onDelete: SetNull)
   items         InvoiceItem[]
+  billingScheduleEvent BillingScheduleEvent?
 
   @@index([workspaceId, status, dueDate])
   @@map("invoices")
@@ -655,10 +689,19 @@ model InvoiceItem {
   totalCost   Decimal  @default(0) @db.Decimal(12, 2)
   sortOrder   Int      @default(0)
 
+  // BASE is a snapshot of the agreement; EXTRA belongs only to this invoice.
+  billingKind String? @db.VarChar(20)
+  sourceTicketId String? @db.Uuid
+  sourceServiceOrderId String? @db.Uuid
+
   // Relationships
+  sourceTicket Ticket? @relation("InvoiceItemTicket", fields: [sourceTicketId], references: [id], onDelete: SetNull)
+  sourceServiceOrder ServiceOrder? @relation("InvoiceItemServiceOrder", fields: [sourceServiceOrderId], references: [id], onDelete: SetNull)
   invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
+  @@index([sourceTicketId])
+  @@index([sourceServiceOrderId])
   @@map("invoice_items")
 }
 
@@ -676,6 +719,14 @@ model Contract {
   renewalMode            RenewalMode    @default(MONTHLY)
   billingDay             Int            @default(5)
   monthlyAmountCents     Int            @default(0)
+  billingIssueDay        Int?
+  billingIssueTime       String         @default("09:00") @db.VarChar(5)
+  billingAutoIssue       Boolean        @default(false)
+  billingAutoEmail       Boolean        @default(false)
+  billingEmailRecipients String[]       @default([])
+  billingWhatsappNumbers String[]       @default([])
+  billingPaymentMethod   String         @default("PIX") @db.VarChar(30)
+  billingPixKey          String?        @db.VarChar(100)
   currency               String         @default("BRL") @db.VarChar(3)
   slaPolicyId            String?        @db.Uuid
   maxUsers               Int?
@@ -757,6 +808,21 @@ model BillingScheduleEvent {
   amountCents  Int
   currency     String                @db.VarChar(3)
   description  String?               @db.Text
+  invoiceId    String?               @unique @db.Uuid
+  approvedAt   DateTime?
+  approvedById String?               @db.Uuid
+  emailRecipients String[]           @default([])
+  emailStatus  String                @default("NOT_REQUESTED") @db.VarChar(30)
+  emailAcceptedRecipients String[]   @default([])
+  emailRejectedRecipients String[]   @default([])
+  emailMessageId String?             @db.VarChar(255)
+  emailSentAt DateTime?
+  emailAttemptedAt DateTime?
+  emailNextAttemptAt DateTime?
+  emailAttempts Int                  @default(0)
+  emailLastError String?             @db.VarChar(255)
+  emailPdfFileObjectId String?       @db.Uuid
+  documentSnapshot Json?
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt
 
@@ -764,10 +830,13 @@ model BillingScheduleEvent {
   workspace    Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   contract     Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
   client       Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  invoice      Invoice?              @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
 
   @@index([contractId])
   @@index([workspaceId])
   @@unique([contractId, periodKey])
+  @@index([status, scheduledFor])
+  @@index([emailStatus, emailNextAttemptAt])
   @@map("billing_schedule_events")
 }
 

@@ -20,7 +20,7 @@ export interface WebhookEventPayload {
 
 const SENSITIVE_KEYS = new Set([
   "password",
-  "passwordhash",
+  "passwordhash", "passwordencrypted", "smtppassword",
   "password_hash",
   "token",
   "secret",
@@ -101,7 +101,7 @@ export class WebhookEventsService {
       // 3. Fetch workspace metadata
       const ws = await prisma.workspace.findUnique({
         where: { id: event.workspaceId },
-        select: { name: true },
+        select: { name: true, webhookMaxAttempts: true },
       });
       const workspaceName = ws?.name || "Peanut OS Workspace";
 
@@ -231,7 +231,7 @@ export class WebhookEventsService {
                 eventType: event.eventType,
                 payload: payload as any,
                 status: "PENDING",
-                maxAttempts: 5,
+                maxAttempts: ws?.webhookMaxAttempts ?? 5,
                 nextAttemptAt: new Date(),
               },
             });
@@ -241,7 +241,7 @@ export class WebhookEventsService {
                 "webhook-dispatch",
                 { deliveryId: delivery.id },
                 {
-                  attempts: 5,
+                  attempts: ws?.webhookMaxAttempts ?? 5,
                   backoff: { type: "exponential", delay: 5000 },
                   removeOnComplete: 100,
                   removeOnFail: 200,

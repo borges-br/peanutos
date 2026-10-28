@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { TicketPriority, prisma } from "@peanut/db";
+import { calendarDateKey, dateKey } from "@peanut/utils";
 
 export interface SlaDueDates {
   slaDueFirstResponseAt: Date;
@@ -44,29 +45,17 @@ export class SlaService {
 
       // 1. Resolve contract-specific SLA policy if clientId is provided
       if (clientId) {
-        const activeContract = await prisma.contract.findFirst({
-          where: {
-            workspaceId,
-            clientId,
-            status: "ACTIVE",
-            type: {
-              in: ["RECURRING_SUPPORT", "HYBRID"],
-            },
-            startDate: { lte: openedAt },
-            OR: [{ endDate: null }, { endDate: { gte: openedAt } }],
-            slaPolicyId: { not: null },
-          },
+        const candidates = await prisma.contract.findMany({
+          where: { workspaceId, clientId, status: 'ACTIVE', type: { in: ['RECURRING_SUPPORT', 'HYBRID'] } },
+          include: { workspace: { select: { timeZone: true } } },
         });
-
-        if (activeContract && activeContract.slaPolicyId) {
+        const activeContract = candidates.find(contract => {
+          const day = dateKey(openedAt, contract.workspace.timeZone);
+          return calendarDateKey(contract.startDate, contract.workspace.timeZone) <= day && (!contract.endDate || calendarDateKey(contract.endDate, contract.workspace.timeZone) >= day);
+        });
+        if (activeContract) {
           contractId = activeContract.id;
-          policy = await prisma.slaPolicy.findFirst({
-            where: {
-              id: activeContract.slaPolicyId,
-              workspaceId,
-              active: true,
-            },
-          });
+          if (activeContract.slaPolicyId) policy = await prisma.slaPolicy.findFirst({ where: { id: activeContract.slaPolicyId, workspaceId, active: true } });
         }
       }
 

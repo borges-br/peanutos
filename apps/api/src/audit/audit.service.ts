@@ -15,7 +15,7 @@ export class AuditService {
     const sanitized = { ...data };
     const sensitiveKeys = [
       "password",
-      "passwordhash",
+      "passwordhash", "passwordencrypted", "smtppassword",
       "token",
       "accesstoken",
       "refreshtoken",

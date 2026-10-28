@@ -10,7 +10,10 @@ import Breadcrumbs from '../../../components/layout/Breadcrumbs';
 import AuthenticatedImage from '../../../components/ui/AuthenticatedImage';
 import AvatarCropModal from '../../../components/ui/AvatarCropModal';
 
-type TabId = 'geral' | 'empresa' | 'seguranca' | 'usuarios' | 'notificacoes' | 'integracoes' | 'modulos';
+import SmtpSettingsPanel from '../../../components/settings/SmtpSettingsPanel';
+import OperationalSettingsPanel from '../../../components/settings/OperationalSettingsPanel';
+
+type TabId = 'operacao' | 'geral' | 'empresa' | 'seguranca' | 'usuarios' | 'notificacoes' | 'integracoes' | 'modulos';
 
 const BRAND_FIELDS = [
   'brandName', 'brandSubtitle', 'legalName', 'companyDocument',
@@ -58,12 +61,13 @@ function ColorField({
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const [timeZone, setTimeZone] = useState('America/Sao_Paulo');
+  const [generalLoading, setGeneralLoading] = useState(true);
+  const [generalError, setGeneralError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('geral');
   const [successSaved, setSuccessSaved] = useState(false);
 
-  const [logSensitiveViews, setLogSensitiveViews] = useState(true);
-  const [confirmCriticalActions, setConfirmCriticalActions] = useState(true);
 
   const [brandSettings, setBrandSettings] = useState<any>({});
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -79,6 +83,33 @@ export default function SettingsPage() {
   useEffect(() => {
     if (activeTab === 'empresa') loadSettings();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'geral') return;
+    setGeneralLoading(true);
+    apiRequest('/settings/general')
+      .then((settings) => { setTimeZone(settings.timeZone); setGeneralError(null); })
+      .catch((error) => setGeneralError(error.message || 'Falha ao carregar o fuso horário.'))
+      .finally(() => setGeneralLoading(false));
+  }, [activeTab]);
+
+  async function saveGeneralSettings() {
+    if (!isEditable || generalLoading) return;
+    setGeneralLoading(true);
+    setGeneralError(null);
+    setSuccessSaved(false);
+    try {
+      const saved = await apiRequest('/settings/general', { method: 'PATCH', body: JSON.stringify({ timeZone }) });
+      setTimeZone(saved.timeZone);
+      await refreshUser();
+      setSuccessSaved(true);
+      setTimeout(() => setSuccessSaved(false), 3000);
+    } catch (error: any) {
+      setGeneralError(error.message || 'Falha ao salvar o fuso horário.');
+    } finally {
+      setGeneralLoading(false);
+    }
+  }
 
   async function loadSettings() {
     setLoadingSettings(true);
@@ -142,8 +173,8 @@ export default function SettingsPage() {
   }
 
   const handleSave = () => {
-    if (activeTab === 'empresa') handleSaveSettings();
-    else { setSuccessSaved(true); setTimeout(() => setSuccessSaved(false), 3000); }
+    if (activeTab === 'geral') saveGeneralSettings();
+    else if (activeTab === 'empresa') handleSaveSettings();
   };
 
   const renderGeral = () => (
@@ -175,10 +206,23 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-sm">
             <div className="flex flex-col gap-xs">
               <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Fuso Horário</label>
-              <select className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none transition-colors appearance-none">
-                <option>GMT-03:00 Brasilia</option>
-                <option>UTC 00:00</option>
+              <select
+                aria-label="Fuso horário do workspace"
+                value={timeZone}
+                disabled={!isEditable || generalLoading}
+                onChange={(event) => setTimeZone(event.target.value)}
+                className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none transition-colors appearance-none disabled:opacity-60"
+              >
+                {Array.from(new Set([
+                  timeZone, 'America/Sao_Paulo', 'America/Manaus', 'America/Belem',
+                  'America/Cuiaba', 'America/Campo_Grande', 'America/Rio_Branco',
+                  'America/Noronha', 'UTC', 'Europe/Lisbon', 'America/New_York',
+                  ...((Intl as any).supportedValuesOf?.('timeZone') || []),
+                ])).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
               </select>
+              <p className="text-xs text-on-surface-variant">Aplicado aos documentos, prévias e rotinas deste workspace. Alterações valem para novas emissões; PDFs existentes são preservados.</p>
+              {!isEditable && <p className="text-xs text-on-surface-variant">Somente administradores e o proprietário podem alterar o fuso.</p>}
+
             </div>
             <div className="flex flex-col gap-xs">
               <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Moeda Padrão</label>
@@ -403,38 +447,10 @@ export default function SettingsPage() {
   };
 
   const renderSeguranca = () => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-lg animate-fade-in">
-      <div className="md:col-span-2 space-y-gutter">
-        <Card title="Políticas de Acesso Seguras">
-          <div className="space-y-md">
-            {[
-              { key: 'log', label: 'Registrar Visualização de Dados Sensíveis', desc: 'Auditar visualizações de credenciais criptografadas.', value: logSensitiveViews, set: setLogSensitiveViews },
-              { key: 'confirm', label: 'Confirmação para Ações Críticas', desc: 'Exigir confirmação para exclusão ou redefinições.', value: confirmCriticalActions, set: setConfirmCriticalActions },
-            ].map(({ key, label, desc, value, set }) => (
-              <div key={key} className="flex items-center justify-between p-sm hover:bg-surface-container/30 transition-colors rounded border border-outline-variant/10">
-                <div>
-                  <p className="font-body-md text-[13px] font-semibold text-on-surface">{label}</p>
-                  <p className="font-body-sm text-[12px] text-on-surface-variant">{desc}</p>
-                </div>
-                <button onClick={() => set(!value)} className={`w-10 h-5 rounded-full relative transition-colors duration-200 focus:outline-none ${value ? 'bg-primary' : 'bg-outline-variant'}`}>
-                  <div className={`absolute top-1 w-3 h-3 rounded-full bg-surface transition-all duration-200 ${value ? 'right-1' : 'left-1'}`} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-      <div>
-        <div className="bg-error-container/10 border border-error/20 p-lg rounded-xl flex flex-col gap-md shadow">
-          <div className="flex items-center gap-sm text-error">
-            <span className="material-symbols-outlined">lock</span>
-            <h2 className="font-title-sm text-sm font-semibold">Chave de Assinatura</h2>
-          </div>
-          <p className="font-body-sm text-[12px] text-on-surface-variant">Previsto para rotação de chave criptográfica.</p>
-          <div className="bg-black/40 p-sm rounded font-mono text-center text-primary-fixed-dim text-[12px]">••••••••••••</div>
-        </div>
-      </div>
-    </div>
+    <Card title="Segurança de acesso">
+      <p className="text-sm mb-md">Os acessos são definidos pelos papéis dos usuários. A duração da sessão pode ser ajustada na aba Operação. Chaves de assinatura e criptografia ficam protegidas no servidor.</p>
+      <Button variant="secondary" onClick={() => setActiveTab('operacao')}>Configurar duração da sessão</Button>
+    </Card>
   );
 
   const renderUsuarios = () => (
@@ -474,37 +490,16 @@ export default function SettingsPage() {
   );
 
   const renderNotificacoes = () => (
-    <div className="bg-surface border border-outline-variant p-xl rounded-xl text-center space-y-md shadow animate-fade-in max-w-xl mx-auto">
-      <span className="material-symbols-outlined text-5xl text-outline-variant">notifications_active</span>
-      <h2 className="font-headline-md text-lg text-on-surface font-semibold">Canais de Alerta e Notificação</h2>
-      <p className="text-on-surface-variant text-[13px] leading-relaxed">Previsto: regras granulares por canal (Sistema, E-mail, Webhook).</p>
-    </div>
+    <Card title="Alertas e notificações">
+      <p className="text-sm mb-md">Ajuste os prazos dos alertas na aba Operação e os endpoints na configuração de Webhooks. O SMTP para envio de faturas fica na aba Integrações.</p>
+      <Button variant="secondary" onClick={() => setActiveTab('operacao')}>Configurar alertas</Button>
+    </Card>
   );
 
   const renderIntegracoes = () => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-md animate-fade-in">
-      {[
-        { title: 'Diretório Azure AD', desc: 'Sincronização de operadores.', status: 'ATIVO', active: true, icon: 'hub', path: '' },
-        { title: 'Serviço de Envio SMTP', desc: 'Disparo de emails operacionais.', status: 'Previsto', active: false, icon: 'mail', path: '' },
-        { title: 'Disparador de Webhooks', desc: 'Integrações JSON em tempo real.', status: 'ATIVO', active: true, icon: 'api', path: '/dashboard/configuracoes/webhooks' },
-      ].map(({ title, desc, status, active, icon, path }) => (
-        <div
-          key={title}
-          onClick={() => path && router.push(path)}
-          className={`bg-surface border border-outline-variant p-md rounded-xl flex items-center gap-md shadow transition-colors ${!active ? 'opacity-60' : 'cursor-pointer hover:border-primary/40'}`}
-        >
-          <div className="w-12 h-12 bg-surface-container-high rounded-lg flex items-center justify-center shrink-0">
-            <span className={`material-symbols-outlined text-primary text-3xl`}>{icon}</span>
-          </div>
-          <div>
-            <h3 className="font-title-sm text-sm font-semibold text-on-surface">{title}</h3>
-            <p className="font-body-sm text-[12px] text-on-surface-variant mt-0.5">{desc}</p>
-            <span className={`inline-block mt-1 px-2 py-0.5 text-[9px] font-bold rounded uppercase tracking-wider ${active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-secondary-container/30 border border-outline-variant/30 text-on-surface-variant'}`}>
-              {status}
-            </span>
-          </div>
-        </div>
-      ))}
+    <div className="space-y-lg">
+      <SmtpSettingsPanel canEdit={isEditable} />
+      <Card title="Webhooks"><p className="text-sm mb-md">Integre eventos do sistema com seus endpoints.</p><Button variant="secondary" onClick={() => router.push('/dashboard/webhooks')}>Configurar webhooks</Button></Card>
     </div>
   );
 
@@ -530,6 +525,7 @@ export default function SettingsPage() {
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'operacao': return <OperationalSettingsPanel canEdit={isEditable} />;
       case 'geral': return renderGeral();
       case 'empresa': return renderEmpresa();
       case 'seguranca': return renderSeguranca();
@@ -542,6 +538,7 @@ export default function SettingsPage() {
 
   const getTabLabel = (id: TabId) => {
     switch (id) {
+      case 'operacao': return 'Operação';
       case 'geral': return 'Geral';
       case 'empresa': return 'Empresa';
       case 'seguranca': return 'Segurança';
@@ -573,12 +570,14 @@ export default function SettingsPage() {
             <span className="material-symbols-outlined text-[18px] mr-1">history</span>
             Ver Auditoria
           </Button>
-          <Button variant="primary" onClick={handleSave} disabled={activeTab === 'empresa' ? (loadingSettings || !isEditable) : false}>
+          {(activeTab === 'geral' || activeTab === 'empresa') && <Button variant="primary" onClick={handleSave} disabled={activeTab === 'empresa' ? (loadingSettings || !isEditable) : activeTab === 'geral' ? (generalLoading || !isEditable) : false}>
             <span className="material-symbols-outlined text-[18px] mr-1">save</span>
             {activeTab === 'empresa' && loadingSettings ? 'Salvando...' : 'Salvar'}
-          </Button>
+          </Button>}
         </div>
       </header>
+
+      {activeTab === 'geral' && generalError && <p role="alert" className="text-error">{generalError}</p>}
 
       {successSaved && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-md rounded-lg flex items-center gap-sm animate-fade-in">
@@ -591,6 +590,7 @@ export default function SettingsPage() {
         {([
           { id: 'geral', label: 'GERAL' },
           { id: 'empresa', label: 'EMPRESA' },
+          { id: 'operacao', label: 'OPERAÇÃO' },
           { id: 'seguranca', label: 'SEGURANÇA' },
           { id: 'usuarios', label: 'USUÁRIOS E PERMISSÕES' },
           { id: 'notificacoes', label: 'NOTIFICAÇÕES' },

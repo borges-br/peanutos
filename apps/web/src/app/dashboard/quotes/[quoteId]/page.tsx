@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiRequest } from '../../../../lib/api';
@@ -35,6 +37,7 @@ type QuoteItemInput = {
 };
 
 export default function QuoteDetailPage() {
+  const { formatCalendarDate } = useWorkspaceFormatters();
   const params = useParams();
   const router = useRouter();
   const quoteId = params.quoteId as string;
@@ -244,7 +247,7 @@ export default function QuoteDetailPage() {
             </Badge>
           </div>
           <p className="text-[12px] text-on-surface-variant font-mono">
-            Cliente: {quote.client?.tradeName || quote.clientName || '--'} - Validade: {new Date(quote.validUntil).toLocaleDateString('pt-BR')}
+            Cliente: {quote.client?.tradeName || quote.clientName || '--'} - Validade: {formatCalendarDate(quote.validUntil)}
           </p>
         </div>
         <div className="flex flex-wrap gap-sm">

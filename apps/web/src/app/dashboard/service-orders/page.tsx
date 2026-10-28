@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../i18n/useWorkspaceFormatters';
+
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiRequest } from '../../../lib/api';
@@ -26,6 +28,7 @@ const STATUS_VARIANTS: Record<string, 'success' | 'warning' | 'error' | 'info' |
 };
 
 export default function ServiceOrdersPage() {
+  const { formatDateTime } = useWorkspaceFormatters();
   const router = useRouter();
   const [serviceOrders, setServiceOrders] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -157,7 +160,7 @@ export default function ServiceOrdersPage() {
                     <td className="p-md">{serviceOrder.client?.tradeName || serviceOrder.clientName || '--'}</td>
                     <td className="p-md font-mono text-on-surface-variant">
                       {serviceOrder.scheduledFor
-                        ? new Date(serviceOrder.scheduledFor).toLocaleString('pt-BR')
+                        ? formatDateTime(serviceOrder.scheduledFor)
                         : '--'}
                     </td>
                     <td className="p-md">{serviceOrder.responsibleUser?.name || 'Não definido'}</td>

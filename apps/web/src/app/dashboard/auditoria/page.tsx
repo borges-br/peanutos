@@ -1,14 +1,16 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
 import { useAuth } from '../../../context/AuthContext';
 import { useI18n } from '../../../i18n/useI18n';
-import { formatDateTime } from '../../../i18n/formatters';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 
 export default function AuditoriaPage() {
+  const { formatDateTime } = useWorkspaceFormatters();
   const { t } = useI18n();
   const { user } = useAuth();
 

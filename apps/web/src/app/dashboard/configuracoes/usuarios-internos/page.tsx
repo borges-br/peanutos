@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../context/AuthContext';
@@ -36,6 +38,7 @@ function getInitials(name: string): string {
 }
 
 export default function InternalUsersPage() {
+  const { formatDate, timeZone } = useWorkspaceFormatters();
   const router = useRouter();
   const { user: currentUser } = useAuth();
 
@@ -326,7 +329,7 @@ export default function InternalUsersPage() {
                           <td className="p-md">{getRoleBadge(u.role)}</td>
                           <td className="p-md">{getStatusIndicator(u.status)}</td>
                           <td className="p-md text-on-surface-variant text-[12px]">
-                            {new Date(u.createdAt).toLocaleDateString('pt-BR')}
+                            {formatDate(u.createdAt)}
                           </td>
                           {canManage && (
                             <td className="p-md text-right">
@@ -443,6 +446,7 @@ export default function InternalUsersPage() {
                 </span>
                 <span className="text-on-surface">
                   {new Date(selectedUser.createdAt).toLocaleDateString('pt-BR', {
+                    timeZone,
                     day: '2-digit',
                     month: 'long',
                     year: 'numeric',
@@ -456,7 +460,7 @@ export default function InternalUsersPage() {
                 </span>
                 <span className="text-on-surface">
                   {selectedUser.lastLoginAt
-                    ? new Date(selectedUser.lastLoginAt).toLocaleDateString('pt-BR')
+                    ? formatDate(selectedUser.lastLoginAt)
                     : 'Nunca'}
                 </span>
               </div>

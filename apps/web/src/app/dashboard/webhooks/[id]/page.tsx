@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../context/AuthContext';
@@ -64,6 +66,7 @@ interface Delivery {
 }
 
 export default function WebhookDetailPage({ params }: { params: { id: string } }) {
+  const { formatDate, formatDateTime } = useWorkspaceFormatters();
   const router = useRouter();
   const { user } = useAuth();
   const canManage = user && ['OWNER', 'ADMIN'].includes(user.role);
@@ -295,7 +298,7 @@ export default function WebhookDetailPage({ params }: { params: { id: string } }
                 </div>
                 <div>
                   <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold block mb-1">Criado em</span>
-                  <span className="text-on-surface-variant">{new Date(webhook.createdAt).toLocaleDateString('pt-BR')}</span>
+                  <span className="text-on-surface-variant">{formatDate(webhook.createdAt)}</span>
                 </div>
               </div>
               <div>
@@ -347,7 +350,7 @@ export default function WebhookDetailPage({ params }: { params: { id: string } }
                         </span>
                       )}
                       <span className="text-[11px] text-on-surface-variant/60 ml-auto">
-                        {new Date(d.createdAt).toLocaleString('pt-BR')}
+                        {formatDateTime(d.createdAt)}
                       </span>
                     </div>
                     {d.errorMessage && (
@@ -417,11 +420,11 @@ export default function WebhookDetailPage({ params }: { params: { id: string } }
               </div>
               <div>
                 <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold block mb-1">Criado em</span>
-                <span className="text-on-surface-variant">{new Date(webhook.createdAt).toLocaleString('pt-BR')}</span>
+                <span className="text-on-surface-variant">{formatDateTime(webhook.createdAt)}</span>
               </div>
               <div>
                 <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold block mb-1">Atualizado em</span>
-                <span className="text-on-surface-variant">{new Date(webhook.updatedAt).toLocaleString('pt-BR')}</span>
+                <span className="text-on-surface-variant">{formatDateTime(webhook.updatedAt)}</span>
               </div>
             </div>
           </Card>

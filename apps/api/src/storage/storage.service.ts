@@ -1,12 +1,6 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
 import { prisma } from "@peanut/db";
-import {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-  HeadBucketCommand,
-  CreateBucketCommand,
-} from "@aws-sdk/client-s3";
+import { LocalObjectStorage } from "@peanut/utils";
 import * as crypto from "crypto";
 
 const ALLOWED_IMAGE_MIMES = new Set([
@@ -19,83 +13,7 @@ const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 @Injectable()
 export class StorageService {
-  private readonly normalizeEndpoint = (ep?: string) => {
-    const v = ep || "http://localhost:9000";
-    return /^https?:\/\//i.test(v) ? v : `http://${v}`;
-  };
-
-  private readonly s3Endpoint = this.normalizeEndpoint(process.env.S3_ENDPOINT);
-  private readonly s3Bucket =
-    process.env.S3_BUCKET ||
-    process.env.S3_BUCKET_NAME ||
-    "peanut-os-documents";
-  private readonly s3Region = process.env.S3_REGION || "us-east-1";
-  private readonly s3ForcePathStyle =
-    String(process.env.S3_FORCE_PATH_STYLE ?? "true") === "true";
-
-  private readonly s3 = new S3Client({
-    endpoint: this.s3Endpoint,
-    region: this.s3Region,
-    credentials: {
-      accessKeyId:
-        process.env.S3_ACCESS_KEY_ID ||
-        process.env.S3_ACCESS_KEY ||
-        "minio_admin",
-      secretAccessKey:
-        process.env.S3_SECRET_ACCESS_KEY ||
-        process.env.S3_SECRET_KEY ||
-        "change-me-in-production",
-    },
-    forcePathStyle: this.s3ForcePathStyle,
-  });
-
-  private isMissingBucketError(err: any): boolean {
-    return (
-      err?.name === "NoSuchBucket" ||
-      err?.name === "NotFound" ||
-      err?.$metadata?.httpStatusCode === 404
-    );
-  }
-
-  private isBucketAlreadyAvailableError(err: any): boolean {
-    return (
-      err?.name === "BucketAlreadyOwnedByYou" ||
-      err?.name === "BucketAlreadyExists"
-    );
-  }
-
-  private createBucketCommand() {
-    const input: any = { Bucket: this.s3Bucket };
-    if (this.s3Region && this.s3Region !== "us-east-1") {
-      input.CreateBucketConfiguration = {
-        LocationConstraint: this.s3Region,
-      };
-    }
-    return new CreateBucketCommand(input);
-  }
-
-  private async ensureBucketExists(): Promise<void> {
-    try {
-      await this.s3.send(new HeadBucketCommand({ Bucket: this.s3Bucket }));
-    } catch (err: any) {
-      if (!this.isMissingBucketError(err)) {
-        console.warn("[StorageService] S3 bucket check failed:", err.message);
-        return;
-      }
-
-      try {
-        await this.s3.send(this.createBucketCommand());
-        console.log(`[StorageService] S3 bucket "${this.s3Bucket}" created.`);
-      } catch (createErr: any) {
-        if (this.isBucketAlreadyAvailableError(createErr)) return;
-        console.error(
-          `[StorageService] Failed to create S3 bucket "${this.s3Bucket}":`,
-          createErr.message,
-        );
-        throw createErr;
-      }
-    }
-  }
+  readonly objects = new LocalObjectStorage();
 
   /**
    * Upload an image from base64-encoded payload.
@@ -138,17 +56,9 @@ export class StorageService {
     const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
 
     try {
-      await this.ensureBucketExists();
-      await this.s3.send(
-        new PutObjectCommand({
-          Bucket: this.s3Bucket,
-          Key: uniqueKey,
-          Body: buffer,
-          ContentType: opts.mimeType,
-        }),
-      );
+      await this.objects.put(this.objects.bucket, uniqueKey, buffer);
     } catch (err: any) {
-      console.error("[StorageService] S3 upload failed:", err.message);
+      console.error("[StorageService] File upload failed:", err.message);
       throw new BadRequestException("Falha ao salvar arquivo no armazenamento");
     }
 
@@ -156,7 +66,7 @@ export class StorageService {
       const fileObject = await prisma.fileObject.create({
         data: {
           workspaceId: opts.workspaceId,
-          bucket: this.s3Bucket,
+          bucket: this.objects.bucket,
           key: uniqueKey,
           originalFilename: opts.filename,
           mimeType: opts.mimeType,
@@ -168,12 +78,7 @@ export class StorageService {
       });
       return { fileObjectId: fileObject.id };
     } catch (dbErr: any) {
-      // Cleanup orphaned S3 object
-      await this.s3
-        .send(
-          new DeleteObjectCommand({ Bucket: this.s3Bucket, Key: uniqueKey }),
-        )
-        .catch(() => {});
+      await this.objects.remove(this.objects.bucket, uniqueKey).catch(() => {});
       throw new BadRequestException(
         "Falha ao registrar arquivo no banco de dados",
       );
@@ -181,7 +86,7 @@ export class StorageService {
   }
 
   /**
-   * Delete a FileObject record (does NOT hard-delete the S3 object to preserve history).
+   * Delete a FileObject record (does NOT hard-delete the stored object to preserve history).
    */
   async deleteFileObject(
     fileObjectId: string,
@@ -192,10 +97,4 @@ export class StorageService {
     });
   }
 
-  /**
-   * Get the S3 client and bucket for streaming (used by files proxy).
-   */
-  getS3Config() {
-    return { s3: this.s3, bucket: this.s3Bucket };
-  }
 }

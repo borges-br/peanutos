@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
 import { prisma } from "@peanut/db";
+import { calendarDateKey, dateKey } from "@peanut/utils";
 import { AuditService } from "../audit/audit.service";
 
 const QUOTA_COUNTED_ASSET_STATUSES = [
@@ -32,16 +33,14 @@ export class ContractsQuotaService {
    * Resolves the single primary active contract for a client.
    */
   async getActiveContract(workspaceId: string, clientId: string) {
-    return prisma.contract.findFirst({
-      where: {
-        workspaceId,
-        clientId,
-        status: "ACTIVE",
-        type: {
-          in: ["RECURRING_SUPPORT", "HYBRID"],
-        },
-      },
+    const candidates = await prisma.contract.findMany({
+      where: { workspaceId, clientId, status: 'ACTIVE', type: { in: ['RECURRING_SUPPORT', 'HYBRID'] } },
+      include: { workspace: { select: { timeZone: true } } },
     });
+    return candidates.find(contract => {
+      const today = dateKey(new Date(), contract.workspace.timeZone);
+      return calendarDateKey(contract.startDate, contract.workspace.timeZone) <= today && (!contract.endDate || calendarDateKey(contract.endDate, contract.workspace.timeZone) >= today);
+    }) || null;
   }
 
   /**

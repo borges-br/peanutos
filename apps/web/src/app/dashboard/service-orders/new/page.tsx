@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
+
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiRequest } from '../../../../lib/api';
@@ -20,6 +22,7 @@ interface ServiceOrderItemInput {
 }
 
 export default function NewServiceOrderPage() {
+  const { localDateTimeToIso, timeZone } = useWorkspaceFormatters();
   const router = useRouter();
   const [clients, setClients] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -111,13 +114,20 @@ export default function NewServiceOrderPage() {
       return;
     }
 
+    let scheduledInstant: string | undefined;
+    try {
+      scheduledInstant = scheduledFor ? localDateTimeToIso(scheduledFor) : undefined;
+    } catch (error: any) {
+      setError(error.message || 'Agendamento inválido no fuso selecionado.');
+      return;
+    }
     const payload = {
       clientId: clientId || undefined,
       clientName: clientId ? undefined : trimmedClientName,
       responsibleUserId: responsibleUserId || undefined,
       title,
       description,
-      scheduledFor: scheduledFor ? new Date(scheduledFor).toISOString() : undefined,
+      scheduledFor: scheduledInstant,
       laborMinutes,
       clientNotes: clientNotes.trim() || undefined,
       internalNotes: internalNotes.trim() || undefined,
@@ -195,7 +205,8 @@ export default function NewServiceOrderPage() {
               required
             />
             <Input
-              label="Agendamento"
+              label={`Agendamento (${timeZone})`}
+              aria-label={`Agendamento (${timeZone})`}
               type="datetime-local"
               value={scheduledFor}
               onChange={(event) => setScheduledFor(event.target.value)}

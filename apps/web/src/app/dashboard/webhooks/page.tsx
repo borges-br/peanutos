@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { apiRequest } from '../../../lib/api';
@@ -84,6 +86,7 @@ interface WebhookDelivery {
 }
 
 export default function WebhooksPage() {
+  const { formatDateTime } = useWorkspaceFormatters();
   const { user } = useAuth();
   const canManage = user && ['OWNER', 'ADMIN'].includes(user.role);
 
@@ -984,7 +987,7 @@ export default function WebhooksPage() {
                                     </span>
                                     <span className="text-on-surface-variant">Ação: {details.action || 'indefinido'}</span>
                                     {details.externalReference && <span className="text-on-surface-variant/70">Ref: {details.externalReference}</span>}
-                                    <span className="text-on-surface-variant/40 ml-auto">{new Date(aud.createdAt).toLocaleString('pt-BR')}</span>
+                                    <span className="text-on-surface-variant/40 ml-auto">{formatDateTime(aud.createdAt)}</span>
                                   </div>
                                 );
                               })}
@@ -1412,7 +1415,7 @@ export default function WebhooksPage() {
                       <div>Status final: <strong>{selectedDelivery.status}</strong></div>
                       <div>Tentativas: <strong>{selectedDelivery.attempt}/{selectedDelivery.maxAttempts}</strong></div>
                       <div>Código HTTP: <strong>{selectedDelivery.responseStatus || '--'}</strong></div>
-                      <div>Enviado em: <strong>{new Date(selectedDelivery.createdAt).toLocaleString('pt-BR')}</strong></div>
+                      <div>Enviado em: <strong>{formatDateTime(selectedDelivery.createdAt)}</strong></div>
                     </div>
 
                     {selectedDelivery.errorMessage && (

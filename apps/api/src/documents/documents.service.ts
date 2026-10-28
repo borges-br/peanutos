@@ -8,118 +8,14 @@ import { prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { DocumentQueryInput, DocumentUploadInput } from "@peanut/validators";
 import { Queue } from "bullmq";
-import {
-  S3Client,
-  GetObjectCommand,
-  HeadBucketCommand,
-  CreateBucketCommand,
-  PutObjectCommand,
-  DeleteObjectCommand,
-} from "@aws-sdk/client-s3";
+import { LocalObjectStorage } from "@peanut/utils";
 import * as crypto from "crypto";
 
 @Injectable()
 export class DocumentsService {
-  constructor(private readonly auditService: AuditService) {
-    this.ensureBucketExists().catch((err) => {
-      console.warn(
-        "[S3 API Initialize] Auto-create check threw unhandled error:",
-        err.message,
-      );
-    });
-  }
+  private readonly objects = new LocalObjectStorage();
 
-  private normalizeS3Endpoint(endpoint?: string) {
-    const value = endpoint || "http://localhost:9000";
-    return /^https?:\/\//i.test(value) ? value : `http://${value}`;
-  }
-
-  private readonly s3Endpoint = this.normalizeS3Endpoint(
-    process.env.S3_ENDPOINT,
-  );
-  private readonly s3AccessKey =
-    process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || "minio_admin";
-  private readonly s3SecretKey =
-    process.env.S3_SECRET_ACCESS_KEY ||
-    process.env.S3_SECRET_KEY ||
-    "change-me-in-production";
-  private readonly s3Bucket =
-    process.env.S3_BUCKET ||
-    process.env.S3_BUCKET_NAME ||
-    "peanut-os-documents";
-  private readonly s3Region = process.env.S3_REGION || "us-east-1";
-  private readonly s3ForcePathStyle =
-    String(process.env.S3_FORCE_PATH_STYLE ?? "true") === "true";
-
-  private readonly s3Client = new S3Client({
-    endpoint: this.s3Endpoint,
-    region: this.s3Region,
-    credentials: {
-      accessKeyId: this.s3AccessKey,
-      secretAccessKey: this.s3SecretKey,
-    },
-    forcePathStyle: this.s3ForcePathStyle,
-  });
-
-  private isMissingBucketError(err: any): boolean {
-    return (
-      err?.name === "NoSuchBucket" ||
-      err?.name === "NotFound" ||
-      err?.$metadata?.httpStatusCode === 404
-    );
-  }
-
-  private isBucketAlreadyAvailableError(err: any): boolean {
-    return (
-      err?.name === "BucketAlreadyOwnedByYou" ||
-      err?.name === "BucketAlreadyExists"
-    );
-  }
-
-  private createBucketCommand() {
-    const input: any = { Bucket: this.s3Bucket };
-    if (this.s3Region && this.s3Region !== "us-east-1") {
-      input.CreateBucketConfiguration = {
-        LocationConstraint: this.s3Region,
-      };
-    }
-    return new CreateBucketCommand(input);
-  }
-
-  private async ensureBucketExists() {
-    console.log(
-      `[S3 API Initialize] Checking bucket "${this.s3Bucket}" existence...`,
-    );
-    try {
-      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.s3Bucket }));
-      console.log(`[S3 API Initialize] Bucket "${this.s3Bucket}" is ready.`);
-    } catch (err: any) {
-      if (!this.isMissingBucketError(err)) {
-        console.warn(
-          "[S3 API Initialize] HeadBucket query failed (safe bypass):",
-          err.message,
-        );
-        return;
-      }
-
-      console.log(
-        `[S3 API Initialize] Bucket "${this.s3Bucket}" not found. Creating dynamically...`,
-      );
-      try {
-        await this.s3Client.send(this.createBucketCommand());
-        console.log(
-          `[S3 API Initialize] Bucket "${this.s3Bucket}" created successfully.`,
-        );
-      } catch (createErr: any) {
-        if (this.isBucketAlreadyAvailableError(createErr)) return;
-        console.error(
-          `[S3 API Initialize] Failed to create bucket "${this.s3Bucket}":`,
-          createErr.message,
-        );
-        throw createErr;
-      }
-    }
-  }
+  constructor(private readonly auditService: AuditService) {}
 
   private isUuid(val: string): boolean {
     const uuidRegex =
@@ -440,96 +336,90 @@ export class DocumentsService {
     const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
 
     try {
-      await this.ensureBucketExists();
-      await this.s3Client.send(
-        new PutObjectCommand({
-          Bucket: this.s3Bucket,
-          Key: key,
-          Body: buffer,
-          ContentType: input.mimeType,
-        }),
-      );
+      await this.objects.put(this.objects.bucket, key, buffer);
     } catch (err: any) {
       console.error("[DocumentsService] Manual upload failed:", err.message);
       throw new BadRequestException("Falha ao salvar arquivo no armazenamento.");
     }
 
+    let generatedDocument;
     try {
-      const lastDoc = await prisma.generatedDocument.findFirst({
-        where: {
-          workspaceId,
-          entityType,
-          entityId,
-          documentType: input.documentType,
-        },
-        orderBy: { version: "desc" },
-        select: { version: true },
-      });
-      const version = lastDoc ? lastDoc.version + 1 : 1;
+      generatedDocument = await prisma.$transaction(async (tx) => {
+        const lastDoc = await tx.generatedDocument.findFirst({
+          where: {
+            workspaceId,
+            entityType,
+            entityId,
+            documentType: input.documentType,
+          },
+          orderBy: { version: "desc" },
+          select: { version: true },
+        });
+        const version = lastDoc ? lastDoc.version + 1 : 1;
 
-      const fileObject = await prisma.fileObject.create({
-        data: {
-          workspaceId,
-          bucket: this.s3Bucket,
-          key,
-          originalFilename,
-          mimeType: input.mimeType,
-          sizeBytes: BigInt(buffer.length),
-          sha256,
-          visibility: input.visibility,
-          createdById: actorUserId,
-        },
-      });
-
-      const generatedDocument = await prisma.generatedDocument.create({
-        data: {
-          workspaceId,
-          entityType,
-          entityId,
-          documentType: input.documentType,
-          version,
-          fileObjectId: fileObject.id,
-          sha256,
-          generatedById: actorUserId,
-          metadata: JSON.stringify({
-            manualUpload: true,
-            displayName: input.displayName || null,
-            notes: input.notes || null,
+        const fileObject = await tx.fileObject.create({
+          data: {
+            workspaceId,
+            bucket: this.objects.bucket,
+            key,
             originalFilename,
-            storage: "s3",
-          }),
-        },
-        include: { fileObject: true },
-      });
+            mimeType: input.mimeType,
+            sizeBytes: BigInt(buffer.length),
+            sha256,
+            visibility: input.visibility,
+            createdById: actorUserId,
+          },
+        });
 
-      await this.auditService.log({
-        workspaceId,
-        actorUserId,
-        action: "document.uploaded",
-        entityType: "DOCUMENT",
-        entityId: generatedDocument.id,
-        after: {
-          documentId: generatedDocument.id,
-          documentType: input.documentType,
-          linkedEntityType: entityType,
-          linkedEntityId: entityId,
-          originalFilename,
-          sizeBytes: buffer.length,
-          visibility: input.visibility,
-        },
-        ipAddress,
-        userAgent,
-        severity: "INFO",
-      });
+        const generatedDocument = await tx.generatedDocument.create({
+          data: {
+            workspaceId,
+            entityType,
+            entityId,
+            documentType: input.documentType,
+            version,
+            fileObjectId: fileObject.id,
+            sha256,
+            generatedById: actorUserId,
+            metadata: JSON.stringify({
+              manualUpload: true,
+              displayName: input.displayName || null,
+              notes: input.notes || null,
+              originalFilename,
+              storage: "filesystem",
+            }),
+          },
+          include: { fileObject: true },
+        });
 
-      return this.sanitizeDocument(generatedDocument, "OWNER");
+        return generatedDocument;
+      });
     } catch (err: any) {
-      await this.s3Client
-        .send(new DeleteObjectCommand({ Bucket: this.s3Bucket, Key: key }))
-        .catch(() => {});
+      await this.objects.remove(this.objects.bucket, key).catch(() => {});
       console.error("[DocumentsService] Manual upload DB failed:", err.message);
       throw new BadRequestException("Falha ao registrar documento no banco.");
     }
+    await this.auditService.log({
+      workspaceId,
+      actorUserId,
+      action: "document.uploaded",
+      entityType: "DOCUMENT",
+      entityId: generatedDocument.id,
+      after: {
+        documentId: generatedDocument.id,
+        documentType: input.documentType,
+        linkedEntityType: entityType,
+        linkedEntityId: entityId,
+        originalFilename,
+        sizeBytes: buffer.length,
+        visibility: input.visibility,
+      },
+      ipAddress,
+      userAgent,
+      severity: "INFO",
+    });
+
+    return this.sanitizeDocument(generatedDocument, "OWNER");
   }
 
   private async validateManualDocumentEntity(
@@ -789,35 +679,27 @@ export class DocumentsService {
       }
     }
 
-    // 3. Get file from MinIO S3
-    console.log(
-      `[DocumentsService] Fetching S3 object for document ${documentId} from bucket "${doc.fileObject.bucket}" key "${doc.fileObject.key}"...`,
-    );
-    let s3Response;
+    // 3. Open the private file using its preserved bucket/key pair.
+    let body;
     try {
-      s3Response = await this.s3Client.send(
-        new GetObjectCommand({
-          Bucket: doc.fileObject.bucket,
-          Key: doc.fileObject.key,
-        }),
-      );
+      body = await this.objects.get(doc.fileObject.bucket, doc.fileObject.key);
     } catch (err: any) {
       console.error(
-        `[DocumentsService] MinIO GetObjectCommand failed for doc ${documentId}:`,
+        `[DocumentsService] File read failed for doc ${documentId}:`,
         err.message,
       );
       // Throw secure generic error to avoid exposing raw SDK error
       throw new NotFoundException(
-        "Arquivo físico não encontrado no armazenamento em nuvem.",
+        "Arquivo físico não encontrado no armazenamento.",
       );
     }
 
     // 4. Validate Body exists and is a readable stream
     const isStream =
-      s3Response.Body && typeof (s3Response.Body as any).pipe === "function";
+      body && typeof body.pipe === "function";
     if (!isStream) {
       throw new BadRequestException(
-        "O conteúdo retornado do armazenamento em nuvem não é um fluxo de dados válido.",
+        "O conteúdo retornado do armazenamento não é um fluxo de dados válido.",
       );
     }
 
@@ -877,7 +759,7 @@ export class DocumentsService {
     }
 
     return {
-      stream: s3Response.Body,
+      stream: body,
       filename,
       mimeType: doc.fileObject.mimeType,
     };

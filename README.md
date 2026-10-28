@@ -22,11 +22,11 @@ Peanut OS e uma plataforma web para gestao operacional de prestadores de servico
 | Clientes | Implementado | Cadastro, contatos, status, detalhes e relacionamento com contratos/chamados |
 | Inventario | Implementado | Ativos, atribuicoes, dados sensiveis criptografados e auditoria |
 | Chamados | Implementado | SLA, comentarios, apontamento de tempo, categorias e politicas configuraveis |
-| Contratos | Implementado | Itens recorrentes, historico, cotas e base para agenda financeira |
+| Contratos | Implementado | Mensalidade fixa, adicionais por competencia, emissao agendada e email SMTP |
 | Faturas | Implementado | Itens editaveis antes da emissao, custos internos, preview A4 e PDF |
 | Orcamentos | Implementado | Servicos, materiais, custo/venda, status, preview e PDF |
 | Ordens de servico | Implementado | Fluxo operacional, responsavel, agenda, itens e PDF |
-| Documentos | Implementado | Central com upload manual, MinIO/S3, filtros e downloads |
+| Documentos | Implementado | Central com upload manual, volume persistente privado, filtros e downloads |
 | Webhooks | Implementado | Eventos assinados, disparo por filas e gatilhos configuraveis |
 | Deploy | Implementado | Dockerfile multi-target, Compose de producao, Caddy, NGINX Proxy Manager e GHCR |
 
@@ -37,7 +37,7 @@ flowchart LR
   Web["apps/web<br/>Next.js"] --> API["apps/api<br/>NestJS Fastify"]
   API --> DB[("PostgreSQL<br/>Prisma")]
   API --> Redis[("Redis<br/>BullMQ")]
-  API --> S3[("MinIO / S3<br/>Documentos")]
+  API --> S3[("Volume persistente<br/>Documentos")]
   Worker["apps/worker<br/>PDF + jobs"] --> Redis
   Worker --> DB
   Worker --> S3
@@ -77,7 +77,7 @@ peanutos/
 | Banco | PostgreSQL 16, Prisma 5 |
 | Filas | Redis 7, BullMQ |
 | PDFs | Playwright Chromium |
-| Storage | MinIO ou qualquer S3 compativel |
+| Storage | Filesystem privado compartilhado entre API e worker |
 | Monorepo | pnpm workspaces, Turborepo |
 | Deploy | Docker, GHCR, Caddy ou NGINX Proxy Manager |
 
@@ -107,7 +107,6 @@ URLs locais:
 | --- | --- |
 | Web | http://localhost:3000 |
 | API | http://localhost:3001/api/v1 |
-| MinIO Console | http://localhost:9001 |
 
 > [!TIP]
 > Em banco zerado, o app redireciona para `/setup` para criar o primeiro workspace e usuario administrador.
@@ -118,12 +117,13 @@ URLs locais:
 | --- | --- |
 | `pnpm dev` | Sobe web, API, worker e packages em watch mode |
 | `pnpm build` | Build completo do monorepo |
+| `pnpm test:storage-timezone` | Regressao de arquivos, migracao e fuso (apos compilar API, worker e packages) |
 | `pnpm db:generate` | Gera Prisma Client |
 | `pnpm db:migrate` | Aplica migrations em desenvolvimento |
 | `pnpm db:migrate:deploy` | Aplica migrations em producao |
 | `pnpm db:seed` | Popula dados ficticios de desenvolvimento |
-| `docker compose -f infra\docker\docker-compose.yml up -d` | Sobe Postgres, Redis e MinIO locais |
-| `docker compose -f infra\docker\docker-compose.yml down -v` | Zera banco, Redis e MinIO locais |
+| `docker compose -f infra\docker\docker-compose.yml up -d` | Sobe Postgres e Redis locais |
+| `docker compose -f infra\docker\docker-compose.yml down -v` | Zera banco e Redis locais |
 
 ## Deploy online
 
@@ -132,7 +132,7 @@ O projeto ja inclui:
 | Arquivo | Funcao |
 | --- | --- |
 | [`infra/docker/Dockerfile`](infra/docker/Dockerfile) | Dockerfile multi-target para `web`, `api`, `worker` e `migrator` |
-| [`infra/docker/docker-compose.production.yml`](infra/docker/docker-compose.production.yml) | Stack self-hosted com app, Postgres, Redis, MinIO e Caddy |
+| [`infra/docker/docker-compose.production.yml`](infra/docker/docker-compose.production.yml) | Stack self-hosted com app, Postgres, Redis, volume de arquivos e Caddy |
 | [`infra/docker/docker-compose.npm.yml`](infra/docker/docker-compose.npm.yml) | Override para NGINX Proxy Manager, sem publicar Caddy |
 | [`infra/caddy/Caddyfile`](infra/caddy/Caddyfile) | TLS automatico e proxy por dominio |
 | [`.github/workflows/publish-images.yml`](.github/workflows/publish-images.yml) | Publicacao automatica no GHCR com path filtering |
@@ -159,18 +159,36 @@ sequenceDiagram
 ```
 
 Leia o guia: [Deploy de producao com Docker](docs/deployment/production-docker.md).
+Para uma instalação existente pelo Git, siga também o [roteiro de atualização no Portainer](docs/deployment/portainer-update.md), incluindo a migração dos arquivos antes do redeploy.
 
 ## Variaveis principais
 
 | Grupo | Variaveis |
 | --- | --- |
-| Branding | `NEXT_PUBLIC_BRAND_NAME`, `NEXT_PUBLIC_COMPANY_NAME`, `NEXT_PUBLIC_SUPPORT_EMAIL` |
+| Marca, fuso, SMTP e operação | Configurações pela interface, persistidas no banco |
 | URLs | `NEXT_PUBLIC_WEB_URL`, `NEXT_PUBLIC_API_URL`, `CORS_ORIGIN` |
 | Banco | `DATABASE_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
 | Cache/Fila | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` |
-| Seguranca | `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `APP_ENCRYPTION_KEY` |
-| Storage | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` |
-| Worker | `PDF_MAX_CONCURRENCY`, `BILLING_SCHEDULE_CRON`, `WEBHOOK_SCHEDULER_TIMEZONE` |
+| Seguranca | `JWT_SECRET`, `APP_ENCRYPTION_KEY`, `WEBHOOK_ENCRYPTION_KEY` |
+| Storage | `STORAGE_PATH` (caminho absoluto; volume compartilhado em producao) |
+| Worker | `PDF_MAX_CONCURRENCY`, `WEBHOOK_MAX_CONCURRENCY` |
+
+## Arquivos existentes e fuso horario
+
+Antes de atualizar uma instalacao com arquivos, siga o [guia de preservacao e migracao](docs/deployment/storage-migration.md). A migracao verifica tamanho e SHA-256 e preserva IDs, links, buckets e chaves. Em desenvolvimento, os arquivos ficam em `data/storage`; em Docker, no volume `peanut_storage_data`, compartilhado entre API e worker.
+
+O fuso horario e salvo no banco por workspace, em **Configuracoes > Geral > Fuso Horario**, com edicao por OWNER/ADMIN. Previews, PDFs novos, horarios na interface e datas das rotinas usam essa escolha. PDFs antigos e arquivos enviados manualmente conservam seu conteudo. Veja as [regras e a verificacao de fuso](docs/deployment/timezone.md).
+
+## Contratos recorrentes
+
+Contratos geram uma fatura por competencia, com mensalidade fixa e adicionais exclusivos do mes. Cada cobranca precisa ser conferida antes da emissao agendada e do email automatico; o WhatsApp permanece manual. Configure destinatarios e programacao na aba **Recorrencia** e ajuste os adicionais na fatura. Leia o [guia de cobranca mensal e ativacao SMTP](docs/deployment/contract-billing.md) antes de habilitar em producao.
+
+Testes, apos compilar os packages/API/worker e o frontend:
+
+- `pnpm test:contract-billing`: regras e SMTP de captura local.
+- `pnpm test:contract-billing:postgres`: migrations e concorrencia em PostgreSQL temporario (requer Docker e a imagem `postgres:16-alpine`).
+- `pnpm test:contract-billing:ui`: formularios com API ficticia em navegador headless.
+- `pnpm test:contract-billing:pdf`: PDFs ficticios para conferir layout e quebra de paginas.
 
 ## Seguranca
 
@@ -201,3 +219,5 @@ Boas praticas do projeto:
 ## Licenca
 
 Projeto privado em desenvolvimento.
+
+SMTP, duração da sessão, prazos de alertas e limites de webhooks são administrados em **Configurações > Integrações / Operação**. Senhas ficam criptografadas por workspace. Antes de remover variáveis de uma instalação antiga, siga o [guia de migração das configurações](docs/deployment/workspace-settings.md).

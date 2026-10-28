@@ -1,16 +1,18 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../../../lib/api';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '../../../../../../context/AuthContext';
 import { useI18n } from '../../../../../../i18n/useI18n';
-import { formatDateTime } from '../../../../../../i18n/formatters';
 import Button from '../../../../../../components/ui/Button';
 import Badge from '../../../../../../components/ui/Badge';
 import Card from '../../../../../../components/ui/Card';
 
 export default function AssetDetailPage() {
+  const { formatDateTime } = useWorkspaceFormatters();
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();

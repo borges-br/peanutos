@@ -9,7 +9,6 @@ import { LoginInput } from "@peanut/validators";
 export class AuthService {
   private readonly jwtSecret =
     process.env.JWT_SECRET || "change-me-in-production-at-least-32-chars-long";
-  private readonly jwtExpiresIn = (process.env.JWT_EXPIRES_IN || "30m") as any;
 
   constructor(private readonly auditService: AuditService) {}
 
@@ -19,6 +18,7 @@ export class AuthService {
     role: string;
     name: string;
     email: string;
+    workspace: { sessionDurationMinutes: number };
   }) {
     const payload = {
       sub: user.id,
@@ -29,7 +29,7 @@ export class AuthService {
     };
 
     return jwt.sign(payload, this.jwtSecret, {
-      expiresIn: this.jwtExpiresIn,
+      expiresIn: `${user.workspace.sessionDurationMinutes}m`,
     });
   }
 
@@ -38,6 +38,7 @@ export class AuthService {
 
     const user = await prisma.user.findUnique({
       where: { email },
+      include: { workspace: { select: { timeZone: true, sessionDurationMinutes: true } } },
     });
 
     if (!user || user.status !== "ACTIVE") {
@@ -103,6 +104,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        timeZone: user.workspace.timeZone,
         avatarFileObjectId: user.avatarFileObjectId,
         avatarUrl: user.avatarFileObjectId
           ? `/api/v1/files/${user.avatarFileObjectId}`
@@ -117,6 +119,7 @@ export class AuthService {
 
       const user = await prisma.user.findUnique({
         where: { id: decoded.sub },
+        include: { workspace: { select: { timeZone: true, sessionDurationMinutes: true } } },
       });
 
       if (!user || user.status !== "ACTIVE") {
@@ -129,6 +132,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        timeZone: user.workspace.timeZone,
         avatarFileObjectId: user.avatarFileObjectId,
       };
     } catch (err) {
@@ -139,6 +143,7 @@ export class AuthService {
   async refreshToken(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
+      include: { workspace: { select: { timeZone: true, sessionDurationMinutes: true } } },
     });
 
     if (!user || user.status !== "ACTIVE") {
@@ -153,6 +158,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        timeZone: user.workspace.timeZone,
         avatarUrl: user.avatarFileObjectId
           ? `/api/v1/files/${user.avatarFileObjectId}`
           : null,

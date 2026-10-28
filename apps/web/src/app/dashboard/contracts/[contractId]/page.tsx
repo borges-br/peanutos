@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
 import { useRouter, useParams } from 'next/navigation';
@@ -11,10 +13,12 @@ import Input from '../../../../components/ui/Input';
 import Select from '../../../../components/ui/Select';
 import ErrorState from '../../../../components/ui/ErrorState';
 import RestrictedState from '../../../../components/ui/RestrictedState';
+import ContractBillingPanel from '../../../../components/contracts/ContractBillingPanel';
 
 type TabType = 'summary' | 'items' | 'quotas' | 'recurrence' | 'history';
 
 export default function ContractDetailPage() {
+  const { formatCalendarDate, formatDateTime } = useWorkspaceFormatters();
   const params = useParams();
   const router = useRouter();
   const { t } = useI18n();
@@ -192,7 +196,7 @@ export default function ContractDetailPage() {
               {contract.number}
             </span>
             <span>&bull;</span>
-            <span>De {new Date(contract.startDate).toLocaleDateString('pt-BR')} {contract.endDate ? `até ${new Date(contract.endDate).toLocaleDateString('pt-BR')}` : '(Vigência indeterminada)'}</span>
+            <span>De {formatCalendarDate(contract.startDate)} {contract.endDate ? `até ${formatCalendarDate(contract.endDate)}` : '(Vigência indeterminada)'}</span>
           </div>
           <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight mt-1">
             {contract.title}
@@ -463,49 +467,9 @@ export default function ContractDetailPage() {
           </div>
         )}
 
-        {/* Tab Content: Recurrence (Financial Schedule) */}
-        {activeTab === 'recurrence' && (
-          <div className="flex flex-col gap-md">
-            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
-              {t.contracts.tabRecurrence}
-            </h3>
-
-            {!hasFinancialPrivilege ? (
-              <RestrictedState />
-            ) : (!contract.billingScheduleEvents || contract.billingScheduleEvents.length === 0) ? (
-              <p className="text-sm font-medium text-on-surface-variant/50 text-center py-6">Nenhum agendamento recorrente gerado.</p>
-            ) : (
-              <div className="overflow-x-auto border border-outline-variant rounded-xl shadow">
-                <table className="w-full text-left border-collapse text-xs font-mono">
-                  <thead>
-                    <tr className="border-b border-outline-variant bg-surface-container-low font-sans text-on-surface-variant">
-                      <th className="p-sm px-md font-semibold">Data Planejada</th>
-                      <th className="p-sm px-md font-semibold">Chave de Período</th>
-                      <th className="p-sm px-md font-semibold">Descrição</th>
-                      <th className="p-sm px-md font-semibold text-right">Valor Agendado</th>
-                      <th className="p-sm px-md font-semibold text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-on-surface font-medium">
-                    {contract.billingScheduleEvents.map((evt: any) => (
-                      <tr key={evt.id} className="border-b border-outline-variant/20 hover:bg-surface-container-low/50">
-                        <td className="p-sm px-md font-sans text-sm">{new Date(evt.scheduledFor).toLocaleDateString('pt-BR')}</td>
-                        <td className="p-sm px-md font-bold">{evt.periodKey}</td>
-                        <td className="p-sm px-md font-sans text-[11px] text-on-surface-variant">{evt.description || '--'}</td>
-                        <td className="p-sm px-md text-right text-primary font-bold">{formatCurrency(evt.amountCents)}</td>
-                        <td className="p-sm px-md text-right font-sans">
-                          <Badge variant={evt.status === 'PENDING' ? 'warning' : 'success'} className="text-[10px] py-0 px-2 uppercase font-semibold">
-                            {evt.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+        {activeTab === 'recurrence' && (hasFinancialPrivilege
+          ? <ContractBillingPanel contract={contract} onSaved={fetchContractDetails} />
+          : <RestrictedState />)}
 
         {/* Tab Content: History */}
         {activeTab === 'history' && (
@@ -523,7 +487,7 @@ export default function ContractDetailPage() {
                     <div className="absolute -left-[30px] top-1.5 w-2 h-2 rounded-full bg-primary border-4 border-background" />
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-mono font-bold text-primary">{h.event}</span>
-                      <span className="text-on-surface-variant font-mono">{new Date(h.createdAt).toLocaleString('pt-BR')}</span>
+                      <span className="text-on-surface-variant font-mono">{formatDateTime(h.createdAt)}</span>
                     </div>
                     <p className="text-sm font-body text-on-surface mt-0.5">{h.description}</p>
                     <span className="text-[11px] text-on-surface-variant/70 font-mono mt-0.5">Por: {h.actorUser?.name || 'Sistema'}</span>

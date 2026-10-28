@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { formatDateTime } from '../../i18n/formatters';
+import { useWorkspaceFormatters } from '../../i18n/useWorkspaceFormatters';
 
 export const AppFooter: React.FC = () => {
+  const { formatDateTime } = useWorkspaceFormatters();
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [currentDate] = useState(() => new Date('2026-05-24T15:32:12-03:00')); // consistent date format as requested in specs

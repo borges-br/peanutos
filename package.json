@@ -4,7 +4,7 @@
   "private": true,
   "description": "Peanut OS - Operational Management Platform for IT Service Providers",
   "engines": {
-    "node": ">=18.0.0",
+    "node": ">=20.0.0",
     "pnpm": ">=8.0.0"
   },
   "scripts": {
@@ -17,7 +17,14 @@
     "db:generate": "pnpm --filter @peanut/db generate",
     "db:migrate": "pnpm --filter @peanut/db migrate",
     "db:migrate:deploy": "pnpm --filter @peanut/db migrate:deploy",
-    "db:seed": "pnpm --filter @peanut/db seed"
+    "db:seed": "pnpm --filter @peanut/db seed",
+    "test:storage-timezone": "node --test tests/storage-timezone.test.cjs",
+    "test:contract-billing": "node --test tests/contract-billing.test.cjs",
+    "test:contract-billing:postgres": "node tests/run-contract-postgres.cjs",
+    "test:contract-billing:ui": "node tests/contract-billing-ui.cjs",
+    "test:contract-billing:pdf": "node tests/render-contract-billing.cjs",
+    "test:settings:postgres": "node tests/run-contract-postgres.cjs",
+    "test:settings:ui": "node tests/settings-ui.cjs"
   },
   "devDependencies": {
     "prettier": "^3.2.5",

@@ -1,11 +1,14 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../../i18n/useWorkspaceFormatters';
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiBlobRequest, apiRequest } from '../../../../../lib/api';
 import A4PreviewShell from '../../../../../components/ui/A4PreviewShell';
 
 export default function QuotePreviewPage() {
+  const { formatCalendarDate } = useWorkspaceFormatters();
   const params = useParams();
   const router = useRouter();
   const quoteId = params.quoteId as string;
@@ -109,7 +112,7 @@ export default function QuotePreviewPage() {
       documentType="ORÇAMENTO"
       documentNumber={quote?.number}
       dateLabel="Validade"
-      dateValue={quote ? new Date(quote.validUntil).toLocaleDateString('pt-BR') : '--'}
+      dateValue={quote ? formatCalendarDate(quote.validUntil) : '--'}
       clientName={quote?.client?.tradeName || quote?.clientName}
       clientDocument={quote?.client?.document || quote?.clientDocument}
       clientEmail={quote?.client?.email || quote?.clientEmail}

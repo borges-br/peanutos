@@ -13,6 +13,7 @@
     "seed": "node scripts/with-root-env.js ts-node prisma/seed.ts"
   },
   "dependencies": {
+    "@peanut/utils": "workspace:^",
     "@prisma/client": "^5.14.0"
   },
   "devDependencies": {

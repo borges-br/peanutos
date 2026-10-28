@@ -9,13 +9,13 @@
     "start": "node dist/main"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.587.0",
     "@peanut/db": "workspace:*",
+    "@peanut/documents": "workspace:*",
     "@peanut/types": "workspace:*",
     "@peanut/utils": "workspace:*",
-    "@peanut/documents": "workspace:*",
     "bullmq": "^5.8.1",
     "dotenv": "^16.4.5",
+    "nodemailer": "^10.2.1",
     "playwright": "^1.44.0"
   },
   "devDependencies": {

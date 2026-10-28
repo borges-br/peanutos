@@ -28,7 +28,7 @@ flowchart LR
   Proxy --> Nest["API NestJS"]
   Nest --> PG["PostgreSQL"]
   Nest --> Redis["Redis"]
-  Nest --> S3["MinIO / S3"]
+  Nest --> Storage["Volume privado compartilhado"]
   Worker --> PG
   Worker --> Redis
   Worker --> S3
@@ -158,10 +158,8 @@ nano .env.production
 | Variavel | Obrigatoria | Exemplo | Para que serve |
 | --- | --- | --- | --- |
 | `JWT_SECRET` | Sim | 32+ caracteres aleatorios | Assinatura do access token |
-| `REFRESH_TOKEN_SECRET` | Sim | 32+ caracteres aleatorios | Assinatura do refresh token |
 | `APP_ENCRYPTION_KEY` | Sim | base64 de 32 bytes | Criptografia de dados sensiveis |
 | `APPLICATION_ENCRYPTION_KEY` | Temporaria | hex de 64 chars | Compatibilidade com rotinas existentes |
-| `WEBHOOK_SIGNING_SECRET` | Sim | segredo forte | HMAC dos webhooks enviados |
 | `WEBHOOK_ENCRYPTION_KEY` | Sim | 32+ caracteres | Protecao de segredos de webhook |
 
 Gerar chave de criptografia:
@@ -174,24 +172,13 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 | Variavel | Obrigatoria | Exemplo | Para que serve |
 | --- | --- | --- | --- |
-| `S3_ACCESS_KEY` | Sim | `minio_admin` | Usuario do MinIO/S3 |
-| `S3_SECRET_KEY` | Sim | senha forte | Senha/chave do MinIO/S3 |
-| `S3_BUCKET` | Sim | `peanut-os-documents` | Bucket de documentos |
-| `S3_REGION` | Sim | `us-east-1` | Regiao S3 |
-| `S3_FORCE_PATH_STYLE` | Sim | `true` | Necessario para MinIO |
-| `S3_AUTO_CREATE_BUCKET` | Opcional | `true` | Cria bucket automaticamente no self-host |
+| `STORAGE_PATH` | Sim, definido no Compose | `/data/storage` | Volume persistente compartilhado entre API e worker |
 | `PDF_MAX_CONCURRENCY` | Opcional | `1` | Concorrencia do worker de PDF |
 | `API_BODY_LIMIT_BYTES` | Opcional | `26214400` | Limite de upload JSON/base64 |
 
-### Agendadores
+### Configurações operacionais
 
-| Variavel | Obrigatoria | Exemplo | Para que serve |
-| --- | --- | --- | --- |
-| `WEBHOOK_SCHEDULER_TIMEZONE` | Opcional | `America/Sao_Paulo` | Timezone dos jobs recorrentes |
-| `WEBHOOK_INVOICE_DUE_SOON_HOURS` | Opcional | `72` | Janela padrao de fatura a vencer |
-| `WEBHOOK_CONTRACT_ENDING_SOON_DAYS` | Opcional | `15` | Janela padrao de contrato acabando |
-| `WEBHOOK_TICKET_FEEDBACK_HOURS_AFTER_RESOLVED` | Opcional | `24` | Delay para feedback apos resolucao |
-| `BILLING_SCHEDULE_CRON` | Opcional | `0 2 * * *` | Rotina de agenda financeira |
+SMTP (incluindo usuário e senha), duração da sessão, prazos de alertas, intervalo de verificação e limites de webhooks são gerenciados pela interface e persistidos no banco. Mantenha as chaves mestras em API e worker e preserve-as nos backups. A migração de configurações existentes está no [guia de configurações](workspace-settings.md).
 
 ## Primeiro deploy com Caddy
 
@@ -357,74 +344,20 @@ docker buildx build \
   -t peanut-web:local .
 ```
 
-## Reset completo de producao
+## Preservacao e atualizacao com arquivos existentes
 
-> [!CAUTION]
-> Isto apaga banco, Redis e midia local do MinIO.
+Siga o [guia de preservacao e migracao](storage-migration.md) **antes** de atualizar uma instalacao que usava armazenamento antigo. O novo Compose dispensa esse servico e monta `peanut_storage_data` em `/data/storage` na API e no worker. Os arquivos antigos precisam ser copiados e verificados antes de reabrir o sistema.
 
-```bash
-docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml down -v
-```
+Volumes persistem entre recriacoes de containers. Nao use `down -v`, `docker volume prune` nem exclua volumes no Portainer ao atualizar. Para parar a stack mantendo os dados, use `docker compose ... stop` ou `down` sem a opcao de volumes. Backup precisa incluir banco e arquivos, no mesmo ponto de consistencia.
 
-Para NPM:
+O volume novo e inicializado para o usuario `node` (UID 1000) pelas imagens. Se um volume foi populado por ferramentas executadas como root, corrija a propriedade para `1000:1000` antes de iniciar API e worker. Nao publique o diretorio via Caddy/NPM: o acesso passa pelos endpoints autenticados.
 
-```bash
-docker compose --env-file .env.production \
-  -f infra/docker/docker-compose.production.yml \
-  -f infra/docker/docker-compose.npm.yml \
-  down -v
-```
+## Fuso horario
 
-Depois repita o primeiro deploy.
+Configure em **Configuracoes > Geral > Fuso Horario** com OWNER/ADMIN. O valor e salvo no banco por workspace; nao existe variavel de ambiente para sobrescreve-lo. Atualize o banco com o migrator antes de subir as novas imagens. O padrao inicial e `America/Sao_Paulo`.
 
-## Checklist operacional
+O worker consulta as configuracoes a cada emissao e varredura. O relogio tecnico consulta a fila a cada minuto em UTC; a verificacao de alertas segue o intervalo definido em Configuracoes > Operacao (padrao de 60 minutos). O dia, mes e horario de negocio sao calculados no fuso do workspace. Veja [regras de datas](timezone.md).
 
-| Check | Comando |
-| --- | --- |
-| Containers rodando com Caddy | `docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml ps` |
-| Containers rodando com NPM | `docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml -f infra/docker/docker-compose.npm.yml ps` |
-| Logs da API | `docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml logs -f api` |
-| Logs do worker | `docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml logs -f worker` |
-| Healthcheck | `curl https://app.example.com/api/v1/health` |
-| Espaco em disco | `docker system df` |
-| Limpar imagens antigas | `docker image prune -f` |
+## Cobranca mensal e email
 
-## Troubleshooting GHCR
-
-| Erro | Causa comum | Como resolver |
-| --- | --- | --- |
-| `denied` em `ghcr.io/borges-br/peanut-web` | Namespace sem o nome do repositorio | Use `PEANUT_IMAGE_NAMESPACE=borges-br/peanutos` |
-| `unauthorized` em `ghcr.io/borges-br/peanutos/peanut-web` | Pacote privado ou servidor/Portainer sem login no GHCR | Configure o registry `ghcr.io` no Portainer com PAT `read:packages`, rode `docker login ghcr.io`, ou torne os packages publicos |
-| `unauthorized` em `ghcr.io/borges-br/peanutos/peanut-worker` | Mesmo problema de autenticacao, mas em outra imagem da stack | A correcao e global: autenticar o registry ou publicar todos os packages |
-| `manifest unknown` | Tag ainda nao publicada | Rode o workflow `Publish Docker images`, aguarde concluir e confira se a tag existe |
-
-Para conferir manualmente:
-
-```bash
-docker manifest inspect ghcr.io/borges-br/peanutos/peanut-web:latest
-```
-
-## Portas
-
-| Porta | Servico | Publica? |
-| --- | --- | --- |
-| `80` | Caddy HTTP/ACME | Sim |
-| `443` | Caddy HTTPS | Sim |
-| `80/443` | NGINX Proxy Manager | Sim, somente no modo NPM |
-| `3000` | Web Next.js | Nao, interno |
-| `3001` | API NestJS | Nao, interno |
-| `5432` | PostgreSQL | Nao, interno |
-| `6379` | Redis | Nao, interno |
-| `9000` | MinIO API | Nao, interno |
-| `9001` | MinIO Console | Nao, interno |
-
-## Observacoes importantes
-
-> [!IMPORTANT]
-> O `peanut-web` recebe `NEXT_PUBLIC_API_URL` no build. A imagem padrao usa `/api/v1`, ideal para dominio unico com Caddy ou NGINX Proxy Manager. Se quiser `api.example.com`, publique a imagem web com o build arg correto.
-
-> [!WARNING]
-> Nao rode `pnpm db:seed` em producao. O seed cria dados e credenciais ficticias para desenvolvimento.
-
-> [!TIP]
-> Para deploys pequenos e frequentes, prefira tags `sha-*` geradas pelo workflow. Use `latest` apenas quando quiser acompanhar sempre o ultimo build da branch principal.
+A fila `contract-billing` consulta cobranças a cada minuto. Emissão e email automáticos começam desativados nos contratos existentes e exigem configuração e conferência por competência. O SMTP é configurado em **Configurações > Integrações**, por workspace, com senha criptografada. Consulte o [guia de cobrança mensal](contract-billing.md) para ativação, homologação e recuperação de envios.

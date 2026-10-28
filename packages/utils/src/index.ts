@@ -3,6 +3,8 @@
 // ==============================================================================
 
 import * as crypto from 'crypto';
+export * from './object-storage';
+export * from './timezone';
 
 /**
  * Format document string (CPF or CNPJ) to standard Brazilian formatting

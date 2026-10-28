@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect } from 'react';
 import { apiRequest, apiBlobRequest } from '../../../../../lib/api';
 import { useParams, useRouter } from 'next/navigation';
@@ -9,6 +11,7 @@ import A4PreviewShell from '../../../../../components/ui/A4PreviewShell';
 import RestrictedState from '../../../../../components/ui/RestrictedState';
 
 export default function InvoiceA4PreviewPage() {
+  const { formatCalendarDate } = useWorkspaceFormatters();
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
@@ -266,7 +269,7 @@ export default function InvoiceA4PreviewPage() {
       documentType={t.invoices.documentType || "FATURA COMERCIAL"}
       documentNumber={invoice.number}
       dateLabel={t.invoices.dueDate || "Vencimento"}
-      dateValue={new Date(invoice.dueDate).toLocaleDateString('pt-BR')}
+      dateValue={formatCalendarDate(invoice.dueDate)}
       clientName={invoice.client?.tradeName || invoice.clientName}
       clientDocument={invoice.client?.document || invoice.clientDocument}
       clientEmail={invoice.client?.email || invoice.clientEmail}

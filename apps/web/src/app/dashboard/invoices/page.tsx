@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
 import { extractArray, extractRecord } from '../../../lib/api-shape';
@@ -15,6 +17,7 @@ import EmptyState from '../../../components/ui/EmptyState';
 import ErrorState from '../../../components/ui/ErrorState';
 
 export default function InvoicesPage() {
+  const { formatCalendarDate } = useWorkspaceFormatters();
   const router = useRouter();
   const { t } = useI18n();
   const { user } = useAuth();
@@ -110,7 +113,7 @@ export default function InvoicesPage() {
       header: t.invoices.dueDate || 'Vencimento',
       render: (invoice: any) => (
         <span className="font-mono text-on-surface-variant">
-          {new Date(invoice.dueDate).toLocaleDateString('pt-BR')}
+          {formatCalendarDate(invoice.dueDate)}
         </span>
       ),
     },
@@ -155,7 +158,7 @@ export default function InvoicesPage() {
       <div className="grid grid-cols-2 gap-xs text-[12px] font-mono">
         <div className="flex flex-col">
           <span className="text-on-surface-variant/70 uppercase text-[9px] font-sans font-bold">{t.invoices.dueDate || 'Vencimento'}</span>
-          <span className="mt-0.5 text-on-surface">{new Date(invoice.dueDate).toLocaleDateString('pt-BR')}</span>
+          <span className="mt-0.5 text-on-surface">{formatCalendarDate(invoice.dueDate)}</span>
         </div>
         <div className="flex flex-col">
           <span className="text-on-surface-variant/70 uppercase text-[9px] font-sans font-bold">{t.invoices.total || 'Total'}</span>

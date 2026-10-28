@@ -53,3 +53,7 @@ Thumbs.db
 # Prompts para IA
 /prompts/
 /docs/ai-handoff/
+# Private persistent files and migration reports
+/data/
+/backups/
+storage-migration-report*.json

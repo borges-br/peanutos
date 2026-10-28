@@ -2,9 +2,6 @@ name: peanut-os
 
 x-app-env: &app-env
   NODE_ENV: production
-  NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-Peanut OS}
-  NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-Borges TI}
-  NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-suporte@example.com}
   NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:-https://localhost}
   NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
   API_BODY_LIMIT_BYTES: ${API_BODY_LIMIT_BYTES:-26214400}
@@ -14,30 +11,12 @@ x-app-env: &app-env
   REDIS_PORT: 6379
   REDIS_PASSWORD: ${REDIS_PASSWORD:-change-me-in-production}
   JWT_SECRET: ${JWT_SECRET:-change-me-in-production-at-least-32-chars-long}
-  JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
-  REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-change-me-in-production-at-least-32-chars-long}
-  REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
-  APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-change-me-generate-a-real-32-byte-key}
-  APPLICATION_ENCRYPTION_KEY: ${APPLICATION_ENCRYPTION_KEY:-000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f}
-  S3_ENDPOINT: http://minio:9000
-  S3_REGION: ${S3_REGION:-us-east-1}
-  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minio_admin}
-  S3_SECRET_KEY: ${S3_SECRET_KEY:-change-me-in-production}
-  S3_BUCKET: ${S3_BUCKET:-peanut-os-documents}
-  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
-  S3_AUTO_CREATE_BUCKET: ${S3_AUTO_CREATE_BUCKET:-true}
-  WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-change-me-in-production-signing-secret}
+  APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
+  APPLICATION_ENCRYPTION_KEY: ${APPLICATION_ENCRYPTION_KEY:-}
+  STORAGE_PATH: /data/storage
   WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:-peanut-os-webhook-key-change-in-production!!}
-  WEBHOOK_MAX_ATTEMPTS: ${WEBHOOK_MAX_ATTEMPTS:-5}
-  WEBHOOK_TIMEOUT_MS: ${WEBHOOK_TIMEOUT_MS:-10000}
   WEBHOOK_MAX_CONCURRENCY: ${WEBHOOK_MAX_CONCURRENCY:-5}
-  WEBHOOK_SCHEDULER_TIMEZONE: ${WEBHOOK_SCHEDULER_TIMEZONE:-America/Sao_Paulo}
-  WEBHOOK_INVOICE_DUE_SOON_HOURS: ${WEBHOOK_INVOICE_DUE_SOON_HOURS:-72}
-  WEBHOOK_CONTRACT_ENDING_SOON_DAYS: ${WEBHOOK_CONTRACT_ENDING_SOON_DAYS:-15}
-  WEBHOOK_TICKET_FEEDBACK_HOURS_AFTER_RESOLVED: ${WEBHOOK_TICKET_FEEDBACK_HOURS_AFTER_RESOLVED:-24}
-  BILLING_SCHEDULE_CRON: ${BILLING_SCHEDULE_CRON:-0 2 * * *}
   PDF_MAX_CONCURRENCY: ${PDF_MAX_CONCURRENCY:-1}
-  LOG_LEVEL: ${LOG_LEVEL:-info}
 
 services:
   # Caddy mode: use this service when Peanut OS should manage HTTP, HTTPS,
@@ -73,9 +52,6 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
-      NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-Peanut OS}
-      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-Borges TI}
-      NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-suporte@example.com}
     expose:
       - "3000"
 
@@ -92,11 +68,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
     environment:
       <<: *app-env
       PORT_API: 3001
+    volumes:
+      - storage_data:/data/storage
     expose:
       - "3001"
 
@@ -111,10 +87,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
     environment:
       <<: *app-env
+    volumes:
+      - storage_data:/data/storage
 
   migrator:
     # One-shot startup job. It applies pending Prisma migrations, exits 0, and
@@ -156,25 +132,11 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
-    image: minio/minio:latest
-    container_name: peanut-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minio_admin}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-change-me-in-production}
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
 
 volumes:
   caddy_data:
   caddy_config:
   postgres_data:
   redis_data:
-  minio_data:
+  storage_data:
+    name: peanut_storage_data

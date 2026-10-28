@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ----------------------------------------------------------------------------
   # POSTGRESQL DATABASE
@@ -40,32 +38,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # ----------------------------------------------------------------------------
-  # MINIO OBJECT STORAGE (S3-compatible bucket storage for imutable PDFs)
-  # ----------------------------------------------------------------------------
-  minio:
-    image: minio/minio
-    container_name: peanut_minio
-    restart: always
-    ports:
-      - "9000:9000" # MinIO API
-      - "9001:9001" # MinIO Web Console
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio_admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me-in-production}
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  minio_data:
     driver: local

@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, BillingScheduleStatus } from "@peanut/db";
+import { dateKey, calendarDateKey, zonedDateTime } from "@peanut/utils";
 import { AuditService } from "../audit/audit.service";
 
 @Injectable()
@@ -16,8 +17,12 @@ export class FinancialsService {
     userAgent?: string,
   ) {
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const workspace = await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { timeZone: true } });
+    const today = dateKey(now, workspace.timeZone);
+    const period = today.slice(0, 7);
+    const [year, month] = period.split('-').map(Number);
+    const monthStart = zonedDateTime(`${period}-01`, workspace.timeZone);
+    const nextMonthStart = zonedDateTime(new Date(Date.UTC(year!, month!, 1)).toISOString().slice(0, 10), workspace.timeZone);
 
     const [recurringContracts, contractsByStatusRaw, billingEvents, paidInvoices] =
       await Promise.all([
@@ -28,10 +33,9 @@ export class FinancialsService {
             type: {
               in: ["RECURRING_SUPPORT", "HYBRID"],
             },
-            monthlyAmountCents: { gt: 0 },
           },
           select: {
-            monthlyAmountCents: true,
+            monthlyAmountCents: true, startDate: true, endDate: true,
           },
         }),
         prisma.contract.groupBy({
@@ -85,20 +89,13 @@ export class FinancialsService {
       ]);
 
     // Compute metrics
-    const totalMrrCents = recurringContracts.reduce(
+    const effectiveContracts = recurringContracts.filter(contract => calendarDateKey(contract.startDate, workspace.timeZone) <= today && (!contract.endDate || calendarDateKey(contract.endDate, workspace.timeZone) >= today));
+    const totalMrrCents = effectiveContracts.reduce(
       (acc, c) => acc + c.monthlyAmountCents,
       0,
     );
 
-    const activeContractsCount = await prisma.contract.count({
-      where: {
-        workspaceId,
-        status: "ACTIVE",
-        type: {
-          in: ["RECURRING_SUPPORT", "HYBRID"],
-        },
-      },
-    });
+    const activeContractsCount = effectiveContracts.length;
 
     const averageContractValueCents =
       activeContractsCount > 0
@@ -152,7 +149,7 @@ export class FinancialsService {
       activeContracts: activeContractsCount,
       averageContractValueCents,
       monthlyReceived: {
-        period: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+        period,
         paidInvoices: paidInvoices.length,
         grossReceivedCents: monthlyReceivedCents,
         materialCostCents: monthlyMaterialCostCents,

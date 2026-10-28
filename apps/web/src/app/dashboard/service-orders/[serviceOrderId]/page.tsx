@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiRequest } from '../../../../lib/api';
@@ -24,6 +26,7 @@ const STATUS_VARIANTS: Record<string, 'success' | 'warning' | 'error' | 'info' |
 };
 
 export default function ServiceOrderDetailPage() {
+  const { formatDateTime } = useWorkspaceFormatters();
   const params = useParams();
   const router = useRouter();
   const serviceOrderId = params.serviceOrderId as string;
@@ -129,7 +132,7 @@ export default function ServiceOrderDetailPage() {
           <div>
             <span className="block text-[10px] uppercase text-on-surface-variant font-bold">Agendamento</span>
             <span className="font-mono">
-              {serviceOrder.scheduledFor ? new Date(serviceOrder.scheduledFor).toLocaleString('pt-BR') : '--'}
+              {serviceOrder.scheduledFor ? formatDateTime(serviceOrder.scheduledFor) : '--'}
             </span>
           </div>
           <div>

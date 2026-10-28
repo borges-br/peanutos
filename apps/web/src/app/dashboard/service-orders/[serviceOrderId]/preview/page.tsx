@@ -1,11 +1,14 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../../i18n/useWorkspaceFormatters';
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiBlobRequest, apiRequest } from '../../../../../lib/api';
 import A4PreviewShell from '../../../../../components/ui/A4PreviewShell';
 
 export default function ServiceOrderPreviewPage() {
+  const { formatDateTime } = useWorkspaceFormatters();
   const params = useParams();
   const router = useRouter();
   const serviceOrderId = params.serviceOrderId as string;
@@ -98,7 +101,7 @@ export default function ServiceOrderPreviewPage() {
       documentType="ORDEM DE SERVIÇO"
       documentNumber={serviceOrder?.number}
       dateLabel="Agendamento"
-      dateValue={serviceOrder?.scheduledFor ? new Date(serviceOrder.scheduledFor).toLocaleString('pt-BR') : '--'}
+      dateValue={serviceOrder?.scheduledFor ? formatDateTime(serviceOrder.scheduledFor) : '--'}
       clientName={serviceOrder?.client?.tradeName || serviceOrder?.clientName}
       clientDocument={serviceOrder?.client?.document || serviceOrder?.clientDocument}
       clientEmail={serviceOrder?.client?.email || serviceOrder?.clientEmail}

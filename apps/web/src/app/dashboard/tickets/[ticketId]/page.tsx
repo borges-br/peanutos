@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
 import { extractArray } from '../../../../lib/api-shape';
@@ -15,6 +17,7 @@ import ErrorState from '../../../../components/ui/ErrorState';
 type TabType = 'summary' | 'comments' | 'time' | 'history' | 'related';
 
 export default function TicketDetailPage() {
+  const { formatDate, formatDateTime, formatTime } = useWorkspaceFormatters();
   const params = useParams();
   const router = useRouter();
   const { t } = useI18n();
@@ -293,7 +296,7 @@ export default function TicketDetailPage() {
               {ticket.number}
             </span>
             <span>&bull;</span>
-            <span>{t.tickets.openedAt} {new Date(ticket.openedAt).toLocaleDateString('pt-BR')}</span>
+            <span>{t.tickets.openedAt} {formatDate(ticket.openedAt)}</span>
           </div>
           <h2 className="font-display-lg text-2xl text-on-surface font-semibold tracking-tight mt-1">
             {ticket.title}
@@ -421,7 +424,7 @@ export default function TicketDetailPage() {
                           )}
                         </div>
                         <span className="text-on-surface-variant font-mono">
-                          {new Date(c.createdAt).toLocaleString('pt-BR')}
+                          {formatDateTime(c.createdAt)}
                         </span>
                       </div>
                       <p className="text-sm font-body text-on-surface mt-1 leading-relaxed whitespace-pre-wrap">{c.content}</p>
@@ -501,7 +504,7 @@ export default function TicketDetailPage() {
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-semibold text-on-surface font-mono">{entry.user?.name}</span>
                         <span className="text-on-surface-variant font-mono">
-                          {new Date(entry.startedAt).toLocaleString('pt-BR')} {entry.endedAt ? `até ${new Date(entry.endedAt).toLocaleTimeString('pt-BR')}` : ''}
+                          {formatDateTime(entry.startedAt)} {entry.endedAt ? `até ${formatTime(entry.endedAt)}` : ''}
                         </span>
                       </div>
                       <p className="text-sm text-on-surface leading-relaxed mt-1 font-body">{entry.description}</p>
@@ -536,7 +539,7 @@ export default function TicketDetailPage() {
                       <div className="absolute -left-[30px] top-1.5 w-2 h-2 rounded-full bg-primary border-4 border-background" />
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-mono font-bold text-primary">{h.event}</span>
-                        <span className="text-on-surface-variant font-mono">{new Date(h.createdAt).toLocaleString('pt-BR')}</span>
+                        <span className="text-on-surface-variant font-mono">{formatDateTime(h.createdAt)}</span>
                       </div>
                       <p className="text-sm font-body text-on-surface mt-0.5">{h.description}</p>
                       <span className="text-[11px] text-on-surface-variant/70 font-mono mt-0.5">Por: {h.actorUser?.name || 'Sistema'}</span>

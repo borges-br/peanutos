@@ -160,9 +160,6 @@ importers:
 
   apps/worker:
     dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.587.0
-        version: 3.1053.0
       '@peanut/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -181,6 +178,9 @@ importers:
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
+      nodemailer:
+        specifier: ^10.2.1
+        version: 10.2.1
       playwright:
         specifier: ^1.44.0
         version: 1.60.0
@@ -199,6 +199,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@peanut/utils':
+        specifier: workspace:^
+        version: link:../utils
       '@prisma/client':
         specifier: ^5.14.0
         version: 5.22.0(prisma@5.22.0)
@@ -2512,6 +2515,10 @@ packages:
   node-releases@2.0.46:
     resolution: {integrity: sha512-GYVXHE2KnrzAfsAjl4uP++evGFCrAU1jta4ubEjIG7YWt/64Gqv66a30yKwWczVjA6j3bM4nBwH7Pk1JmDHaxQ==}
     engines: {node: '>=18'}
+
+  nodemailer@10.2.1:
+    resolution: {integrity: sha512-ZrDNsPFoDMwefNs7sJwrYiEJ/CG4ClJWDZv05iNJsEBWa8GRDry1QJHTJxsuTAY9eDDKjX4k+q3SxslXJOao7w==}
+    engines: {node: '>=20.0.0'}
 
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
@@ -6110,6 +6117,8 @@ snapshots:
     optional: true
 
   node-releases@2.0.46: {}
+
+  nodemailer@10.2.1: {}
 
   normalize-path@3.0.0: {}
 

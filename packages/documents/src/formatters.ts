@@ -64,7 +64,7 @@ export function formatCurrency(value: number | string | null | undefined, locale
 /**
  * Format date with optional locale and timezone
  */
-export function formatDate(value: Date | string | null | undefined, locale: string = 'pt-BR', timeZone?: string): string {
+export function formatDate(value: Date | string | null | undefined, locale: string = 'pt-BR', timeZone: string = 'America/Sao_Paulo', calendarOnly = false): string {
   if (!value) return '';
   const date = typeof value === 'string' ? new Date(value) : value;
   if (isNaN(date.getTime())) return '';
@@ -75,9 +75,17 @@ export function formatDate(value: Date | string | null | undefined, locale: stri
     year: 'numeric',
   };
   
-  if (timeZone) {
-    options.timeZone = timeZone;
-  }
+  // Date-only form values were stored at UTC midnight. Do not shift their day.
+  options.timeZone = calendarOnly && date.toISOString().endsWith('T00:00:00.000Z') ? 'UTC' : timeZone;
   
   return new Intl.DateTimeFormat(locale, options).format(date);
+}
+
+export function formatDateTime(value: Date | string, locale = 'pt-BR', timeZone = 'America/Sao_Paulo'): string {
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(locale, {
+    timeZone, day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).format(date);
 }

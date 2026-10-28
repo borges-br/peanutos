@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
 import { extractArray, extractRecord } from '../../../lib/api-shape';
@@ -15,6 +17,7 @@ import ErrorState from '../../../components/ui/ErrorState';
 import ClientPageHeader from '../../../components/layout/ClientPageHeader';
 
 export default function TicketsPage() {
+  const { timeZone } = useWorkspaceFormatters();
   const router = useRouter();
   const { t } = useI18n();
 
@@ -101,6 +104,7 @@ export default function TicketsPage() {
     if (!dateStr) return '--';
     const date = new Date(dateStr);
     return date.toLocaleString('pt-BR', {
+      timeZone,
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',

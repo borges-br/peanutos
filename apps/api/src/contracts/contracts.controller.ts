@@ -62,6 +62,7 @@ export class ContractsController {
       result.data = result.data.map((c: any) => ({
         ...c,
         monthlyAmountCents: 0,
+        billingEmailRecipients: [], billingWhatsappNumbers: [], billingPixKey: null,
       }));
     }
 
@@ -111,6 +112,12 @@ export class ContractsController {
     );
     if (!hasFinancialPrivilege) {
       contract.monthlyAmountCents = 0;
+      const safe = contract as any;
+      safe.billingScheduleEvents = [];
+      safe.history = [];
+      safe.billingEmailRecipients = [];
+      safe.billingWhatsappNumbers = [];
+      safe.billingPixKey = null;
       if (contract.lineItems) {
         contract.lineItems = contract.lineItems.map((item: any) => ({
           ...item,
@@ -130,6 +137,15 @@ export class ContractsController {
     @CurrentUser() user: any,
   ) {
     return this.contractsService.getHistory(contractId, user.workspaceId);
+  }
+
+  @Post("contracts/:contractId/periods")
+  @Roles("OWNER", "ADMIN", "FINANCIAL")
+  async preparePeriod(@Param("contractId") contractId: string, @Body() body: any, @CurrentUser() user: any) {
+    if (typeof body?.periodKey !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(body.periodKey)) {
+      throw new BadRequestException('Competência inválida. Use AAAA-MM.');
+    }
+    return this.contractsService.preparePeriod(contractId, user.workspaceId, body.periodKey, user.id);
   }
 
   @Post("contracts")

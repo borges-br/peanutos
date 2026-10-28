@@ -88,6 +88,7 @@ ENV NODE_ENV=production \
     PORT_API=3001
 WORKDIR /app
 COPY --from=api-builder --chown=node:node /prod/api ./
+RUN mkdir -p /data/storage && chown node:node /data/storage
 EXPOSE 3001
 USER node
 CMD ["dumb-init", "node", "dist/main"]
@@ -98,7 +99,8 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=worker-builder --chown=node:node /prod/worker ./
 RUN pnpm exec playwright install --with-deps chromium \
-  && chown -R node:node /app /ms-playwright
+  && mkdir -p /data/storage \
+  && chown -R node:node /app /ms-playwright /data/storage
 USER node
 CMD ["dumb-init", "node", "dist/main"]
 

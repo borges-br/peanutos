@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../i18n/useWorkspaceFormatters';
+
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiRequest } from '../../../lib/api';
@@ -26,6 +28,7 @@ const STATUS_VARIANTS: Record<string, 'success' | 'warning' | 'error' | 'info' |
 };
 
 export default function QuotesPage() {
+  const { formatCalendarDate } = useWorkspaceFormatters();
   const router = useRouter();
   const [quotes, setQuotes] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -159,7 +162,7 @@ export default function QuotesPage() {
                       </div>
                     </td>
                     <td className="p-md font-mono text-on-surface-variant">
-                      {new Date(quote.validUntil).toLocaleDateString('pt-BR')}
+                      {formatCalendarDate(quote.validUntil)}
                     </td>
                     <td className="p-md">
                       <Badge variant={STATUS_VARIANTS[quote.status] || 'neutral'}>

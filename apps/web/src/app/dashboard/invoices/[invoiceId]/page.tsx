@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
 import { useParams, useRouter } from 'next/navigation';
@@ -11,8 +13,10 @@ import Card from '../../../../components/ui/Card';
 import Input from '../../../../components/ui/Input';
 import Select from '../../../../components/ui/Select';
 import RestrictedState from '../../../../components/ui/RestrictedState';
+import MonthlyInvoicePanel from '../../../../components/contracts/MonthlyInvoicePanel';
 
 export default function InvoiceDetailPage() {
+  const { formatCalendarDate, formatDate, formatDateTime } = useWorkspaceFormatters();
   const params = useParams();
   const router = useRouter();
   const { t } = useI18n();
@@ -29,8 +33,12 @@ export default function InvoiceDetailPage() {
   const [editingItems, setEditingItems] = useState(false);
   const [editItems, setEditItems] = useState<any[]>([]);
   const [editSaving, setEditSaving] = useState(false);
+  const [sourceTickets, setSourceTickets] = useState<any[]>([]);
+  const [sourceOrders, setSourceOrders] = useState<any[]>([]);
 
   const hasFinancialPrivilege = user ? ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role) : false;
+  const monthlyEventId = invoice?.billingScheduleEvent?.id;
+  const invoiceClientId = invoice?.clientId;
 
   const fetchInvoice = async () => {
     setLoading(true);
@@ -45,6 +53,13 @@ export default function InvoiceDetailPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!monthlyEventId || !invoiceClientId || !hasFinancialPrivilege) return;
+    const query = `clientId=${encodeURIComponent(invoiceClientId)}&limit=100`;
+    apiRequest(`/tickets?${query}`).then(result => setSourceTickets(Array.isArray(result) ? result : result.data || [])).catch(() => setSourceTickets([]));
+    apiRequest(`/service-orders?${query}`).then(result => setSourceOrders(Array.isArray(result) ? result : result.data || [])).catch(() => setSourceOrders([]));
+  }, [invoiceClientId, monthlyEventId, hasFinancialPrivilege]);
 
   const fetchHistory = async () => {
     setLoadingHistory(true);
@@ -86,11 +101,11 @@ export default function InvoiceDetailPage() {
 
     setStatusSaving(true);
     try {
-      const updated = await apiRequest<any>(`/invoices/${invoiceId}/status`, {
+      await apiRequest<any>(`/invoices/${invoiceId}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       });
-      setInvoice((prev: any) => ({ ...prev, status: updated.status }));
+      await fetchInvoice();
       fetchHistory();
     } catch (err: any) {
       alert(err.message || t.invoices.errorStatusChange || 'Falha ao alterar status da fatura.');
@@ -107,9 +122,13 @@ export default function InvoiceDetailPage() {
       unit: item.unit || 'UN',
       unitPrice: Number(item.unitPrice || 0),
       unitCost: Number(item.unitCost || 0),
+      billingKind: item.billingKind || null,
+      sourceTicketId: item.sourceTicketId || null,
+      sourceServiceOrderId: item.sourceServiceOrderId || null,
     }));
 
   const handleEditItemChange = (index: number, field: string, value: any) => {
+    if (editItems[index]?.billingKind === 'BASE') return;
     const next = [...editItems];
     const item = { ...next[index] };
     if (['quantity', 'unitPrice', 'unitCost'].includes(field)) {
@@ -127,12 +146,12 @@ export default function InvoiceDetailPage() {
   const handleAddEditItem = () => {
     setEditItems([
       ...editItems,
-      { type: 'SERVICE', description: '', quantity: 1, unit: 'UN', unitPrice: 0, unitCost: 0 },
+      { type: 'SERVICE', description: '', quantity: 1, unit: 'UN', unitPrice: 0, unitCost: 0, billingKind: invoice.billingScheduleEvent ? 'EXTRA' : null },
     ]);
   };
 
   const handleRemoveEditItem = (index: number) => {
-    if (editItems.length <= 1) return;
+    if (editItems.length <= 1 || editItems[index]?.billingKind === 'BASE') return;
     setEditItems(editItems.filter((_, idx) => idx !== index));
   };
 
@@ -160,10 +179,13 @@ export default function InvoiceDetailPage() {
             unit: item.unit,
             unitPrice: item.unitPrice,
             unitCost: item.type === 'MATERIAL' ? item.unitCost : 0,
+            billingKind: item.billingKind,
+            sourceTicketId: item.sourceTicketId || null,
+            sourceServiceOrderId: item.sourceServiceOrderId || null,
           })),
         }),
       });
-      setInvoice(updated);
+      await fetchInvoice();
       setEditItems(normalizeItemsForEdit(updated.items || []));
       setEditingItems(false);
       fetchHistory();
@@ -243,6 +265,7 @@ export default function InvoiceDetailPage() {
 
   return (
     <div className="flex flex-col gap-lg max-w-4xl mx-auto select-none">
+      {hasFinancialPrivilege && invoice.billingScheduleEvent && <MonthlyInvoicePanel invoice={invoice} onReload={fetchInvoice} />}
       {/* Header */}
       <header className="flex justify-between items-center w-full border-b border-outline-variant/30 pb-lg">
         <div className="flex flex-col gap-xs">
@@ -255,7 +278,7 @@ export default function InvoiceDetailPage() {
             </Badge>
           </div>
           <p className="text-[12px] text-on-surface-variant font-mono">
-            {t.invoices.client}: {invoice.client?.tradeName || invoice.clientName || '--'} &bull; {t.invoices.issueDate || 'Emissão'}: {new Date(invoice.issueDate).toLocaleDateString('pt-BR')}
+            {t.invoices.client}: {invoice.client?.tradeName || invoice.clientName || '--'} &bull; {t.invoices.issueDate || 'Emissão'}: {formatDate(invoice.issueDate)}
           </p>
         </div>
         
@@ -331,7 +354,7 @@ export default function InvoiceDetailPage() {
               </div>
               <div className="flex flex-col gap-xs">
                 <span className="text-[10px] uppercase font-bold text-on-surface-variant opacity-60">{t.invoices.dueDate}</span>
-                <span className="font-semibold text-on-surface font-mono">{new Date(invoice.dueDate).toLocaleDateString('pt-BR')}</span>
+                <span className="font-semibold text-on-surface font-mono">{formatCalendarDate(invoice.dueDate)}</span>
               </div>
               <div className="flex flex-col gap-xs">
                 <span className="text-[10px] uppercase font-bold text-on-surface-variant opacity-60">Método de Recebimento</span>
@@ -475,6 +498,7 @@ export default function InvoiceDetailPage() {
               <div className="flex flex-col gap-sm">
                 {editItems.map((item, index) => (
                   <div key={index} className="p-md bg-surface-container-low border border-outline-variant/40 rounded-xl flex flex-col gap-md">
+                    {invoice.billingScheduleEvent && <p className="text-xs text-on-surface-variant">{item.billingKind === 'BASE' ? 'Mensalidade fixa copiada do contrato' : 'Adicional somente desta competência'}</p>}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-sm w-full">
                       <div className="md:col-span-2">
                         <Select
@@ -485,7 +509,7 @@ export default function InvoiceDetailPage() {
                             { value: 'SERVICE', label: 'Serviço' },
                             { value: 'MATERIAL', label: 'Material' },
                           ]}
-                          disabled={editSaving}
+                          disabled={editSaving || item.billingKind === 'BASE'}
                         />
                       </div>
                       <div className="md:col-span-4">
@@ -493,7 +517,7 @@ export default function InvoiceDetailPage() {
                           label="Descrição"
                           value={item.description}
                           onChange={(e) => handleEditItemChange(index, 'description', e.target.value)}
-                          disabled={editSaving}
+                          disabled={editSaving || item.billingKind === 'BASE'}
                           required
                         />
                       </div>
@@ -504,7 +528,7 @@ export default function InvoiceDetailPage() {
                           min="1"
                           value={item.quantity}
                           onChange={(e) => handleEditItemChange(index, 'quantity', e.target.value)}
-                          disabled={editSaving}
+                          disabled={editSaving || item.billingKind === 'BASE'}
                           required
                         />
                       </div>
@@ -513,7 +537,7 @@ export default function InvoiceDetailPage() {
                           label="Un."
                           value={item.unit}
                           onChange={(e) => handleEditItemChange(index, 'unit', e.target.value)}
-                          disabled={editSaving}
+                          disabled={editSaving || item.billingKind === 'BASE'}
                         />
                       </div>
                       <div className="md:col-span-2">
@@ -524,7 +548,7 @@ export default function InvoiceDetailPage() {
                           min="0"
                           value={item.unitPrice}
                           onChange={(e) => handleEditItemChange(index, 'unitPrice', e.target.value)}
-                          disabled={editSaving}
+                          disabled={editSaving || item.billingKind === 'BASE'}
                         />
                       </div>
                       <div className="md:col-span-2">
@@ -535,15 +559,19 @@ export default function InvoiceDetailPage() {
                           min="0"
                           value={item.unitCost}
                           onChange={(e) => handleEditItemChange(index, 'unitCost', e.target.value)}
-                          disabled={editSaving || item.type !== 'MATERIAL'}
+                          disabled={editSaving || item.billingKind === 'BASE' || item.type !== 'MATERIAL'}
                         />
                       </div>
                     </div>
+                    {invoice.billingScheduleEvent && item.billingKind !== 'BASE' && <div className="grid md:grid-cols-2 gap-sm">
+                      <Select label="Chamado relacionado (opcional)" value={item.sourceTicketId || ''} onChange={value => handleEditItemChange(index, 'sourceTicketId', value.target.value || null)} disabled={editSaving} options={[{ value: '', label: 'Sem vínculo com chamado' }, ...sourceTickets.map((ticket: any) => ({ value: ticket.id, label: `${ticket.number || ''} ${ticket.title || ticket.subject || ''}` }))]} />
+                      <Select label="O.S. relacionada (opcional)" value={item.sourceServiceOrderId || ''} onChange={value => handleEditItemChange(index, 'sourceServiceOrderId', value.target.value || null)} disabled={editSaving} options={[{ value: '', label: 'Sem vínculo com O.S.' }, ...sourceOrders.map((order: any) => ({ value: order.id, label: `${order.number || ''} ${order.title || ''}` }))]} />
+                    </div>}
                     <div className="flex items-center justify-between text-[11px] text-on-surface-variant font-mono">
                       <span>Total venda: {formatCurrency(item.quantity * item.unitPrice)}</span>
                       <span>Custo interno: {formatCurrency(item.type === 'MATERIAL' ? item.quantity * item.unitCost : 0)}</span>
                       {editItems.length > 1 && (
-                        <Button variant="ghost" onClick={() => handleRemoveEditItem(index)} disabled={editSaving} className="text-error py-1 px-2 text-xs">
+                        <Button variant="ghost" onClick={() => handleRemoveEditItem(index)} disabled={editSaving || item.billingKind === 'BASE'} className="text-error py-1 px-2 text-xs">
                           Remover
                         </Button>
                       )}
@@ -679,7 +707,7 @@ export default function InvoiceDetailPage() {
                         <span className="font-semibold text-on-surface">{eventLabel}</span>
                         <span>{t.invoices.byUser?.replace('{user}', log.actor?.name || 'Sistema') || `Por: ${log.actor?.name || 'Sistema'}`}</span>
                       </div>
-                      <span className="text-on-surface-variant">{new Date(log.createdAt).toLocaleString('pt-BR')}</span>
+                      <span className="text-on-surface-variant">{formatDateTime(log.createdAt)}</span>
                     </div>
                   );
                 })

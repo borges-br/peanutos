@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../../../i18n/useWorkspaceFormatters';
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiRequest } from '../../../../../lib/api';
@@ -15,6 +17,7 @@ import ClientPageHeader from '../../../../../components/layout/ClientPageHeader'
 type BadgeVariant = 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'purple';
 
 export default function ClientContractsPage() {
+  const { formatCalendarDate } = useWorkspaceFormatters();
   const router = useRouter();
   const { id } = useParams() as { id: string };
   const { user } = useAuth();
@@ -131,7 +134,7 @@ export default function ClientContractsPage() {
       header: 'Início',
       render: (contract: any) => (
         <span className="font-mono text-[12px] text-on-surface">
-          {new Date(contract.startDate).toLocaleDateString('pt-BR')}
+          {formatCalendarDate(contract.startDate)}
         </span>
       ),
     },
@@ -139,7 +142,7 @@ export default function ClientContractsPage() {
       header: 'Vencimento',
       render: (contract: any) => (
         <span className="font-mono text-[12px] text-on-surface">
-          {contract.endDate ? new Date(contract.endDate).toLocaleDateString('pt-BR') : 'Indeterminado'}
+          {contract.endDate ? formatCalendarDate(contract.endDate) : 'Indeterminado'}
         </span>
       ),
     },
@@ -180,11 +183,11 @@ export default function ClientContractsPage() {
         </div>
         <div className="flex min-w-0 flex-col">
           <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Início</span>
-          <span className="font-mono text-on-surface">{new Date(contract.startDate).toLocaleDateString('pt-BR')}</span>
+          <span className="font-mono text-on-surface">{formatCalendarDate(contract.startDate)}</span>
         </div>
         <div className="flex min-w-0 flex-col">
           <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Vencimento</span>
-          <span className="font-mono text-on-surface">{contract.endDate ? new Date(contract.endDate).toLocaleDateString('pt-BR') : 'Indeterminado'}</span>
+          <span className="font-mono text-on-surface">{contract.endDate ? formatCalendarDate(contract.endDate) : 'Indeterminado'}</span>
         </div>
       </div>
       <Button variant="outline" onClick={() => router.push(`/dashboard/contracts/${contract.id}`)} className="w-full py-2">

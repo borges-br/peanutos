@@ -10,7 +10,6 @@ import { prisma } from "@peanut/db";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { StorageService } from "../storage/storage.service";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 
 @UseGuards(AuthGuard)
 @Controller("files")
@@ -18,7 +17,7 @@ export class FilesController {
   constructor(private readonly storage: StorageService) {}
 
   /**
-   * Proxy endpoint: serves a FileObject from MinIO.
+   * Proxy endpoint: serves a private FileObject from persistent storage.
    * Only serves files belonging to the requester's workspace.
    */
   @Get(":fileObjectId")
@@ -64,20 +63,13 @@ export class FilesController {
       );
     }
 
-    const { s3, bucket } = this.storage.getS3Config();
-
-    let s3Response: any;
+    let body;
     try {
-      s3Response = await s3.send(
-        new GetObjectCommand({
-          Bucket: bucket,
-          Key: fileObject.key,
-        }),
-      );
+      body = await this.storage.objects.get(fileObject.bucket, fileObject.key);
     } catch (err: any) {
       if (isDev) {
         console.error(
-          `[FilesController] S3 GetObject failed for key=${fileObject.key}:`,
+          `[FilesController] File read failed for key=${fileObject.key}:`,
           err.message,
         );
       }
@@ -86,19 +78,19 @@ export class FilesController {
 
     if (isDev) {
       console.log(
-        `[FilesController] S3 OK, streaming response for ${fileObject.originalFilename}`,
+        `[FilesController] Storage OK, streaming response for ${fileObject.originalFilename}`,
       );
     }
 
     // Use Fastify's native .send() with the readable stream — do NOT use stream.pipe(res.raw)
-    const body = s3Response.Body as NodeJS.ReadableStream;
 
     return res
       .header("Content-Type", fileObject.mimeType)
       .header("Cache-Control", "private, max-age=3600")
+      .header("X-Content-Type-Options", "nosniff")
       .header(
         "Content-Disposition",
-        `inline; filename="${fileObject.originalFilename}"`,
+        `inline; filename="${fileObject.originalFilename.replace(/[^\w.\- ()]/g, "_")}"`,
       )
       .send(body);
   }

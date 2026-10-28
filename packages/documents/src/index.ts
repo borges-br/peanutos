@@ -2,7 +2,7 @@
 // PEANUT OS - DOCUMENTS & PRINT TEMPLATES
 // ==============================================================================
 
-import { formatCpfCnpj, formatPhone } from './formatters';
+import { formatCpfCnpj, formatPhone, formatDateTime } from './formatters';
 export * from './formatters';
 
 // ─── Snapshot Types ───────────────────────────────────────────────────────────
@@ -185,6 +185,7 @@ export interface InvoicePdfTemplateData {
   responsible?: ResponsibleSnapshot | null;
   generatedAt: string;
   locale?: 'pt-BR' | 'en-US';
+  timeZone?: string;
 }
 
 /**
@@ -215,6 +216,8 @@ export interface RenderA4DocumentParams {
   };
   data: {
     number: string;
+    billingPeriod?: string | null;
+    contractNumber?: string | null;
     status: string;
     issueDate: string;
     dueDate: string;
@@ -223,6 +226,7 @@ export interface RenderA4DocumentParams {
     totalAmount: string;
     items: Array<{
       type: string;
+      billingKind?: string | null;
       description: string;
       quantity: string;
       unit: string;
@@ -240,6 +244,7 @@ export interface RenderA4DocumentParams {
   templateSettings: TemplateSnapshot;
   generatedAt?: string;
   locale?: 'pt-BR' | 'en-US';
+  timeZone?: string;
 }
 
 // ─── Multi-language translation catalog ──────────────────────────────────────────
@@ -363,7 +368,8 @@ const translations = {
  */
 export function renderA4Document(params: RenderA4DocumentParams): string {
   const { documentType, brand, responsible, client, data, templateSettings } = params;
-  const generatedAt = params.generatedAt || new Date().toLocaleString('pt-BR');
+  const timeZone = params.timeZone || 'America/Sao_Paulo';
+  const generatedAt = params.generatedAt || formatDateTime(new Date(), params.locale, timeZone);
   const locale = params.locale || "pt-BR";
   const t = translations[locale] || translations["pt-BR"];
 
@@ -461,6 +467,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: left;">
         <strong style="color: #1e293b; font-size: 9.5pt; display: block;">${escapeHtml(item.description)}</strong>
+        ${item.billingKind ? `<span style="font-size: 7pt; color: #64748b;">${item.billingKind === 'BASE' ? 'Mensalidade contratada' : 'Adicional desta competência'}</span>` : ''}
         ${showItemTypeLabel ? `<span style="font-size: 7.5pt; color: #64748b;">${itemTypeLabel}</span>` : ''}
       </td>
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569;">${escapeHtml(item.quantity)}</td>
@@ -557,6 +564,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     documentTitle: () => `
       <div class="block-container block-document-title" style="margin-bottom: 20px; border-bottom: 2px solid ${primaryColor}; padding-bottom: 6px;">
         <span style="font-size: 13pt; font-weight: 800; color: #0f172a; tracking-tight: -0.2px;">${customTitle}</span>
+        ${data.billingPeriod ? `<div style="font-size: 9pt; color: #475569; margin-top: 4px;">Competência: ${escapeHtml(data.billingPeriod)}${data.contractNumber ? ` | Contrato: ${escapeHtml(data.contractNumber)}` : ''}</div>` : ''}
       </div>
     `,
     itemsTable: () => `
@@ -626,6 +634,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
       </div>
     `,
     responsibleSignature: () => {
+      if (!responsible?.displayName && !brand.signatureName) return '';
       const displaySigName = responsible?.displayName ? escapeHtml(responsible.displayName) : escapeHtml(brand.signatureName || "");
       const displaySigJob = responsible?.jobTitle ? escapeHtml(responsible.jobTitle) : "Responsável Técnico";
       return `
@@ -669,16 +678,25 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     `,
     footer: () => `
       <div class="block-container block-footer" style="border-top: 1px solid #e2e8f0; padding-top: 10px; font-size: 8pt; color: #94a3b8; font-family: monospace; display: flex; justify-content: space-between; margin-top: auto;">
-        <span>${documentFooterText} | Gerado em: ${generatedAt}</span>
+        <span>${documentFooterText} | Gerado em: ${escapeHtml(generatedAt)} (${escapeHtml(timeZone)})</span>
       </div>
     `,
   };
 
   // Compile blocks HTML matching sequence and checking enabled status
-  const blocksHtml = templateSettings.blockOrder
-    .filter(block => templateSettings.enabledBlocks[block] === true && block in blocksMap)
-    .map(block => blocksMap[block]!())
-    .join("\n");
+  const activeBlocks = templateSettings.blockOrder
+    .filter(block => templateSettings.enabledBlocks[block] === true && block in blocksMap);
+  const renderedBlocks: string[] = [];
+  for (let index = 0; index < activeBlocks.length; index++) {
+    const block = activeBlocks[index]!;
+    if (data.billingPeriod && block === 'financialSummary' && activeBlocks[index + 1] === 'paymentInfo') {
+      let closing = blocksMap.financialSummary!() + blocksMap.paymentInfo!();
+      index++;
+      if (activeBlocks[index + 1] === 'footer') { closing += blocksMap.footer!(); index++; }
+      renderedBlocks.push(`<div class="block-container block-billing-closing">${closing}</div>`);
+    } else renderedBlocks.push(blocksMap[block]!());
+  }
+  const blocksHtml = renderedBlocks.join("\n");
 
   return `
 <!DOCTYPE html>
@@ -735,9 +753,22 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     tfoot {
       display: table-footer-group;
     }
+    @media print {
+      @page { size: A4; margin: 14mm 16mm; }
+      .page-container {
+        width: auto;
+        min-height: 0;
+        padding: 0;
+        display: block;
+      }
+      .block-items-table { break-inside: auto; page-break-inside: auto; }
+      .block-footer { margin-top: 16px !important; }
+      .monthly-invoice .block-container { margin-bottom: 12px !important; }
+      .monthly-invoice .block-items-table tbody td { padding-top: 6px !important; padding-bottom: 6px !important; }
+    }
   </style>
 </head>
-<body>
+<body class="${data.billingPeriod ? 'monthly-invoice' : ''}">
   <div class="page-container">
     ${blocksHtml}
   </div>
@@ -846,6 +877,7 @@ export function generateInvoicePdfHtml(data: InvoicePdfTemplateData): string {
     data: renderData,
     templateSettings,
     generatedAt: data.generatedAt,
+    timeZone: data.timeZone,
     locale: data.locale,
   });
 }

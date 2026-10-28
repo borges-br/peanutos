@@ -1,5 +1,7 @@
 'use client';
 
+import { useWorkspaceFormatters } from '../../../i18n/useWorkspaceFormatters';
+
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
 import { useRouter } from 'next/navigation';
@@ -11,6 +13,7 @@ import ErrorState from '../../../components/ui/ErrorState';
 import RestrictedState from '../../../components/ui/RestrictedState';
 
 export default function FinancialsOverviewPage() {
+  const { formatDate } = useWorkspaceFormatters();
   const router = useRouter();
   const { t } = useI18n();
   const { user, loading: authLoading } = useAuth();
@@ -203,7 +206,7 @@ export default function FinancialsOverviewPage() {
                 <tbody className="text-on-surface font-medium">
                   {metrics.nextBillingEvents.map((evt: any) => (
                     <tr key={evt.id} className="border-b border-outline-variant/20 hover:bg-surface-container-low/50">
-                      <td className="p-sm px-md font-sans text-sm font-semibold">{new Date(evt.scheduledFor).toLocaleDateString('pt-BR')}</td>
+                      <td className="p-sm px-md font-sans text-sm font-semibold">{formatDate(evt.scheduledFor)}</td>
                       <td className="p-sm px-md font-sans text-sm">{evt.client?.tradeName || evt.client?.legalName || '--'}</td>
                       <td className="p-sm px-md">{evt.contract?.number || '--'}</td>
                       <td className="p-sm px-md text-right text-success font-bold">{formatCurrency(evt.amountCents)}</td>

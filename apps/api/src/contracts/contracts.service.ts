@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from "@nestjs/common";
-import { prisma, ContractStatus, ContractType } from "@peanut/db";
+import { prisma, ContractStatus, ContractType, prepareContractPeriod, ContractBillingError } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
 import {
@@ -111,6 +111,11 @@ export class ContractsService {
       include: {
         client: true,
         slaPolicy: true,
+        billingScheduleEvents: {
+          orderBy: { periodKey: 'desc' }, take: 36,
+          include: { invoice: { select: { id: true, number: true, status: true, totalAmount: true, dueDate: true } } },
+        },
+        history: { orderBy: { createdAt: 'desc' }, take: 100, include: { actorUser: { select: { id: true, name: true } } } },
         lineItems: {
           orderBy: { createdAt: "asc" },
         },
@@ -122,6 +127,23 @@ export class ContractsService {
     }
 
     return contract;
+  }
+
+  async preparePeriod(contractId: string, workspaceId: string, period: string, actorUserId: string) {
+    try { return await prepareContractPeriod(prisma, contractId, workspaceId, period, actorUserId); }
+    catch (error) {
+      if (error instanceof ContractBillingError) throw new BadRequestException(error.message);
+      throw error;
+    }
+  }
+
+  private validateBillingSettings(input: any) {
+    if (input.billingAutoEmail && !input.billingEmailRecipients?.length) {
+      throw new BadRequestException('Informe pelo menos um destinatário para ativar o email automático.');
+    }
+    if (input.billingAutoEmail && !input.billingAutoIssue) {
+      throw new BadRequestException('Ative a emissão automática para programar o email.');
+    }
   }
 
   /**
@@ -188,6 +210,7 @@ export class ContractsService {
     ipAddress?: string,
     userAgent?: string,
   ) {
+    this.validateBillingSettings(input);
     // Verify client exists
     const client = await prisma.client.findFirst({
       where: { id: input.clientId, workspaceId },
@@ -233,6 +256,14 @@ export class ContractsService {
         renewalMode: input.renewalMode as any,
         billingDay: input.billingDay,
         monthlyAmountCents: input.monthlyAmountCents,
+        billingIssueDay: input.billingIssueDay ?? null,
+        billingIssueTime: input.billingIssueTime,
+        billingAutoIssue: input.billingAutoIssue,
+        billingAutoEmail: input.billingAutoEmail,
+        billingEmailRecipients: [...new Set(input.billingEmailRecipients.map(email => email.toLowerCase()))],
+        billingWhatsappNumbers: [...new Set(input.billingWhatsappNumbers)],
+        billingPaymentMethod: input.billingPaymentMethod,
+        billingPixKey: input.billingPixKey || null,
         currency: input.currency,
         slaPolicyId: input.slaPolicyId || null,
         maxUsers: input.maxUsers !== undefined ? input.maxUsers : null,
@@ -318,6 +349,13 @@ export class ContractsService {
       throw new NotFoundException("Contrato não encontrado");
     }
 
+    this.validateBillingSettings({ ...contract, ...input });
+    if (input.clientId && input.clientId !== contract.clientId) {
+      throw new BadRequestException('O cliente de um contrato existente não pode ser alterado. Crie outro contrato.');
+    }
+    const start = input.startDate ? new Date(input.startDate) : contract.startDate;
+    const end = input.endDate !== undefined ? (input.endDate ? new Date(input.endDate) : null) : contract.endDate;
+    if (end && end < start) throw new BadRequestException('O término não pode ser anterior ao início.');
     const before = { ...contract };
 
     // Check active subscription overlap if updating status or type to active recurring
@@ -370,6 +408,10 @@ export class ContractsService {
       data.includedOnsiteHours = input.includedOnsiteHours;
     if (input.notes !== undefined) data.notes = input.notes;
 
+    for (const field of ['billingIssueDay', 'billingIssueTime', 'billingAutoIssue', 'billingAutoEmail', 'billingEmailRecipients', 'billingWhatsappNumbers', 'billingPaymentMethod', 'billingPixKey'] as const) {
+      if (input[field] !== undefined) data[field] = input[field];
+    }
+    if (data.billingEmailRecipients) data.billingEmailRecipients = [...new Set(data.billingEmailRecipients.map((email: string) => email.toLowerCase()))];
     const updatedContract = await prisma.contract.update({
       where: { id },
       data,

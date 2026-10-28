@@ -3,34 +3,15 @@ import {
   NotFoundException,
   BadRequestException,
 } from "@nestjs/common";
-import { prisma, Prisma } from "@peanut/db";
+import { prisma, Prisma, updateContractInvoice, approveContractInvoice, issueContractInvoice, ContractBillingError } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
-import { renderA4Document } from "@peanut/documents";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { renderA4Document, formatDate as formatDocumentDate, formatDateTime as formatDocumentDateTime } from "@peanut/documents";
+import { LocalObjectStorage } from "@peanut/utils";
 
 @Injectable()
 export class InvoicesService {
-  private normalizeS3Endpoint(endpoint?: string) {
-    const value = endpoint || "http://localhost:9000";
-    return /^https?:\/\//i.test(value) ? value : `http://${value}`;
-  }
-
-  private readonly s3Client = new S3Client({
-    endpoint: this.normalizeS3Endpoint(process.env.S3_ENDPOINT),
-    region: process.env.S3_REGION || "us-east-1",
-    credentials: {
-      accessKeyId:
-        process.env.S3_ACCESS_KEY_ID ||
-        process.env.S3_ACCESS_KEY ||
-        "minio_admin",
-      secretAccessKey:
-        process.env.S3_SECRET_ACCESS_KEY ||
-        process.env.S3_SECRET_KEY ||
-        "change-me-in-production",
-    },
-    forcePathStyle: String(process.env.S3_FORCE_PATH_STYLE ?? "true") === "true",
-  });
+  private readonly objects = new LocalObjectStorage();
 
   constructor(
     private readonly auditService: AuditService,
@@ -99,14 +80,9 @@ export class InvoicesService {
     if (!fileObject) return null;
 
     try {
-      const response = await this.s3Client.send(
-        new GetObjectCommand({
-          Bucket: fileObject.bucket,
-          Key: fileObject.key,
-        }),
-      );
+      const body = await this.objects.get(fileObject.bucket, fileObject.key);
       const chunks: Buffer[] = [];
-      for await (const chunk of response.Body as any) {
+      for await (const chunk of body) {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       }
       const buffer = Buffer.concat(chunks);
@@ -143,6 +119,7 @@ export class InvoicesService {
       discountReason: null,
       netAmount: null,
       observations: null,
+      billingScheduleEvent: null,
     };
 
     if (sanitized.items) {
@@ -252,6 +229,7 @@ export class InvoicesService {
       where: { id, workspaceId },
       include: {
         client: true,
+        billingScheduleEvent: { include: { contract: { select: { number: true, billingWhatsappNumbers: true, billingAutoIssue: true, billingAutoEmail: true } } } },
         items: {
           orderBy: { sortOrder: "asc" },
         },
@@ -263,6 +241,24 @@ export class InvoicesService {
     }
 
     return this.mapInvoiceForRole(invoice, requesterRole);
+  }
+
+  async approveMonthly(invoiceId: string, workspaceId: string, actorUserId: string) {
+    try { return await approveContractInvoice(prisma, invoiceId, workspaceId, actorUserId); }
+    catch (error) { if (error instanceof ContractBillingError) throw new BadRequestException(error.message); throw error; }
+  }
+
+  async retryMonthlyEmail(invoiceId: string, workspaceId: string, actorUserId: string, confirmResend: boolean) {
+    return prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoiceId}::uuid AND "workspaceId" = ${workspaceId}::uuid FOR UPDATE`;
+      const invoice = await tx.invoice.findFirst({ where: { id: invoiceId, workspaceId }, include: { billingScheduleEvent: true } });
+      const event = invoice?.billingScheduleEvent;
+      if (!invoice || !event || !['ISSUED', 'OVERDUE'].includes(invoice.status)) throw new BadRequestException('Cobrança emitida não encontrada.');
+      if (!['FAILED', 'PARTIAL', 'UNKNOWN'].includes(event.emailStatus)) throw new BadRequestException('Este envio não está disponível para nova tentativa.');
+      if (event.emailStatus === 'UNKNOWN' && !confirmResend) throw new BadRequestException('O resultado do envio é incerto. Confirme o reenvio para evitar uma duplicidade não intencional.');
+      await tx.contractHistory.create({ data: { workspaceId, contractId: event.contractId, actorUserId, event: 'BILLING_EMAIL_RETRY', description: `Nova tentativa de email solicitada para ${invoice.number}.` } });
+      return tx.billingScheduleEvent.update({ where: { id: event.id }, data: { emailStatus: 'QUEUED', emailAttempts: 0, emailNextAttemptAt: new Date(), emailLastError: null } });
+    });
   }
 
   /**
@@ -508,6 +504,7 @@ export class InvoicesService {
     // 1. Fetch current invoice to verify ownership and evaluate transitions
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, workspaceId },
+      include: { billingScheduleEvent: true },
     });
 
     if (!invoice) {
@@ -563,10 +560,20 @@ export class InvoicesService {
     }
 
     // 4. Update the status in the database
-    const updatedInvoice = await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: dataToUpdate,
-    });
+    let updatedInvoice;
+    if (invoice.billingScheduleEvent && oldStatus === 'DRAFT' && newStatus === 'ISSUED') {
+      try { updatedInvoice = await issueContractInvoice(prisma, invoiceId, workspaceId); }
+      catch (error) { if (error instanceof ContractBillingError) throw new BadRequestException(error.message); throw error; }
+    } else {
+      updatedInvoice = await prisma.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoiceId}::uuid AND "workspaceId" = ${workspaceId}::uuid FOR UPDATE`;
+        const current = await tx.invoice.findFirst({ where: { id: invoiceId, workspaceId }, include: { billingScheduleEvent: true } });
+        if (!current || current.status !== oldStatus) throw new BadRequestException('A fatura mudou durante a operação. Recarregue a página.');
+        if (current.billingScheduleEvent?.emailStatus === 'SENDING') throw new BadRequestException('Há um envio de email em andamento. Aguarde sua conclusão.');
+        if (current.billingScheduleEvent && newStatus === 'CANCELLED') await tx.billingScheduleEvent.update({ where: { id: current.billingScheduleEvent.id }, data: { status: 'CANCELLED', approvedAt: null, emailStatus: 'CANCELLED' } });
+        return tx.invoice.update({ where: { id: invoiceId }, data: dataToUpdate });
+      });
+    }
 
     // 5. Audit Logging (As per user adjustment #1: outside the Prisma transaction)
     let severity: "INFO" | "WARN" = "INFO";
@@ -613,11 +620,19 @@ export class InvoicesService {
     // 1. Fetch invoice and check if it exists in the workspace
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, workspaceId },
-      include: { items: true },
+      include: { items: true, billingScheduleEvent: true },
     });
 
     if (!invoice) {
       throw new NotFoundException("Fatura não encontrada");
+    }
+
+    if (invoice.billingScheduleEvent) {
+      try {
+        const updated = await updateContractInvoice(prisma, invoiceId, workspaceId, input);
+        await this.auditService.log({ workspaceId, actorUserId, action: 'invoice.updated', entityType: 'INVOICE', entityId: invoiceId, after: { monthly: true, approvalCleared: true }, ipAddress, userAgent });
+        return updated;
+      } catch (error) { if (error instanceof ContractBillingError) throw new BadRequestException(error.message); throw error; }
     }
 
     // 2. Lock editing of financial/documental content for non-DRAFT invoices
@@ -779,6 +794,7 @@ export class InvoicesService {
       where: { id: invoiceId, workspaceId },
       include: {
         client: true,
+        billingScheduleEvent: { include: { contract: { select: { number: true } } } },
         items: {
           orderBy: { sortOrder: "asc" },
         },
@@ -797,6 +813,10 @@ export class InvoicesService {
       throw new NotFoundException("Workspace não encontrado");
     }
 
+    if (invoice.status !== 'DRAFT' && invoice.billingScheduleEvent?.documentSnapshot) {
+      return renderA4Document(invoice.billingScheduleEvent.documentSnapshot as any);
+    }
+
     const formatCurrency = (val: number | any) => {
       return new Intl.NumberFormat("pt-BR", {
         style: "currency",
@@ -805,7 +825,7 @@ export class InvoicesService {
     };
 
     const formatDate = (date: Date) => {
-      return new Date(date).toLocaleDateString("pt-BR");
+      return formatDocumentDate(date, "pt-BR", workspace.timeZone, true);
     };
 
     const logoDataUri = await this.fileObjectToDataUri(
@@ -888,6 +908,8 @@ export class InvoicesService {
 
     const renderData = {
       number: invoice.number,
+      billingPeriod: invoice.billingScheduleEvent?.periodKey,
+      contractNumber: invoice.billingScheduleEvent?.contract.number,
       status: invoice.status,
       issueDate: formatDate(invoice.issueDate),
       dueDate: formatDate(invoice.dueDate),
@@ -896,6 +918,7 @@ export class InvoicesService {
       totalAmount: formatCurrency(invoice.totalAmount),
       items: invoice.items.map((item) => ({
         type: item.type,
+        billingKind: item.billingKind,
         description: item.description,
         quantity: item.quantity.toString(),
         unit: item.unit,
@@ -917,8 +940,9 @@ export class InvoicesService {
       client: this.documentClient(invoice),
       data: renderData,
       templateSettings: templateSnapshot,
-      generatedAt: new Date().toLocaleString("pt-BR"),
+      generatedAt: formatDocumentDateTime(new Date(), "pt-BR", workspace.timeZone),
       locale: "pt-BR",
+      timeZone: workspace.timeZone,
     });
   }
 }

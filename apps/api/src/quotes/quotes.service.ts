@@ -6,31 +6,12 @@ import {
 import { prisma, Prisma } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
-import { renderA4Document } from "@peanut/documents";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { renderA4Document, formatDate as formatDocumentDate, formatDateTime as formatDocumentDateTime } from "@peanut/documents";
+import { LocalObjectStorage } from "@peanut/utils";
 
 @Injectable()
 export class QuotesService {
-  private normalizeS3Endpoint(endpoint?: string) {
-    const value = endpoint || "http://localhost:9000";
-    return /^https?:\/\//i.test(value) ? value : `http://${value}`;
-  }
-
-  private readonly s3Client = new S3Client({
-    endpoint: this.normalizeS3Endpoint(process.env.S3_ENDPOINT),
-    region: process.env.S3_REGION || "us-east-1",
-    credentials: {
-      accessKeyId:
-        process.env.S3_ACCESS_KEY_ID ||
-        process.env.S3_ACCESS_KEY ||
-        "minio_admin",
-      secretAccessKey:
-        process.env.S3_SECRET_ACCESS_KEY ||
-        process.env.S3_SECRET_KEY ||
-        "change-me-in-production",
-    },
-    forcePathStyle: String(process.env.S3_FORCE_PATH_STYLE ?? "true") === "true",
-  });
+  private readonly objects = new LocalObjectStorage();
 
   constructor(
     private readonly auditService: AuditService,
@@ -520,14 +501,9 @@ export class QuotesService {
     if (!fileObject) return null;
 
     try {
-      const response = await this.s3Client.send(
-        new GetObjectCommand({
-          Bucket: fileObject.bucket,
-          Key: fileObject.key,
-        }),
-      );
+      const body = await this.objects.get(fileObject.bucket, fileObject.key);
       const chunks: Buffer[] = [];
-      for await (const chunk of response.Body as any) {
+      for await (const chunk of body) {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       }
       const buffer = Buffer.concat(chunks);
@@ -559,7 +535,7 @@ export class QuotesService {
         currency: "BRL",
       }).format(Number(val));
     const formatDate = (date: Date) =>
-      new Date(date).toLocaleDateString("pt-BR");
+      formatDocumentDate(date, "pt-BR", workspace.timeZone, true);
 
     const logoDataUri = await this.fileObjectToDataUri(
       (workspace as any).logoFileObjectId,
@@ -662,8 +638,9 @@ export class QuotesService {
         discountAmount: formatCurrency(quote.discountAmount),
       },
       templateSettings: templateSnapshot,
-      generatedAt: new Date().toLocaleString("pt-BR"),
+      generatedAt: formatDocumentDateTime(new Date(), "pt-BR", workspace.timeZone),
       locale: "pt-BR",
+      timeZone: workspace.timeZone,
     });
   }
 }

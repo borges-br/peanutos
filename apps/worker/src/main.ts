@@ -5,13 +5,16 @@ import * as dotenv from 'dotenv';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { Worker, Job, Queue } from 'bullmq';
-import { prisma } from '@peanut/db';
+import { runContractBilling } from './contract-billing';
+import { testWorkspaceEmailConnection } from './email-settings';
+import type { RenderA4DocumentParams } from '@peanut/documents';
+import { prisma, freezeContractDocument } from '@peanut/db';
 import * as crypto from 'crypto';
 import * as https from 'https';
 import * as http from 'http';
 import { chromium } from 'playwright';
-import { renderA4Document } from '@peanut/documents';
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { renderA4Document, formatDate as formatDocumentDate, formatDateTime as formatDocumentDateTime } from '@peanut/documents';
+import { LocalObjectStorage, dateKey, calendarDateKey, zonedDateTime } from '@peanut/utils';
 
 // Load environment variables from root or local
 for (const path of [resolve(process.cwd(), ".env"), resolve(process.cwd(), "..", "..", ".env")]) {
@@ -21,28 +24,7 @@ for (const path of [resolve(process.cwd(), ".env"), resolve(process.cwd(), "..",
   }
 }
 
-// S3 Client initialization with resilient fallbacks
-const normalizeS3Endpoint = (endpoint?: string) => {
-  const value = endpoint || "http://localhost:9000";
-  return /^https?:\/\//i.test(value) ? value : `http://${value}`;
-};
-
-const s3Endpoint = normalizeS3Endpoint(process.env.S3_ENDPOINT);
-const s3AccessKey = process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || "minio_admin";
-const s3SecretKey = process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || "change-me-in-production";
-const s3Bucket = process.env.S3_BUCKET || process.env.S3_BUCKET_NAME || "peanut-os-documents";
-const s3Region = process.env.S3_REGION || "us-east-1";
-const s3ForcePathStyle = String(process.env.S3_FORCE_PATH_STYLE ?? "true") === "true";
-
-const s3Client = new S3Client({
-  endpoint: s3Endpoint,
-  region: s3Region,
-  credentials: {
-    accessKeyId: s3AccessKey,
-    secretAccessKey: s3SecretKey,
-  },
-  forcePathStyle: s3ForcePathStyle,
-});
+const objects = new LocalObjectStorage();
 
 async function fileObjectToDataUri(fileObjectId: string | null | undefined, workspaceId: string): Promise<string | null> {
   if (!fileObjectId) return null;
@@ -53,14 +35,9 @@ async function fileObjectToDataUri(fileObjectId: string | null | undefined, work
   if (!fileObject) return null;
 
   try {
-    const response = await s3Client.send(
-      new GetObjectCommand({
-        Bucket: fileObject.bucket,
-        Key: fileObject.key,
-      }),
-    );
+    const body = await objects.get(fileObject.bucket, fileObject.key);
     const chunks: Buffer[] = [];
-    for await (const chunk of response.Body as any) {
+    for await (const chunk of body) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
     const buffer = Buffer.concat(chunks);
@@ -71,61 +48,6 @@ async function fileObjectToDataUri(fileObjectId: string | null | undefined, work
   }
 }
 
-function isMissingBucketError(err: any): boolean {
-  return (
-    err?.name === 'NoSuchBucket' ||
-    err?.name === 'NotFound' ||
-    err?.$metadata?.httpStatusCode === 404
-  );
-}
-
-function isBucketAlreadyAvailableError(err: any): boolean {
-  return (
-    err?.name === 'BucketAlreadyOwnedByYou' ||
-    err?.name === 'BucketAlreadyExists'
-  );
-}
-
-function createBucketCommand() {
-  const input: any = { Bucket: s3Bucket };
-  if (s3Region && s3Region !== 'us-east-1') {
-    input.CreateBucketConfiguration = {
-      LocationConstraint: s3Region,
-    };
-  }
-  return new CreateBucketCommand(input);
-}
-
-/**
- * Auto-create target S3 bucket when it is missing.
- */
-async function ensureBucketExists() {
-  console.log(`[S3 Initialize] Checking bucket "${s3Bucket}" existence...`);
-  try {
-    await s3Client.send(new HeadBucketCommand({ Bucket: s3Bucket }));
-    console.log(`[S3 Initialize] Bucket "${s3Bucket}" is ready.`);
-  } catch (err: any) {
-    if (!isMissingBucketError(err)) {
-      console.warn(`[S3 Initialize] HeadBucket query failed (safe bypass):`, err.message);
-      return;
-    }
-
-    console.log(`[S3 Initialize] Bucket "${s3Bucket}" not found. Creating it dynamically...`);
-    try {
-      await s3Client.send(createBucketCommand());
-      console.log(`[S3 Initialize] Bucket "${s3Bucket}" created successfully.`);
-    } catch (createErr: any) {
-      if (isBucketAlreadyAvailableError(createErr)) return;
-      console.error(`[S3 Initialize] Failed to create bucket "${s3Bucket}":`, createErr.message);
-      throw createErr;
-    }
-  }
-}
-
-ensureBucketExists().catch(err => {
-  console.warn('[S3 Initialize] Auto-create check threw unhandled error:', err.message);
-});
-
 console.log('👷 Background job worker initializing...');
 
 // ==============================================================================
@@ -133,7 +55,7 @@ console.log('👷 Background job worker initializing...');
 // ==============================================================================
 
 const WORKER_SENSITIVE_KEYS = new Set([
-  'password', 'passwordhash', 'token', 'secret', 'encryptedsecret',
+  'password', 'passwordhash', 'passwordencrypted', 'smtppassword', 'token', 'secret', 'encryptedsecret',
   'accesstoken', 'refreshtoken', 'authorization', 'apikey', 'credential',
   'sensitivedataencrypted', 'sensitivedata', 'bucket', 'key', 's3key',
   'storagekey', 'stack', 'stacktrace',
@@ -147,21 +69,6 @@ function workerSanitize(obj: unknown): unknown {
     result[k] = WORKER_SENSITIVE_KEYS.has(k.toLowerCase()) ? '[REDACTED]' : workerSanitize(v);
   }
   return result;
-}
-
-function formatDateInTz(date: Date): string {
-  const tz = process.env.WEBHOOK_SCHEDULER_TIMEZONE || 'America/Sao_Paulo';
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const parts = formatter.formatToParts(date);
-  const year = parts.find(p => p.type === 'year')?.value || '1970';
-  const month = parts.find(p => p.type === 'month')?.value || '01';
-  const day = parts.find(p => p.type === 'day')?.value || '01';
-  return `${year}-${month}-${day}`;
 }
 
 async function emitUniqueWebhook(params: {
@@ -194,7 +101,7 @@ async function emitUniqueWebhook(params: {
     const nowStr = new Date().toISOString();
     const ws = await prisma.workspace.findUnique({
       where: { id: params.workspaceId },
-      select: { name: true },
+      select: { name: true, webhookMaxAttempts: true },
     });
     const workspaceName = ws?.name || 'Peanut OS Workspace';
 
@@ -276,13 +183,13 @@ async function emitUniqueWebhook(params: {
             eventType: params.eventType,
             payload: payload as any,
             status: 'PENDING',
-            maxAttempts: 5,
+            maxAttempts: ws?.webhookMaxAttempts ?? 5,
             nextAttemptAt: new Date(),
           },
         });
 
         await webhookDispatchQueue.add('webhook-dispatch', { deliveryId: delivery.id }, {
-          attempts: 5,
+          attempts: ws?.webhookMaxAttempts ?? 5,
           backoff: { type: 'exponential', delay: 5000 },
           removeOnComplete: 100,
           removeOnFail: 200,
@@ -298,32 +205,29 @@ async function emitUniqueWebhook(params: {
   }
 }
 
-async function sweepInvoices() {
+async function sweepInvoices(settings: { id: string; invoiceDueSoonOffsetHours: number }) {
   const today = new Date();
-  const todayStr = formatDateInTz(today);
-
-  const fallbackDueSoonHours = parseInt(process.env.WEBHOOK_INVOICE_DUE_SOON_HOURS || '', 10)
-    || parseInt(process.env.WEBHOOK_INVOICE_DUE_SOON_DAYS || '3', 10) * 24;
-
-  console.log(`[Webhook Invoice Sweep] Today: ${todayStr}, fallback due soon offset: ${fallbackDueSoonHours}h`);
 
   // Fetch all pending/issued/overdue invoices
   const invoices = await prisma.invoice.findMany({
     where: {
-      status: { in: ['ISSUED', 'OVERDUE'] },
+      status: { in: ['ISSUED', 'OVERDUE'] }, workspaceId: settings.id,
     },
     include: {
       workspace: {
-        select: { invoiceDueSoonOffsetHours: true },
+        select: { invoiceDueSoonOffsetHours: true, timeZone: true },
       },
     },
   });
 
   for (const inv of invoices) {
-    const dueDateStr = formatDateInTz(inv.dueDate);
-    const remainingMs = inv.dueDate.getTime() - today.getTime();
+    const todayStr = dateKey(today, inv.workspace.timeZone);
+    const dueDateStr = calendarDateKey(inv.dueDate, inv.workspace.timeZone);
+    const dueInstant = inv.dueDate.toISOString().endsWith('T00:00:00.000Z')
+      ? zonedDateTime(dueDateStr, inv.workspace.timeZone) : inv.dueDate;
+    const remainingMs = dueInstant.getTime() - today.getTime();
     const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
-    const dueSoonOffsetHours = inv.workspace?.invoiceDueSoonOffsetHours || fallbackDueSoonHours;
+    const dueSoonOffsetHours = settings.invoiceDueSoonOffsetHours;
 
     // A. invoice.due_today
     if (dueDateStr === todayStr) {
@@ -380,22 +284,24 @@ async function sweepInvoices() {
   }
 }
 
-async function sweepContracts() {
+async function sweepContracts(settings: { id: string; contractEndingSoonDays: number }) {
   const today = new Date();
-  const todayStr = formatDateInTz(today);
 
-  const endingSoonDays = parseInt(process.env.WEBHOOK_CONTRACT_ENDING_SOON_DAYS || '15', 10);
-  const endingSoonTargetStr = formatDateInTz(new Date(today.getTime() + endingSoonDays * 24 * 60 * 60 * 1000));
+  const endingSoonDays = settings.contractEndingSoonDays;
 
   const contracts = await prisma.contract.findMany({
     where: {
-      status: 'ACTIVE',
+      status: 'ACTIVE', workspaceId: settings.id,
     },
+    include: { workspace: { select: { timeZone: true } } },
   });
 
   for (const ctr of contracts) {
+    const tz = ctr.workspace.timeZone;
+    const todayStr = dateKey(today, tz);
+    const endingSoonTargetStr = dateKey(new Date(today.getTime() + endingSoonDays * 86400000), tz);
     if (ctr.endDate) {
-      const endDateStr = formatDateInTz(ctr.endDate);
+      const endDateStr = calendarDateKey(ctr.endDate, tz);
 
       // A. cycle_ending_soon
       if (endDateStr === endingSoonTargetStr) {
@@ -436,7 +342,6 @@ async function sweepContracts() {
     }
 
     // C. renewal_due
-    const tz = process.env.WEBHOOK_SCHEDULER_TIMEZONE || 'America/Sao_Paulo';
     const dayOfMonth = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: tz, day: 'numeric' }).format(today), 10);
     if (ctr.billingDay === dayOfMonth) {
       const periodKey = `${todayStr}:renewalDue`;
@@ -458,13 +363,13 @@ async function sweepContracts() {
   }
 }
 
-async function sweepTicketsFeedback() {
-  const feedbackHours = parseInt(process.env.WEBHOOK_TICKET_FEEDBACK_HOURS_AFTER_RESOLVED || '24', 10);
+async function sweepTicketsFeedback(settings: { id: string; ticketFeedbackAfterHours: number }) {
+  const feedbackHours = settings.ticketFeedbackAfterHours;
   const targetTime = new Date(Date.now() - feedbackHours * 60 * 60 * 1000);
 
   const tickets = await prisma.ticket.findMany({
     where: {
-      status: { in: ['RESOLVED', 'CLOSED'] },
+      status: { in: ['RESOLVED', 'CLOSED'] }, workspaceId: settings.id,
       resolvedAt: { lte: targetTime },
     },
   });
@@ -487,10 +392,24 @@ async function sweepTicketsFeedback() {
 }
 
 async function runDailyWebhookSweeps() {
-  console.log('[Webhook Scheduler] Running daily webhook sweeps...');
-  await sweepInvoices();
-  await sweepContracts();
-  await sweepTicketsFeedback();
+  const now = new Date();
+  const workspaces = await prisma.workspace.findMany({ select: {
+    id: true, invoiceDueSoonOffsetHours: true, contractEndingSoonDays: true, ticketFeedbackAfterHours: true,
+    automationIntervalMinutes: true, lastAutomationSweepAt: true,
+  } });
+  for (const settings of workspaces) {
+    if (settings.lastAutomationSweepAt && now.getTime() - settings.lastAutomationSweepAt.getTime() < settings.automationIntervalMinutes * 60000) continue;
+    const claim = await prisma.workspace.updateMany({ where: { id: settings.id, lastAutomationSweepAt: settings.lastAutomationSweepAt }, data: { lastAutomationSweepAt: now } });
+    if (!claim.count) continue;
+    try {
+      await sweepInvoices(settings);
+      await sweepContracts(settings);
+      await sweepTicketsFeedback(settings);
+    } catch (error) {
+      await prisma.workspace.updateMany({ where: { id: settings.id, lastAutomationSweepAt: now }, data: { lastAutomationSweepAt: settings.lastAutomationSweepAt } });
+      throw error;
+    }
+  }
 }
 
 async function emitWebhookEventFromWorker(event: {
@@ -512,7 +431,7 @@ async function emitWebhookEventFromWorker(event: {
 
     const ws = await prisma.workspace.findUnique({
       where: { id: event.workspaceId },
-      select: { name: true },
+      select: { name: true, webhookMaxAttempts: true },
     });
     const workspaceName = ws?.name || 'Peanut OS Workspace';
 
@@ -553,12 +472,12 @@ async function emitWebhookEventFromWorker(event: {
             eventType: event.eventType,
             payload: payload as any,
             status: 'PENDING',
-            maxAttempts: 5,
+            maxAttempts: ws?.webhookMaxAttempts ?? 5,
             nextAttemptAt: new Date(),
           },
         });
         await webhookDispatchQueue.add('webhook-dispatch', { deliveryId: delivery.id }, {
-          attempts: 5,
+          attempts: ws?.webhookMaxAttempts ?? 5,
           backoff: { type: 'exponential', delay: 5000 },
           removeOnComplete: 100,
           removeOnFail: 200,
@@ -585,46 +504,31 @@ const connection = {
 };
 
 const billingScheduleQueue = new Queue('billing-schedule', { connection });
+const emailTestWorker = new Worker('settings-email-test', async (job: Job) => testWorkspaceEmailConnection(job.data.workspaceId, job.data.revision), { connection, concurrency: 2 });
+emailTestWorker.on('error', () => console.warn('[Email Settings] Test queue unavailable.'));
+emailTestWorker.on('failed', () => console.warn('[Email Settings] Connection test failed.'));
+const recurringPdfQueue = new Queue('pdf-generation', { connection });
+const contractBillingQueue = new Queue('contract-billing', { connection });
+contractBillingQueue.add('contract-billing.scan', {}, { jobId: 'contract-billing.scan', repeat: { every: 60000 }, removeOnComplete: 10, removeOnFail: 50 }).catch((error: Error) => console.warn('[Contract Billing] Queue unavailable:', error.message));
+const contractBillingWorker = new Worker('contract-billing', async () => runContractBilling(prisma, recurringPdfQueue, objects), { connection, concurrency: 1 });
+contractBillingWorker.on('error', (error: Error) => console.warn('[Contract Billing] Worker error:', error.message));
 
-async function writeBillingAudit(params: {
-  workspaceId: string;
-  action: 'billing.event_created' | 'billing.event_skipped';
-  entityId: string;
-  before?: unknown;
-  after?: unknown;
-}) {
-  try {
-    await prisma.auditLog.create({
-      data: {
-        workspaceId: params.workspaceId,
-        actorUserId: null,
-        action: params.action,
-        entityType: 'BILLING_SCHEDULE_EVENT',
-        entityId: params.entityId,
-        beforeJson: params.before ? JSON.stringify(params.before) : null,
-        afterJson: params.after ? JSON.stringify(params.after) : null,
-        severity: params.action === 'billing.event_skipped' ? 'WARN' : 'INFO',
-      },
-    });
-  } catch (err) {
-    console.warn('[Billing Scheduler Worker] Failed to write billing audit log:', err);
+async function registerBillingSchedule() {
+  const pattern = '* * * * *'; // Internal tick; workspace settings control the scan interval.
+  // Replace legacy repeats so updates do not leave a second scheduler active.
+  for (const repeat of await billingScheduleQueue.getRepeatableJobs()) {
+    if (repeat.name === 'billing-schedule.monthly-sweep' && (repeat.pattern !== pattern || repeat.tz !== 'UTC')) {
+      await billingScheduleQueue.removeRepeatableByKey(repeat.key);
+    }
   }
-}
-
-billingScheduleQueue
-  .add(
-    'billing-schedule.monthly-sweep',
-    {},
-    {
-      jobId: 'billing-schedule.monthly-sweep',
-      repeat: { pattern: process.env.BILLING_SCHEDULE_CRON || '0 2 * * *' },
-      removeOnComplete: 10,
-      removeOnFail: 50,
-    },
-  )
-  .catch((err: Error) => {
-    console.warn('[Billing Scheduler Queue] Redis is offline (safe bypass):', err.message);
+  await billingScheduleQueue.add('billing-schedule.monthly-sweep', {}, {
+    jobId: 'billing-schedule.monthly-sweep',
+    repeat: { pattern, tz: 'UTC' }, removeOnComplete: 10, removeOnFail: 50,
   });
+}
+registerBillingSchedule().catch((err: Error) => {
+  console.warn('[Billing Scheduler Queue] Could not register schedule:', err.message);
+});
 
 /**
  * PDF GENERATION JOB WORKER STUB
@@ -664,6 +568,7 @@ const pdfWorker = new Worker(
         where: { id: entityId, workspaceId },
         include: {
           client: true,
+          billingScheduleEvent: true,
           items: { orderBy: { sortOrder: 'asc' } },
         },
       });
@@ -736,7 +641,7 @@ const pdfWorker = new Worker(
     };
 
     const formatDate = (date: Date) => {
-      return new Date(date).toLocaleDateString('pt-BR');
+      return formatDocumentDate(date, 'pt-BR', workspace.timeZone, typedDocumentType !== 'SERVICE_ORDER');
     };
 
     const logoDataUri = await fileObjectToDataUri((workspace as any).logoFileObjectId, workspaceId);
@@ -810,7 +715,7 @@ const pdfWorker = new Worker(
         ? source.dueDate
         : typedDocumentType === 'QUOTE'
           ? source.validUntil
-          : source.scheduledFor || source.completedAt || source.createdAt;
+          : source.scheduledFor || source.completedAt || null;
     const sourceItems = source.items?.length
       ? source.items
       : typedDocumentType === 'SERVICE_ORDER'
@@ -846,15 +751,20 @@ const pdfWorker = new Worker(
 
     const renderData = {
       number: source.number,
+      billingPeriod: source.billingScheduleEvent?.periodKey,
+      contractNumber: source.billingScheduleEvent ? (await prisma.contract.findUnique({ where: { id: source.contractId }, select: { number: true } }))?.number : undefined,
       status: source.status,
       issueDate: formatDate(source.issueDate || source.createdAt),
-      dueDate: formatDate(dueDate),
+      dueDate: typedDocumentType === 'SERVICE_ORDER'
+        ? dueDate ? formatDocumentDateTime(dueDate, 'pt-BR', workspace.timeZone) : '--/--/----'
+        : formatDate(dueDate),
       paymentMethod: typedDocumentType === 'INVOICE' ? source.paymentMethod : null,
       pixKey: typedDocumentType === 'INVOICE' ? source.pixKey : null,
       totalAmount: formatCurrency(source.totalAmount || 0),
       title: documentTitle,
       items: sourceItems.map((item: any) => ({
         type: item.type,
+        billingKind: item.billingKind,
         description: item.description,
         quantity: item.quantity.toString(),
         unit: item.unit,
@@ -869,7 +779,7 @@ const pdfWorker = new Worker(
     };
 
     // 5. Render dynamic block-based A4 HTML
-    const html = renderA4Document({
+    const renderParams: RenderA4DocumentParams = {
       documentType: typedDocumentType,
       brand: brandSnapshot,
       responsible: responsibleSnapshot,
@@ -882,9 +792,14 @@ const pdfWorker = new Worker(
       },
       data: renderData,
       templateSettings: templateSnapshot,
-      generatedAt: new Date().toLocaleString('pt-BR'),
+      generatedAt: formatDocumentDateTime(new Date(), 'pt-BR', workspace.timeZone),
+      timeZone: workspace.timeZone,
       locale: 'pt-BR',
-    });
+    };
+    const finalRenderParams: RenderA4DocumentParams = source.billingScheduleEvent && source.status !== 'DRAFT'
+      ? await freezeContractDocument(prisma, entityId, workspaceId, JSON.parse(JSON.stringify(renderParams))) as unknown as RenderA4DocumentParams
+      : renderParams;
+    const html = renderA4Document(finalRenderParams);
 
     // 6. Launch Playwright headless browser
     console.log(`[PDF Worker] Launching chromium browser...`);
@@ -933,22 +848,15 @@ const pdfWorker = new Worker(
           ? 'service-orders'
           : 'invoices';
     const fileName = `${filePrefix}-${sanitizedNumber}-v${version}.pdf`;
-    const key = `${workspaceId}/${folder}/${entityId}/${fileName}`;
+    const key = `${workspaceId}/${folder}/${entityId}/${crypto.randomUUID()}-${fileName}`;
 
-    // 7. Upload the buffer directly to MinIO
-    console.log(`[PDF Worker] Uploading PDF buffer to MinIO bucket "${s3Bucket}" key "${key}"...`);
+    // 7. Publish an immutable PDF in the shared persistent volume.
     try {
-      await ensureBucketExists();
-      await s3Client.send(new PutObjectCommand({
-        Bucket: s3Bucket,
-        Key: key,
-        Body: pdfBuffer,
-        ContentType: 'application/pdf',
-      }));
+      await objects.put(objects.bucket, key, pdfBuffer);
     } catch (uploadErr: any) {
-      console.error('[PDF Worker] MinIO upload command failed:', uploadErr.message);
+      console.error('[PDF Worker] File upload failed:', uploadErr.message);
       // Throw generic secure error (omit internal paths / endpoints / S3 keys)
-      throw new Error(`Falha ao salvar o arquivo no armazenamento em nuvem.`);
+      throw new Error(`Falha ao salvar o arquivo no armazenamento.`);
     }
 
     // 8. Calculate file statistics from memory buffer
@@ -956,59 +864,67 @@ const pdfWorker = new Worker(
     const sha256 = crypto.createHash('sha256').update(pdfBuffer).digest('hex');
 
     // 9. Persist records in Prisma (FileObject & GeneratedDocument)
-    let fileObject;
-    let generatedDoc;
+    let persisted;
     try {
-      fileObject = await prisma.fileObject.create({
-        data: {
-          workspaceId,
-          bucket: s3Bucket,
-          key,
-          originalFilename: `${displayPrefix}-${sanitizedNumber}-v${version}.pdf`,
-          mimeType: 'application/pdf',
-          sizeBytes,
-          sha256,
-          visibility: 'PRIVATE',
-          createdById: actorUserId,
-        },
-      });
+      persisted = await prisma.$transaction(async (tx) => {
+        const fileObject = await tx.fileObject.create({
+          data: {
+            workspaceId,
+            bucket: objects.bucket,
+            key,
+            originalFilename: `${displayPrefix}-${sanitizedNumber}-v${version}.pdf`,
+            mimeType: 'application/pdf',
+            sizeBytes,
+            sha256,
+            visibility: 'PRIVATE',
+            createdById: actorUserId,
+          },
+        });
 
-      generatedDoc = await prisma.generatedDocument.create({
-        data: {
-          workspaceId,
-          entityType,
-          entityId,
-          documentType: typedDocumentType,
-          version,
-          fileObjectId: fileObject.id,
-          sha256,
-          generatedById: actorUserId,
-          metadata: JSON.stringify({
-            invoiceNumber: typedDocumentType === 'INVOICE' ? source.number : undefined,
-            quoteNumber: typedDocumentType === 'QUOTE' ? source.number : undefined,
-            serviceOrderNumber: typedDocumentType === 'SERVICE_ORDER' ? source.number : undefined,
-            generatedFrom: `${typedDocumentType.toLowerCase()}-preview`,
-            storage: 's3',
-            brandSnapshot,
-            responsibleSnapshot,
-            templateSnapshot,
-          }),
-        },
+        const generatedDoc = await tx.generatedDocument.create({
+          data: {
+            workspaceId,
+            entityType,
+            entityId,
+            documentType: typedDocumentType,
+            version,
+            fileObjectId: fileObject.id,
+            sha256,
+            generatedById: actorUserId,
+            metadata: JSON.stringify({
+              invoiceNumber: typedDocumentType === 'INVOICE' ? source.number : undefined,
+              quoteNumber: typedDocumentType === 'QUOTE' ? source.number : undefined,
+              serviceOrderNumber: typedDocumentType === 'SERVICE_ORDER' ? source.number : undefined,
+              generatedFrom: `${typedDocumentType.toLowerCase()}-preview`,
+              storage: 'filesystem',
+              timeZone: workspace.timeZone,
+              brandSnapshot,
+              responsibleSnapshot,
+              templateSnapshot,
+            }),
+          },
+        });
+        if (entityType === 'INVOICE' && source.billingScheduleEvent && ['ISSUED', 'OVERDUE'].includes(source.status)) {
+          await tx.billingScheduleEvent.updateMany({
+            where: { id: source.billingScheduleEvent.id, invoiceId: entityId, emailPdfFileObjectId: null },
+            data: { emailPdfFileObjectId: fileObject.id, documentSnapshot: JSON.parse(JSON.stringify(finalRenderParams)) },
+          });
+        }
+        return { fileObject, generatedDoc };
       });
     } catch (dbError: any) {
-      console.error('[PDF Worker] DB operations failed. Cleaning up S3 object...', dbError.message);
+      console.error('[PDF Worker] DB operations failed. Cleaning up stored file...', dbError.message);
       try {
-        await s3Client.send(new DeleteObjectCommand({
-          Bucket: s3Bucket,
-          Key: key,
-        }));
+        await objects.remove(objects.bucket, key);
       } catch (deleteErr: any) {
-        console.error('[PDF Worker] S3 Object cleanup failed:', deleteErr.message);
+        console.error('[PDF Worker] Stored file cleanup failed:', deleteErr.message);
       }
       throw new Error(`Falha ao registrar o documento no banco de dados.`);
     }
 
-    // 10. Write audit log (omitting S3 path/bucket/key) only after real transaction success
+    const { fileObject, generatedDoc } = persisted;
+
+    // 10. Write audit log (omitting storage path/bucket/key) only after real transaction success
     try {
       await prisma.auditLog.create({
         data: {
@@ -1169,7 +1085,7 @@ const webhookWorker = new Worker(
 
     const delivery = await prisma.webhookDelivery.findUnique({
       where: { id: deliveryId },
-      include: { webhook: true },
+      include: { webhook: true, workspace: { select: { webhookTimeoutMs: true } } },
     });
 
     if (!delivery) {
@@ -1217,7 +1133,7 @@ const webhookWorker = new Worker(
     };
 
     try {
-      const result = await doHttpPost(delivery.webhook.url, rawBody, headers, 8000);
+      const result = await doHttpPost(delivery.webhook.url, rawBody, headers, delivery.workspace.webhookTimeoutMs);
       const isSuccess = result.status >= 200 && result.status < 300;
       const truncatedBody = result.body.substring(0, 500);
 
@@ -1469,80 +1385,12 @@ const billingSchedulerWorker = new Worker(
   async (_job: Job) => {
     console.log(`[Billing Scheduler Worker] Sweeping active contracts...`);
     try {
-      const activeContracts = await prisma.contract.findMany({
-        where: {
-          status: 'ACTIVE',
-          type: {
-            in: ['RECURRING_SUPPORT', 'HYBRID'],
-          },
-          monthlyAmountCents: { gt: 0 },
-        },
-      });
-
-      const now = new Date();
-      const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-      const periodKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-      let processedCount = 0;
-      let skippedCount = 0;
-
-      for (const contract of activeContracts) {
-        // Double-billing safeguard check
-        const existingEvent = await prisma.billingScheduleEvent.findFirst({
-          where: {
-            contractId: contract.id,
-            periodKey,
-          },
-        });
-
-        if (existingEvent) {
-          await writeBillingAudit({
-            workspaceId: contract.workspaceId,
-            action: 'billing.event_skipped',
-            entityId: existingEvent.id,
-            before: { contractId: contract.id, periodKey, reason: 'duplicate_period' },
-          });
-          skippedCount++;
-          continue;
-        }
-
-        // Generate billing schedule event scheduled for the billing day of the current month
-        const billingDay = Math.min(contract.billingDay, currentMonthEnd.getDate());
-        const billingDate = new Date(now.getFullYear(), now.getMonth(), billingDay);
-        const monthLabel = now.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
-
-        const event = await prisma.billingScheduleEvent.create({
-          data: {
-            workspaceId: contract.workspaceId,
-            contractId: contract.id,
-            clientId: contract.clientId,
-            scheduledFor: billingDate,
-            status: 'PENDING',
-            periodKey,
-            amountCents: contract.monthlyAmountCents,
-            currency: contract.currency,
-            description: `Recorrência contratual - Competência ${monthLabel}`,
-          },
-        });
-
-        await writeBillingAudit({
-          workspaceId: contract.workspaceId,
-          action: 'billing.event_created',
-          entityId: event.id,
-          after: event,
-        });
-
-        processedCount++;
-      }
-
-      console.log(`[Billing Scheduler Worker] Finished sweep. Created: ${processedCount}, Skipped: ${skippedCount}`);
-      
       // Trigger the daily commercial and operational scheduled webhook sweeps
       await runDailyWebhookSweeps().catch(err => {
         console.error('[Billing Scheduler Worker] Scheduled webhook sweeps failed:', err.message);
       });
 
-      return { processedCount, skippedCount };
+      return { success: true };
     } catch (err) {
       console.error('[Billing Scheduler Worker] Error processing recurring billing sweep:', err);
       throw err;

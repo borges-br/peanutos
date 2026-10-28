@@ -96,6 +96,18 @@ export class InvoicesController {
     );
   }
 
+  @Post("invoices/:invoiceId/approve-monthly")
+  @Roles("OWNER", "ADMIN", "FINANCIAL")
+  async approveMonthly(@Param("invoiceId") invoiceId: string, @CurrentUser() user: any) {
+    return this.invoicesService.approveMonthly(invoiceId, user.workspaceId, user.id);
+  }
+
+  @Post("invoices/:invoiceId/retry-email")
+  @Roles("OWNER", "ADMIN", "FINANCIAL")
+  async retryEmail(@Param("invoiceId") invoiceId: string, @Body() body: any, @CurrentUser() user: any) {
+    return this.invoicesService.retryMonthlyEmail(invoiceId, user.workspaceId, user.id, body?.confirmResend === true);
+  }
+
   @Patch("invoices/:invoiceId/status")
   @Roles("OWNER", "ADMIN", "FINANCIAL")
   async updateStatus(

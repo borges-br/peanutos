@@ -509,6 +509,14 @@ const contractBaseSchema = z.object({
   renewalMode: renewalModeEnum.default('MONTHLY'),
   billingDay: z.number().int().min(1).max(31, { message: 'Dia de vencimento deve estar entre 1 e 31' }).default(5),
   monthlyAmountCents: z.number().int().min(0, { message: 'Valor mensal deve ser maior ou igual a zero' }).default(0),
+  billingIssueDay: z.number().int().min(1).max(31).optional().nullable(),
+  billingIssueTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Horário de emissão inválido').default('09:00'),
+  billingAutoIssue: z.boolean().default(false),
+  billingAutoEmail: z.boolean().default(false),
+  billingEmailRecipients: z.array(z.string().trim().email().max(254)).max(50).default([]),
+  billingWhatsappNumbers: z.array(z.string().regex(/^\d{10,15}$/, 'Use telefone com código do país e somente números')).max(30).default([]),
+  billingPaymentMethod: z.enum(['PIX', 'TRANSFER', 'CASH', 'OTHER']).default('PIX'),
+  billingPixKey: z.string().max(100).optional().nullable(),
   currency: z.string().length(3, { message: 'A moeda deve ter exatamente 3 caracteres (ex: BRL)' }).default('BRL'),
   slaPolicyId: z.string().uuid({ message: 'ID de SLA inválido' }).optional().nullable(),
   maxUsers: z.number().int().min(0).optional().nullable(),
@@ -617,6 +625,9 @@ export const invoiceItemCreateSchema = z.object({
   unitCost: z.coerce.number().min(0, { message: 'O custo unitário deve ser maior ou igual a zero' }).optional().default(0),
   totalPrice: z.coerce.number().min(0).optional().nullable(),
   totalCost: z.coerce.number().min(0).optional().nullable(),
+  billingKind: z.enum(['BASE', 'EXTRA']).optional().nullable(),
+  sourceTicketId: z.string().uuid().optional().nullable(),
+  sourceServiceOrderId: z.string().uuid().optional().nullable(),
 });
 export type InvoiceItemCreateInput = z.infer<typeof invoiceItemCreateSchema>;
 
@@ -639,6 +650,9 @@ export const invoiceCreateSchema = z.object({
 export type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 
 export const invoiceUpdateSchema = z.object({
+  refreshBase: z.boolean().optional(),
+  scheduledFor: z.string().datetime({ offset: true }).optional(),
+  emailRecipients: z.array(z.string().trim().email().max(254)).max(50).optional(),
   dueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de vencimento inválida' }).optional(),
   paymentMethod: z.enum(["PIX", "TRANSFER", "CASH", "OTHER"]).optional(),
   pixKey: z.string().optional().nullable(),
@@ -1714,3 +1728,31 @@ export type UpdateInboundWebhookInput = z.infer<typeof updateInboundWebhookSchem
 
 
 
+
+
+// Workspace-owned operational configuration. Never accept a stored ciphertext from HTTP.
+export const workspaceEmailSettingsSchema = z.object({
+  enabled: z.boolean(),
+  host: z.string().trim().max(253).refine(value => !value || /^[a-zA-Z0-9._:[\]-]+$/.test(value), 'Servidor SMTP inválido'),
+  port: z.number().int().min(1).max(65535),
+  security: z.enum(['STARTTLS', 'TLS']),
+  username: z.string().max(254).refine(value => !/[\r\n]/.test(value), 'Usuário inválido'),
+  password: z.string().max(2048).optional(),
+  clearPassword: z.boolean().optional(),
+  fromEmail: z.string().trim().email().max(254).or(z.literal('')),
+  fromName: z.string().trim().max(150).refine(value => !/[\r\n]/.test(value), 'Nome inválido'),
+  replyTo: z.string().trim().email().max(254).optional().nullable().or(z.literal('')),
+  revision: z.number().int().min(0),
+}).strict().superRefine((data, ctx) => {
+  if (data.enabled && (!data.host || !data.fromEmail)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Informe servidor e remetente para ativar o SMTP.' });
+  if (data.clearPassword && data.password) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Escolha substituir ou remover a senha.' });
+});
+export const workspaceOperationSettingsSchema = z.object({
+  invoiceDueSoonOffsetHours: z.number().int().min(1).max(720),
+  contractEndingSoonDays: z.number().int().min(0).max(365),
+  ticketFeedbackAfterHours: z.number().int().min(1).max(720),
+  automationIntervalMinutes: z.number().int().min(5).max(1440),
+  webhookMaxAttempts: z.number().int().min(1).max(10),
+  webhookTimeoutMs: z.number().int().min(1000).max(60000),
+  sessionDurationMinutes: z.number().int().min(10).max(1440),
+}).strict();
