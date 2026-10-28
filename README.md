@@ -160,6 +160,7 @@ sequenceDiagram
 
 Leia o guia: [Deploy de producao com Docker](docs/deployment/production-docker.md).
 Para uma instalação existente pelo Git, siga também o [roteiro de atualização no Portainer](docs/deployment/portainer-update.md), incluindo a migração dos arquivos antes do redeploy.
+Na VPS existente com NGINX Proxy Manager, o [portainer-stack.yml](portainer-stack.yml) reúne a stack em um arquivo, preserva os nomes dos volumes e redes e bloqueia a inicialização se a verificação dos arquivos falhar.
 
 ## Variaveis principais
 

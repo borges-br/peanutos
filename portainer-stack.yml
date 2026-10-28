@@ -1,0 +1,182 @@
+# Peanut OS - stack unica para a VPS existente, com NGINX Proxy Manager.
+# Docker Standalone. Imagens verificadas do commit 590d739.
+# Mantenha as variaveis e chaves existentes no Portainer; nao gere novas senhas.
+# Antes do redeploy: backup, migrations, copia e verificacao dos arquivos.
+# Os volumes e as redes abaixo devem existir com estes nomes exatos.
+# Preserve tambem o volume antigo peanutos-infra_minio_data para recuperacao.
+
+name: peanutos-infra
+
+x-app-env: &app-env
+  NODE_ENV: production
+  NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:?Mantenha a URL atual do sistema}
+  NEXT_PUBLIC_API_URL: /api/v1
+  CORS_ORIGIN: ${CORS_ORIGIN:?Mantenha a origem atual da API}
+  DATABASE_URL: postgresql://${POSTGRES_USER:?Mantenha o usuario atual do banco}:${POSTGRES_PASSWORD:?Mantenha a senha atual do banco}@postgres:5432/${POSTGRES_DB:?Mantenha o nome atual do banco}?schema=public
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?Mantenha a senha atual do Redis}
+  JWT_SECRET: ${JWT_SECRET:?Mantenha a chave JWT atual}
+  APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Mantenha a chave de criptografia atual}
+  APPLICATION_ENCRYPTION_KEY: ${APPLICATION_ENCRYPTION_KEY:-}
+  WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:?Mantenha a chave atual dos webhooks}
+  STORAGE_PATH: /data/storage
+  API_BODY_LIMIT_BYTES: ${API_BODY_LIMIT_BYTES:-26214400}
+  PDF_MAX_CONCURRENCY: ${PDF_MAX_CONCURRENCY:-1}
+  WEBHOOK_MAX_CONCURRENCY: ${WEBHOOK_MAX_CONCURRENCY:-5}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: peanut-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Mantenha o usuario atual do banco}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Mantenha a senha atual do banco}
+      POSTGRES_DB: ${POSTGRES_DB:?Mantenha o nome atual do banco}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - peanutos_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: peanut-redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Mantenha a senha atual do Redis}
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?Mantenha a senha atual do Redis}"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - peanutos_net
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrator:
+    image: ghcr.io/borges-br/peanutos/peanut-migrator:sha-590d739
+    container_name: peanut-migrator
+    restart: "no"
+    environment:
+      <<: *app-env
+    networks:
+      - peanutos_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Confere todos os arquivos registrados no banco, sem alterar os objetos.
+  # Se a copia ainda nao terminou, API/worker/web ficam bloqueados.
+  storage-check:
+    image: ghcr.io/borges-br/peanutos/peanut-api:sha-590d739
+    container_name: peanut-storage-check
+    restart: "no"
+    command: ["node", "scripts/migrate-storage.cjs", "--source=verify", "--report=/tmp/storage-verification.json"]
+    environment:
+      <<: *app-env
+    volumes:
+      - storage_data:/data/storage:ro
+    networks:
+      - peanutos_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+  api:
+    image: ghcr.io/borges-br/peanutos/peanut-api:sha-590d739
+    container_name: peanut-api
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      PORT_API: 3001
+    volumes:
+      - storage_data:/data/storage
+    expose:
+      - "3001"
+    networks:
+      peanutos_net: {}
+      npm_proxy:
+        aliases:
+          - peanut-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+      storage-check:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 40s
+      retries: 4
+
+  worker:
+    image: ghcr.io/borges-br/peanutos/peanut-worker:sha-590d739
+    container_name: peanut-worker
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    volumes:
+      - storage_data:/data/storage
+    networks:
+      - peanutos_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+      storage-check:
+        condition: service_completed_successfully
+
+  web:
+    image: ghcr.io/borges-br/peanutos/peanut-web:sha-590d739
+    container_name: peanut-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: /api/v1
+    expose:
+      - "3000"
+    networks:
+      peanutos_net: {}
+      npm_proxy:
+        aliases:
+          - peanut-web
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    external: true
+    name: peanutos-infra_postgres_data
+  redis_data:
+    external: true
+    name: peanutos-infra_redis_data
+  storage_data:
+    external: true
+    name: peanut_storage_data
+
+networks:
+  peanutos_net:
+    external: true
+    name: peanutos-infra_peanutos_net
+  npm_proxy:
+    external: true
+    name: rvproxy_npm_backend_network

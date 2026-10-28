@@ -20,6 +20,14 @@ O importador de configurações também pode ser executado com a imagem da API, 
 
 ## Configuração da stack Git
 
+Para a VPS existente com stack `peanutos-infra` e NGINX Proxy Manager, há uma opção de arquivo único: [`portainer-stack.yml`](../../portainer-stack.yml). Use esse arquivo como **Compose path**, sem arquivos adicionais. Ele fixa as quatro imagens em `sha-590d739`, usa os volumes existentes de PostgreSQL/Redis e as redes já identificadas. Suas variáveis de senhas, chaves e URLs continuam necessárias no Portainer.
+
+Nesse arquivo, os volumes e redes são externos e precisam existir antes do deploy. O volume novo `peanut_storage_data` deve ser preparado pela migração; declarar o volume não copia arquivos. O serviço `storage-check` verifica tamanho e SHA-256 de todos os objetos após as migrations, com o armazenamento montado somente para leitura. API e worker dependem do sucesso dessa verificação, e web aguarda a saúde da API. `migrator` e `storage-check` devem terminar com código zero. Esse bloqueio protege a inicialização, mas não substitui backup e migração com gravações paradas.
+
+Como as imagens estão fixadas nesse arquivo, `PEANUT_IMAGE_TAG` não altera essa versão. Para uma publicação futura, atualize as referências das imagens de todos os serviços, incluindo `storage-check`. Preserve o volume antigo `peanutos-infra_minio_data`; este Compose não inicia o MinIO nem remove os dados antigos. Não execute limpeza/prune dos serviços antigos durante a migração.
+
+Para outras instalações que usam os arquivos genéricos, siga a configuração abaixo:
+
 Em **Stacks > sua stack > Edit stack settings** (o nome pode variar conforme a versão):
 
 - Repositório: `https://github.com/borges-br/peanutos`.
