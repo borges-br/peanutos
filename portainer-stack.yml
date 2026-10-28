@@ -1,5 +1,5 @@
 # Peanut OS - stack unica para a VPS existente, com NGINX Proxy Manager.
-# Docker Standalone. Imagens verificadas do commit 4ca34c5.
+# Docker Standalone. Imagens verificadas do commit ae5d132.
 # Mantenha as variaveis e chaves existentes no Portainer; nao gere novas senhas.
 # Lista de variaveis: portainer.env.example (o .env.example e para desenvolvimento).
 # Antes do redeploy: backup, migrations, copia e verificacao dos arquivos.
