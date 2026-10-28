@@ -1,5 +1,5 @@
 # Peanut OS - stack unica para a VPS existente, com NGINX Proxy Manager.
-# Docker Standalone. Imagens verificadas do commit 590d739.
+# Docker Standalone. Imagens verificadas do commit 4ca34c5.
 # Mantenha as variaveis e chaves existentes no Portainer; nao gere novas senhas.
 # Lista de variaveis: portainer.env.example (o .env.example e para desenvolvimento).
 # Antes do redeploy: backup, migrations, copia e verificacao dos arquivos.
@@ -64,7 +64,7 @@ services:
       retries: 10
 
   migrator:
-    image: ghcr.io/borges-br/peanutos/peanut-migrator:sha-590d739
+    image: ghcr.io/borges-br/peanutos/peanut-migrator:sha-4ca34c5
     container_name: peanut-migrator
     restart: "no"
     environment:
@@ -78,7 +78,7 @@ services:
   # Confere todos os arquivos registrados no banco, sem alterar os objetos.
   # Se a copia ainda nao terminou, API/worker/web ficam bloqueados.
   storage-check:
-    image: ghcr.io/borges-br/peanutos/peanut-api:sha-590d739
+    image: ghcr.io/borges-br/peanutos/peanut-api:sha-4ca34c5
     container_name: peanut-storage-check
     restart: "no"
     command: ["node", "scripts/migrate-storage.cjs", "--source=verify", "--report=/tmp/storage-verification.json"]
@@ -95,7 +95,7 @@ services:
         condition: service_completed_successfully
 
   api:
-    image: ghcr.io/borges-br/peanutos/peanut-api:sha-590d739
+    image: ghcr.io/borges-br/peanutos/peanut-api:sha-4ca34c5
     container_name: peanut-api
     restart: unless-stopped
     environment:
@@ -127,7 +127,7 @@ services:
       retries: 4
 
   worker:
-    image: ghcr.io/borges-br/peanutos/peanut-worker:sha-590d739
+    image: ghcr.io/borges-br/peanutos/peanut-worker:sha-4ca34c5
     container_name: peanut-worker
     restart: unless-stopped
     environment:
@@ -147,7 +147,7 @@ services:
         condition: service_completed_successfully
 
   web:
-    image: ghcr.io/borges-br/peanutos/peanut-web:sha-590d739
+    image: ghcr.io/borges-br/peanutos/peanut-web:sha-4ca34c5
     container_name: peanut-web
     restart: unless-stopped
     environment:
