@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { calendarDateKey, dateKey, zonedDateTime } from '@peanut/utils';
 import { randomUUID } from 'node:crypto';
+import { recurringAddonItems } from './contract-items';
 
 export class ContractBillingError extends Error {}
 const fail = (message: string): never => { throw new ContractBillingError(message); };
@@ -36,8 +37,8 @@ export function contractBillingDates(contract: { billingDay: number; billingIssu
   return { scheduledFor, dueDate: new Date(`${dueKey}T00:00:00.000Z`) };
 }
 
-export function recurringBaseItems(contract: { monthlyAmountCents: number; title: string; lineItems: Array<{ description: string; quantity: Prisma.Decimal; unitPriceCents: number; recurring: boolean }> }) {
-  const recurring = contract.lineItems.filter(item => item.recurring);
+export function recurringBaseItems(contract: { monthlyAmountCents: number; title: string; lineItems: Array<{ description: string; quantity: Prisma.Decimal; unitPriceCents: number; recurring: boolean; billingRole?: string }> }) {
+  const recurring = contract.lineItems.filter(item => item.recurring && item.billingRole !== 'ADDON');
   if (!recurring.length) return [{ type: 'SERVICE', description: contract.title, quantity: new Prisma.Decimal(1), unit: 'MÊS', unitPrice: new Prisma.Decimal(contract.monthlyAmountCents).div(100), billingKind: 'BASE' }];
   const sum = recurring.reduce((total, item) => total.add(new Prisma.Decimal(item.quantity).mul(item.unitPriceCents).toDecimalPlaces(0)), new Prisma.Decimal(0));
   if (!sum.equals(contract.monthlyAmountCents)) return fail('A soma dos itens fixos deve corresponder à mensalidade. Ajuste o contrato antes de preparar a competência.');
@@ -59,6 +60,8 @@ export function invoiceAmounts(items: Array<any>, discount: Prisma.Decimal.Value
     return {
       type: item.type || 'SERVICE', description: item.description, quantity, unit: item.unit || 'UN', unitPrice, unitCost, totalPrice, totalCost, sortOrder: index,
       billingKind: item.billingKind || 'EXTRA', sourceTicketId: item.sourceTicketId || null, sourceServiceOrderId: item.sourceServiceOrderId || null,
+      sourceContractLineItemId: item.billingKind === 'RECURRING' ? item.sourceContractLineItemId : null,
+      recurrenceSnapshot: item.billingKind === 'RECURRING' && item.recurrenceSnapshot ? item.recurrenceSnapshot : Prisma.JsonNull,
     };
   });
   const discountAmount = new Prisma.Decimal(discount).toDecimalPlaces(2);
@@ -71,6 +74,8 @@ async function lockContract(tx: Prisma.TransactionClient, id: string, workspaceI
   await tx.$queryRaw`SELECT id FROM contracts WHERE id = ${id}::uuid AND "workspaceId" = ${workspaceId}::uuid FOR UPDATE`;
 }
 async function lockInvoice(tx: Prisma.TransactionClient, id: string, workspaceId: string) {
+  const source = await tx.invoice.findFirst({ where: { id, workspaceId }, select: { contractId: true } });
+  if (source?.contractId) await lockContract(tx, source.contractId, workspaceId);
   await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${id}::uuid AND "workspaceId" = ${workspaceId}::uuid FOR UPDATE`;
 }
 
@@ -88,7 +93,7 @@ export async function prepareContractPeriod(db: BillingDb, contractId: string, w
     if (contract.currency !== 'BRL') return fail('A emissão de faturas recorrentes atualmente aceita contratos em BRL.');
     const dates = contractBillingDates(contract, period, zone);
     if (contract.endDate && dateKey(dates.scheduledFor, zone) > calendarDateKey(contract.endDate, zone)) return fail('A data de emissão está após o fim do contrato. Ajuste a programação.');
-    const amounts = invoiceAmounts(recurringBaseItems(contract));
+    const amounts = invoiceAmounts([...recurringBaseItems(contract), ...recurringAddonItems(contract, period, zone)]);
     const invoice = await tx.invoice.create({ data: {
       workspaceId, clientId: contract.clientId, clientName: contract.client.tradeName || contract.client.legalName,
       clientDocument: contract.client.document, clientEmail: contract.client.email, clientPhone: contract.client.phone,
@@ -121,16 +126,16 @@ export async function updateContractInvoice(db: BillingDb, invoiceId: string, wo
     const invoice = await tx.invoice.findFirst({ where: { id: invoiceId, workspaceId }, include: { items: { orderBy: { sortOrder: 'asc' } }, billingScheduleEvent: true } });
     if (!invoice?.billingScheduleEvent) return fail('Cobrança mensal não encontrada.');
     if (invoice.status !== 'DRAFT') return fail('Apenas cobranças em rascunho podem ser editadas.');
-    let base: Array<any> = invoice.items.filter(item => item.billingKind === 'BASE');
+    let base: Array<any> = invoice.items.filter(item => ['BASE', 'RECURRING'].includes(item.billingKind || ''));
     if (input.refreshBase) {
-      const agreement = await tx.contract.findUniqueOrThrow({ where: { id: invoice.contractId! }, include: { lineItems: { orderBy: { createdAt: 'asc' } } } });
-      base = recurringBaseItems(agreement);
+      const agreement = await tx.contract.findUniqueOrThrow({ where: { id: invoice.contractId! }, include: { workspace: true, lineItems: { orderBy: { createdAt: 'asc' } } } });
+      base = [...recurringBaseItems(agreement), ...recurringAddonItems(agreement, invoice.billingScheduleEvent.periodKey, agreement.workspace.timeZone)];
     }
     const incoming = input.items || invoice.items;
-    const incomingBase = incoming.filter((item: any) => item.billingKind === 'BASE');
-    const signature = (items: Array<any>) => JSON.stringify(items.map(item => [item.description, new Prisma.Decimal(item.quantity).toString(), new Prisma.Decimal(item.unitPrice).toString(), item.type, item.unit]));
-    if (!input.refreshBase && signature(base) !== signature(incomingBase)) return fail('Os itens fixos são uma cópia da mensalidade. Edite somente os adicionais desta competência.');
-    const extras = incoming.filter((item: any) => item.billingKind !== 'BASE').map((item: any) => ({ ...item, billingKind: 'EXTRA' }));
+    const incomingBase = incoming.filter((item: any) => ['BASE', 'RECURRING'].includes(item.billingKind));
+    const signature = (items: Array<any>) => JSON.stringify(items.map(item => [item.billingKind, item.sourceContractLineItemId || null, item.description, new Prisma.Decimal(item.quantity).toString(), new Prisma.Decimal(item.unitPrice).toString(), item.type, item.unit, new Prisma.Decimal(item.unitCost || 0).toString()]));
+    if (!input.refreshBase && signature(base) !== signature(incomingBase)) return fail('Os itens fixos e recorrentes são cópias do contrato. Edite somente os pontuais desta competência.');
+    const extras = incoming.filter((item: any) => !['BASE', 'RECURRING'].includes(item.billingKind)).map((item: any) => ({ ...item, billingKind: 'EXTRA' }));
     await validateSources(tx, extras, workspaceId, invoice.clientId);
     const amounts = invoiceAmounts([...base, ...extras], input.discountAmount ?? invoice.discountAmount);
     const dueDate = input.dueDate ? new Date(input.dueDate) : invoice.dueDate;
@@ -142,7 +147,7 @@ export async function updateContractInvoice(db: BillingDb, invoiceId: string, wo
     if (issueKey < calendarDateKey(contract.startDate, zone) || (contract.endDate && issueKey > calendarDateKey(contract.endDate, zone))) return fail('Data de emissão fora da vigência do contrato.');
     if (calendarDateKey(dueDate, zone) < issueKey) return fail('O vencimento não pode ser anterior à emissão.');
     await tx.invoiceItem.deleteMany({ where: { invoiceId } });
-    await tx.billingScheduleEvent.update({ where: { id: invoice.billingScheduleEvent.id }, data: { approvedAt: null, approvedById: null, scheduledFor, amountCents: Math.round(Number(amounts.totals.totalAmount) * 100), ...(input.emailRecipients !== undefined ? { emailRecipients: input.emailRecipients } : {}) } });
+    await tx.billingScheduleEvent.update({ where: { id: invoice.billingScheduleEvent.id }, data: { approvedAt: null, approvedById: null, ...(input.refreshBase ? { needsRecurringRefresh: false } : {}), scheduledFor, amountCents: Math.round(Number(amounts.totals.totalAmount) * 100), ...(input.emailRecipients !== undefined ? { emailRecipients: input.emailRecipients } : {}) } });
     return tx.invoice.update({ where: { id: invoiceId }, data: { ...amounts.totals, dueDate, issueDate: scheduledFor, paymentMethod: input.paymentMethod ?? invoice.paymentMethod, pixKey: input.pixKey !== undefined ? input.pixKey : invoice.pixKey, observations: input.observations !== undefined ? input.observations : invoice.observations, discountReason: input.discountReason !== undefined ? input.discountReason : invoice.discountReason, items: { create: amounts.rows } }, include: { items: { orderBy: { sortOrder: 'asc' } }, billingScheduleEvent: true } });
   });
 }
@@ -153,6 +158,7 @@ export async function approveContractInvoice(db: BillingDb, invoiceId: string, w
     const invoice = await tx.invoice.findFirst({ where: { id: invoiceId, workspaceId }, include: { items: true, billingScheduleEvent: { include: { contract: { include: { workspace: true } } } } } });
     const event = invoice?.billingScheduleEvent;
     if (!invoice || !event || invoice.status !== 'DRAFT') return fail('Somente uma cobrança mensal em rascunho pode ser agendada.');
+    if (event.needsRecurringRefresh) return fail('Os itens do contrato mudaram. Atualize os itens recorrentes deste rascunho antes de conferir.');
     if (!contractCoversPeriod(event.contract, event.periodKey, event.contract.workspace.timeZone)) return fail('O contrato não está ativo nesta competência.');
     if (!invoice.items.length || Number(invoice.totalAmount) <= 0) return fail('Revise os itens e o valor da cobrança antes de agendar.');
     if (event.contract.billingAutoEmail && !event.emailRecipients.length) return fail('Informe os emails dos destinatários antes de agendar.');
@@ -169,6 +175,7 @@ export async function issueContractInvoice(db: BillingDb, invoiceId: string, wor
     if (!invoice || !event) return fail('Cobrança mensal não encontrada.');
     if (invoice.status !== 'DRAFT') return invoice;
     if (!event.approvedAt) return fail('Confira e agende esta competência antes de emitir.');
+    if (event.needsRecurringRefresh) return fail('Atualize os itens recorrentes e confira novamente esta competência.');
     if (event.scheduledFor > now) return fail('A data programada de emissão ainda não chegou.');
     if (automatic && !event.contract.billingAutoIssue) return fail('Emissão automática desativada no contrato.');
     const zone = event.contract.workspace.timeZone;

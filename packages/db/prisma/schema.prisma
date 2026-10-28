@@ -693,6 +693,9 @@ model InvoiceItem {
   billingKind String? @db.VarChar(20)
   sourceTicketId String? @db.Uuid
   sourceServiceOrderId String? @db.Uuid
+  // Copied provenance; intentionally survives removal of the original rule.
+  sourceContractLineItemId String? @db.Uuid
+  recurrenceSnapshot Json?
 
   // Relationships
   sourceTicket Ticket? @relation("InvoiceItemTicket", fields: [sourceTicketId], references: [id], onDelete: SetNull)
@@ -764,6 +767,11 @@ model ContractLineItem {
   unitPriceCents  Int
   totalPriceCents Int
   recurring       Boolean              @default(true)
+  billingRole     String               @default("BASE") @db.VarChar(20)
+  startsOn        DateTime?            @db.Date
+  endsOn          DateTime?            @db.Date
+  endMode         String               @default("CONTRACT") @db.VarChar(20)
+  proration       String               @default("NONE") @db.VarChar(20)
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
@@ -811,6 +819,7 @@ model BillingScheduleEvent {
   invoiceId    String?               @unique @db.Uuid
   approvedAt   DateTime?
   approvedById String?               @db.Uuid
+  needsRecurringRefresh Boolean      @default(false)
   emailRecipients String[]           @default([])
   emailStatus  String                @default("NOT_REQUESTED") @db.VarChar(30)
   emailAcceptedRecipients String[]   @default([])

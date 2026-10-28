@@ -2,7 +2,7 @@
 
 ## Fluxo implementado
 
-Cada contrato recorrente ativo pode originar uma fatura por competência (`AAAA-MM`). A fatura contém os itens fixos da mensalidade e os serviços/materiais adicionais **somente daquele mês**. Os adicionais não são copiados para a competência seguinte nem alteram o contrato. Chamado e O.S. são vínculos opcionais, validados contra o mesmo cliente e workspace.
+Cada contrato recorrente ativo pode originar uma fatura por competência (`AAAA-MM`). A cobrança reúne a mensalidade fixa, os adicionais recorrentes vigentes e os serviços/materiais pontuais **somente daquele mês**. Somente os pontuais deixam de ser copiados para a competência seguinte. Chamado e O.S. são vínculos opcionais dos pontuais, validados contra o mesmo cliente e workspace.
 
 O worker prepara o mês vigente em rascunho. Também é possível preparar uma competência futura na aba **Contrato > Recorrência**. A pessoa responsável inclui adicionais, confere a prévia e usa **Conferir e agendar**. Toda edição posterior do rascunho desfaz essa conferência.
 
@@ -24,19 +24,34 @@ Nenhum contrato antigo é ativado para emissão ou email automático pela migra�
 ## Regras comerciais
 
 - A mensalidade cadastrada é o valor fixo acordado. Sem itens recorrentes detalhados, vira uma linha de mensalidade. Se houver itens fixos detalhados, sua soma precisa coincidir com a mensalidade antes de preparar o mês.
-- Os valores fixos são copiados para a fatura, identificados como mensalidade e protegidos na edição de itens. Alterar o contrato não muda competências já preparadas. **Atualizar mensalidade do contrato**, na fatura em rascunho, permite recopiá-los explicitamente, preservando os adicionais e exigindo nova conferência.
+- Os valores fixos e adicionais recorrentes são copiados para a fatura e protegidos na edição de itens. Alterar suas regras, a mensalidade ou a vigência do contrato sinaliza os rascunhos como desatualizados, remove sua conferência e impede a emissão até a atualização. **Atualizar itens recorrentes**, na fatura em rascunho, refaz essas cópias, preserva os pontuais e exige nova conferência. Faturas emitidas permanecem intactas.
 - Quantidades e preços aceitam até duas casas decimais. Totais e descontos são recalculados no servidor com `Prisma.Decimal`. Custos de materiais permanecem internos.
 - A emissão e o vencimento têm dias separados. Dias 29–31 são limitados ao último dia do mês. Se o vencimento preceder a emissão, ele passa ao mês seguinte. A primeira emissão não antecede o início do contrato.
-- A cobrança precisa pertencer à vigência contratual. Suspensão, cancelamento ou término de vigência impedem a emissão automática. Não há renovação contratual, reajuste ou cobrança proporcional automáticos nesta versão. O primeiro mês pode ser ajustado por desconto explícito antes da conferência.
+- A cobrança precisa pertencer à vigência contratual. Suspensão, cancelamento ou término de vigência impedem a emissão automática. Não há renovação contratual ou reajuste automático. A mensalidade fixa não recebe rateio automático; pode ser ajustada por desconto explícito antes da conferência. Os adicionais recorrentes têm sua própria opção de rateio, descrita abaixo.
 - A periodicidade financeira deste fluxo é mensal. O campo legado de modalidade de renovação não transforma a cobrança em anual; renovação da vigência e frequência de faturamento são conceitos separados.
 - Faturas emitidas têm conteúdo protegido. O primeiro conjunto de dados usado para gerar o PDF é congelado, inclusive em jobs concorrentes. Novas prévias e regenerações usam esse mesmo conteúdo.
 - Uma competência cancelada/ignorada não é recriada pelo worker. Previsões antigas já marcadas como faturadas, mas sem referência à fatura, exigem revisão manual antes de qualquer nova cobrança.
 - O sistema não associa automaticamente faturas históricas manuais às novas competências. Antes de habilitar a automação, confira o último mês já faturado e prepare o primeiro mês ainda não cobrado. Rascunhos não conferidos não serão enviados.
 
+## Adicionais recorrentes com vigência e rateio
+
+Em **Contrato > Itens**, escolha entre **Incluído na mensalidade** (detalhamento do valor fixo) e **Adicional recorrente** (somado ao valor fixo). Cada adicional tem início, quantidade, preço mensal e término por data, até o fim do contrato ou sem término próprio. Mesmo sem término próprio, a cobrança respeita a vigência do contrato.
+
+O usuário escolhe por item:
+
+- **Valor integral, sem rateio**: cobra o valor mensal completo em cada competência com pelo menos um dia de vigência.
+- **Proporcional aos dias de vigência**: cobra o valor mensal multiplicado pelos dias vigentes, dividido pelos dias reais daquele mês. Início e término contam, inclusive. O cálculo usa datas de calendário, considera fevereiro e anos bissextos e arredonda o resultado final em centavos.
+
+Exemplo: adicional de R$ 310,00 iniciado em 16 de outubro, com vigência até novembro. Outubro tem 16 dias vigentes de 31: com rateio cobra R$ 160,00; sem rateio cobra R$ 310,00. Um término em 15 de novembro resulta em 15/30 do valor com rateio, ou no valor integral sem rateio.
+
+A fatura e seu PDF mostram a classificação, o período e o demonstrativo do rateio. Quando há proporcionalidade parcial, a linha representa uma cobrança mensal agregada de quantidade 1, preservando no demonstrativo a quantidade e o valor unitário originais. Isso evita arredondar o preço proporcional de cada unidade antes de multiplicar.
+
+Os itens antigos permanecem classificados como incluídos na mensalidade. Para transformar um deles em adicional, use **Editar** e altere a classificação, sem recadastrar. Depois atualize os itens recorrentes dos rascunhos existentes e confira novamente. Nenhuma reclassificação de registros antigos acontece automaticamente.
+
 ## Ativação no servidor
 
 1. Preserve banco e arquivos conforme o [guia de armazenamento](storage-migration.md). Publique/construa as imagens novas de API, worker, web e migrator com a mesma versão. O runtime agora exige Node.js 20 ou superior, conforme as imagens Docker existentes.
-2. Aplique as migrations antes de iniciar os novos processos. A migration `20261027010000_contract_monthly_billing` adiciona configuração financeira, vínculo fatura/competência, classificação dos itens, fontes opcionais e controle do envio. Dados antigos são preservados.
+2. Aplique as migrations antes de iniciar os novos processos. A migration `20261027010000_contract_monthly_billing` adiciona configuração financeira, vínculo fatura/competência, classificação dos itens, fontes opcionais e controle do envio. A migration `20261028000000_recurring_addon_validity` adiciona classificação dos itens do contrato, vigência, opção de rateio, cópia da regra na fatura e controle de atualização dos rascunhos. Dados antigos são preservados; a mensalidade e as faturas emitidas não são recalculadas.
 3. Confirme o volume de arquivos compartilhado, PostgreSQL, Redis, Chromium/Playwright e o worker. Além das filas existentes, passa a existir `contract-billing`, consultada a cada minuto. Os alertas usam o intervalo definido em Configurações > Operação; as operações são idempotentes.
 4. Aplique também a migration `20261027020000_workspace_operational_settings`. Configure servidor, porta, TLS, usuário, senha e remetente em **Configurações > Integrações > Servidor de email (SMTP)**. Somente OWNER/ADMIN podem acessar. API e worker precisam da mesma chave mestra `APP_ENCRYPTION_KEY`. Na porta 587 use STARTTLS; na 465 use TLS direto. Certificados inválidos não são liberados. O remetente/domínio precisam estar autorizados pelo provedor. Salve e teste a conexão: o teste não envia mensagem nem comprova entrega. Depois, ative o envio. As alterações valem para os próximos processamentos, sem reiniciar. Para credenciais antigas, siga o [guia de importação](workspace-settings.md).
 

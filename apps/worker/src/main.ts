@@ -765,6 +765,7 @@ const pdfWorker = new Worker(
       items: sourceItems.map((item: any) => ({
         type: item.type,
         billingKind: item.billingKind,
+        billingNote: (item.recurrenceSnapshot as any)?.note || null,
         description: item.description,
         quantity: item.quantity.toString(),
         unit: item.unit,

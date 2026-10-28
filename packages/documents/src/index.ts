@@ -227,6 +227,7 @@ export interface RenderA4DocumentParams {
     items: Array<{
       type: string;
       billingKind?: string | null;
+      billingNote?: string | null;
       description: string;
       quantity: string;
       unit: string;
@@ -467,7 +468,8 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: left;">
         <strong style="color: #1e293b; font-size: 9.5pt; display: block;">${escapeHtml(item.description)}</strong>
-        ${item.billingKind ? `<span style="font-size: 7pt; color: #64748b;">${item.billingKind === 'BASE' ? 'Mensalidade contratada' : 'Adicional desta competência'}</span>` : ''}
+        ${item.billingKind && !item.billingNote ? `<span style="font-size: 7pt; color: #64748b;">${item.billingKind === 'BASE' ? 'Mensalidade contratada' : item.billingKind === 'RECURRING' ? 'Adicional recorrente' : 'Adicional desta competência'}</span>` : ''}
+        ${item.billingNote ? `<span style="display: block; font-family: sans-serif; font-size: 7.5pt; line-height: 1.25; color: #64748b;">Adicional recorrente · ${escapeHtml(item.billingNote)}</span>` : ''}
         ${showItemTypeLabel ? `<span style="font-size: 7.5pt; color: #64748b;">${itemTypeLabel}</span>` : ''}
       </td>
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569;">${escapeHtml(item.quantity)}</td>

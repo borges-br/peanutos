@@ -129,6 +129,7 @@ export class InvoicesService {
         unitCost: null,
         totalPrice: null,
         totalCost: null,
+        recurrenceSnapshot: null,
       }));
     }
 
@@ -919,6 +920,7 @@ export class InvoicesService {
       items: invoice.items.map((item) => ({
         type: item.type,
         billingKind: item.billingKind,
+        billingNote: (item.recurrenceSnapshot as any)?.note || null,
         description: item.description,
         quantity: item.quantity.toString(),
         unit: item.unit,

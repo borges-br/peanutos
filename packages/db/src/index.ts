@@ -15,4 +15,5 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export * from '@prisma/client';
 export * from './contract-billing';
+export * from './contract-items';
 export * from './email-settings';

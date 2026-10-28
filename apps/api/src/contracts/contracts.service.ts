@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from "@nestjs/common";
-import { prisma, ContractStatus, ContractType, prepareContractPeriod, ContractBillingError } from "@peanut/db";
+import { prisma, ContractStatus, ContractType, prepareContractPeriod, ContractBillingError, saveContractLineItem, removeContractLineItem } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
 import {
@@ -341,109 +341,105 @@ export class ContractsService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    const contract = await prisma.contract.findFirst({
-      where: { id, workspaceId },
-    });
-
-    if (!contract) {
-      throw new NotFoundException("Contrato não encontrado");
-    }
-
-    this.validateBillingSettings({ ...contract, ...input });
-    if (input.clientId && input.clientId !== contract.clientId) {
-      throw new BadRequestException('O cliente de um contrato existente não pode ser alterado. Crie outro contrato.');
-    }
-    const start = input.startDate ? new Date(input.startDate) : contract.startDate;
-    const end = input.endDate !== undefined ? (input.endDate ? new Date(input.endDate) : null) : contract.endDate;
-    if (end && end < start) throw new BadRequestException('O término não pode ser anterior ao início.');
-    const before = { ...contract };
-
-    // Check active subscription overlap if updating status or type to active recurring
-    const nextStatus = input.status || contract.status;
-    const nextType = input.type || contract.type;
-    const nextClient = input.clientId || contract.clientId;
-
-    if (
-      nextStatus === "ACTIVE" &&
-      ["RECURRING_SUPPORT", "HYBRID"].includes(nextType) &&
-      (contract.status !== "ACTIVE" ||
-        contract.type !== nextType ||
-        contract.clientId !== nextClient)
-    ) {
-      await this.checkOverlap(workspaceId, nextClient, id);
-    }
-
-    if (input.slaPolicyId) {
-      const policy = await prisma.slaPolicy.findFirst({
-        where: { id: input.slaPolicyId, workspaceId, active: true },
+    return prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM contracts WHERE id = ${id}::uuid AND "workspaceId" = ${workspaceId}::uuid FOR UPDATE`;
+      const contract = await tx.contract.findFirst({
+        where: { id, workspaceId },
       });
-      if (!policy) {
-        throw new BadRequestException("Política de SLA não encontrada");
+
+      if (!contract) {
+        throw new NotFoundException("Contrato não encontrado");
       }
-    }
 
-    const data: any = {};
-    if (input.title) data.title = input.title;
-    if (input.description !== undefined) data.description = input.description;
-    if (input.status) data.status = input.status as any;
-    if (input.type) data.type = input.type as any;
-    if (input.startDate) data.startDate = new Date(input.startDate);
-    if (input.endDate !== undefined)
-      data.endDate = input.endDate ? new Date(input.endDate) : null;
-    if (input.renewalMode) data.renewalMode = input.renewalMode as any;
-    if (input.billingDay !== undefined) data.billingDay = input.billingDay;
-    if (input.monthlyAmountCents !== undefined)
-      data.monthlyAmountCents = input.monthlyAmountCents;
-    if (input.currency) data.currency = input.currency;
-    if (input.slaPolicyId !== undefined) data.slaPolicyId = input.slaPolicyId;
-    if (input.maxUsers !== undefined) data.maxUsers = input.maxUsers;
-    if (input.maxAssets !== undefined) data.maxAssets = input.maxAssets;
-    if (input.includedRemoteTickets !== undefined)
-      data.includedRemoteTickets = input.includedRemoteTickets;
-    if (input.includedOnsiteVisits !== undefined)
-      data.includedOnsiteVisits = input.includedOnsiteVisits;
-    if (input.includedRemoteHours !== undefined)
-      data.includedRemoteHours = input.includedRemoteHours;
-    if (input.includedOnsiteHours !== undefined)
-      data.includedOnsiteHours = input.includedOnsiteHours;
-    if (input.notes !== undefined) data.notes = input.notes;
+      this.validateBillingSettings({ ...contract, ...input });
+      if (input.clientId && input.clientId !== contract.clientId) {
+        throw new BadRequestException('O cliente de um contrato existente não pode ser alterado. Crie outro contrato.');
+      }
+      const start = input.startDate ? new Date(input.startDate) : contract.startDate;
+      const end = input.endDate !== undefined ? (input.endDate ? new Date(input.endDate) : null) : contract.endDate;
+      if (end && end < start) throw new BadRequestException('O término não pode ser anterior ao início.');
+      const before = { ...contract };
 
-    for (const field of ['billingIssueDay', 'billingIssueTime', 'billingAutoIssue', 'billingAutoEmail', 'billingEmailRecipients', 'billingWhatsappNumbers', 'billingPaymentMethod', 'billingPixKey'] as const) {
-      if (input[field] !== undefined) data[field] = input[field];
-    }
-    if (data.billingEmailRecipients) data.billingEmailRecipients = [...new Set(data.billingEmailRecipients.map((email: string) => email.toLowerCase()))];
-    const updatedContract = await prisma.contract.update({
-      where: { id },
-      data,
+      // Check active subscription overlap if updating status or type to active recurring
+      const nextStatus = input.status || contract.status;
+      const nextType = input.type || contract.type;
+      const nextClient = input.clientId || contract.clientId;
+
+      if (
+        nextStatus === "ACTIVE" &&
+        ["RECURRING_SUPPORT", "HYBRID"].includes(nextType) &&
+        (contract.status !== "ACTIVE" ||
+          contract.type !== nextType ||
+          contract.clientId !== nextClient)
+      ) {
+        await this.checkOverlap(workspaceId, nextClient, id);
+      }
+
+      if (input.slaPolicyId) {
+        const policy = await tx.slaPolicy.findFirst({
+          where: { id: input.slaPolicyId, workspaceId, active: true },
+        });
+        if (!policy) {
+          throw new BadRequestException("Política de SLA não encontrada");
+        }
+      }
+
+      const data: any = {};
+      if (input.title) data.title = input.title;
+      if (input.description !== undefined) data.description = input.description;
+      if (input.status) data.status = input.status as any;
+      if (input.type) data.type = input.type as any;
+      if (input.startDate) data.startDate = new Date(input.startDate);
+      if (input.endDate !== undefined)
+        data.endDate = input.endDate ? new Date(input.endDate) : null;
+      if (input.renewalMode) data.renewalMode = input.renewalMode as any;
+      if (input.billingDay !== undefined) data.billingDay = input.billingDay;
+      if (input.monthlyAmountCents !== undefined)
+        data.monthlyAmountCents = input.monthlyAmountCents;
+      if (input.currency) data.currency = input.currency;
+      if (input.slaPolicyId !== undefined) data.slaPolicyId = input.slaPolicyId;
+      if (input.maxUsers !== undefined) data.maxUsers = input.maxUsers;
+      if (input.maxAssets !== undefined) data.maxAssets = input.maxAssets;
+      if (input.includedRemoteTickets !== undefined)
+        data.includedRemoteTickets = input.includedRemoteTickets;
+      if (input.includedOnsiteVisits !== undefined)
+        data.includedOnsiteVisits = input.includedOnsiteVisits;
+      if (input.includedRemoteHours !== undefined)
+        data.includedRemoteHours = input.includedRemoteHours;
+      if (input.includedOnsiteHours !== undefined)
+        data.includedOnsiteHours = input.includedOnsiteHours;
+      if (input.notes !== undefined) data.notes = input.notes;
+
+      for (const field of ['billingIssueDay', 'billingIssueTime', 'billingAutoIssue', 'billingAutoEmail', 'billingEmailRecipients', 'billingWhatsappNumbers', 'billingPaymentMethod', 'billingPixKey'] as const) {
+        if (input[field] !== undefined) data[field] = input[field];
+      }
+      if (data.billingEmailRecipients) data.billingEmailRecipients = [...new Set(data.billingEmailRecipients.map((email: string) => email.toLowerCase()))];
+      const updatedContract = await tx.contract.update({
+        where: { id },
+        data,
+      });
+
+      const affectsRecurringItems = ['title', 'startDate', 'endDate', 'monthlyAmountCents', 'currency'].some(field => field in data && JSON.stringify(data[field]) !== JSON.stringify((contract as any)[field]));
+      if (affectsRecurringItems) await tx.billingScheduleEvent.updateMany({ where: { contractId: id, workspaceId, invoice: { status: 'DRAFT' } }, data: { approvedAt: null, approvedById: null, needsRecurringRefresh: true } });
+
+      // Write ContractHistory record
+      await tx.contractHistory.create({
+        data: {
+          workspaceId,
+          contractId: id,
+          actorUserId,
+          event: "CONTRACT_UPDATED",
+          description: "Contrato atualizado",
+          before: JSON.stringify(before),
+          after: JSON.stringify(updatedContract),
+        },
+      });
+
+      await tx.auditLog.create({ data: { workspaceId, actorUserId, action: 'contract.updated', entityType: 'CONTRACT', entityId: id,
+        beforeJson: JSON.stringify(before), afterJson: JSON.stringify(updatedContract), ipAddress, userAgent, severity: 'INFO' } });
+
+      return updatedContract;
     });
-
-    // Write ContractHistory record
-    await prisma.contractHistory.create({
-      data: {
-        workspaceId,
-        contractId: id,
-        actorUserId,
-        event: "CONTRACT_UPDATED",
-        description: "Contrato atualizado",
-        before: JSON.stringify(before),
-        after: JSON.stringify(updatedContract),
-      },
-    });
-
-    // Audit Log
-    await this.auditService.log({
-      workspaceId,
-      actorUserId,
-      action: "contract.updated",
-      entityType: "CONTRACT",
-      entityId: id,
-      before,
-      after: updatedContract,
-      ipAddress,
-      userAgent,
-    });
-
-    return updatedContract;
   }
 
   /**
@@ -524,208 +520,24 @@ export class ContractsService {
     return updatedContract;
   }
 
-  // --- CONTRACT LINE ITEMS CRUD ---
-
-  /**
-   * Add a service item line to a contract.
-   */
-  async addLineItem(
-    contractId: string,
-    input: ContractLineItemCreateInput,
-    workspaceId: string,
-    actorUserId: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ) {
-    const contract = await prisma.contract.findFirst({
-      where: { id: contractId, workspaceId },
-    });
-
-    if (!contract) {
-      throw new NotFoundException("Contrato não encontrado");
+  // Line-item changes and stale draft approval invalidation are atomic.
+  private lineItemError(error: unknown): never {
+    if (error instanceof ContractBillingError) {
+      if (error.message.includes('não encontrado')) throw new NotFoundException(error.message);
+      throw new BadRequestException(error.message);
     }
-
-    // Recalculate price on backend
-    const totalPriceCents = Math.round(
-      Number(input.quantity) * input.unitPriceCents,
-    );
-
-    const newLineItem = await prisma.contractLineItem.create({
-      data: {
-        workspaceId,
-        contractId,
-        description: input.description,
-        itemType: input.itemType as any,
-        quantity: input.quantity,
-        unitPriceCents: input.unitPriceCents,
-        totalPriceCents,
-        recurring: input.recurring,
-      },
-    });
-
-    // Write ContractHistory record
-    await prisma.contractHistory.create({
-      data: {
-        workspaceId,
-        contractId,
-        actorUserId,
-        event: "LINE_ITEM_ADDED",
-        description: `Item adicionado: ${newLineItem.description} (Valor Total: ${newLineItem.totalPriceCents / 100})`,
-        after: JSON.stringify(newLineItem),
-      },
-    });
-
-    // Audit Log
-    await this.auditService.log({
-      workspaceId,
-      actorUserId,
-      action: "contract.line_item_added",
-      entityType: "CONTRACT",
-      entityId: contractId,
-      after: newLineItem,
-      ipAddress,
-      userAgent,
-    });
-
-    return newLineItem;
+    throw error;
   }
-
-  /**
-   * Edit a line item.
-   */
-  async updateLineItem(
-    contractId: string,
-    lineItemId: string,
-    input: Partial<ContractLineItemCreateInput>,
-    workspaceId: string,
-    actorUserId: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ) {
-    const contract = await prisma.contract.findFirst({
-      where: { id: contractId, workspaceId },
-    });
-
-    if (!contract) {
-      throw new NotFoundException("Contrato não encontrado");
-    }
-
-    const item = await prisma.contractLineItem.findFirst({
-      where: { id: lineItemId, contractId },
-    });
-
-    if (!item) {
-      throw new NotFoundException("Item do contrato não encontrado");
-    }
-
-    const before = { ...item };
-
-    const data: any = {};
-    if (input.description) data.description = input.description;
-    if (input.itemType) data.itemType = input.itemType as any;
-    if (input.quantity !== undefined) data.quantity = input.quantity;
-    if (input.unitPriceCents !== undefined)
-      data.unitPriceCents = input.unitPriceCents;
-    if (input.recurring !== undefined) data.recurring = input.recurring;
-
-    // Recalculate price on backend
-    const finalQuantity =
-      input.quantity !== undefined ? input.quantity : item.quantity;
-    const finalUnitPrice =
-      input.unitPriceCents !== undefined
-        ? input.unitPriceCents
-        : item.unitPriceCents;
-    data.totalPriceCents = Math.round(Number(finalQuantity) * finalUnitPrice);
-
-    const updatedItem = await prisma.contractLineItem.update({
-      where: { id: lineItemId },
-      data,
-    });
-
-    // Write ContractHistory record
-    await prisma.contractHistory.create({
-      data: {
-        workspaceId,
-        contractId,
-        actorUserId,
-        event: "LINE_ITEM_UPDATED",
-        description: `Item atualizado: ${updatedItem.description}`,
-        before: JSON.stringify(before),
-        after: JSON.stringify(updatedItem),
-      },
-    });
-
-    // Audit Log
-    await this.auditService.log({
-      workspaceId,
-      actorUserId,
-      action: "contract.line_item_updated",
-      entityType: "CONTRACT",
-      entityId: contractId,
-      before,
-      after: updatedItem,
-      ipAddress,
-      userAgent,
-    });
-
-    return updatedItem;
+  async addLineItem(contractId: string, input: ContractLineItemCreateInput, workspaceId: string, actorUserId: string, ipAddress?: string, userAgent?: string) {
+    try { return await saveContractLineItem(prisma, workspaceId, contractId, input, actorUserId, undefined, { ipAddress, userAgent }); }
+    catch (error) { return this.lineItemError(error); }
   }
-
-  /**
-   * Delete a line item.
-   */
-  async deleteLineItem(
-    contractId: string,
-    lineItemId: string,
-    workspaceId: string,
-    actorUserId: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ) {
-    const contract = await prisma.contract.findFirst({
-      where: { id: contractId, workspaceId },
-    });
-
-    if (!contract) {
-      throw new NotFoundException("Contrato não encontrado");
-    }
-
-    const item = await prisma.contractLineItem.findFirst({
-      where: { id: lineItemId, contractId },
-    });
-
-    if (!item) {
-      throw new NotFoundException("Item do contrato não encontrado");
-    }
-
-    await prisma.contractLineItem.delete({
-      where: { id: lineItemId },
-    });
-
-    // Write ContractHistory record
-    await prisma.contractHistory.create({
-      data: {
-        workspaceId,
-        contractId,
-        actorUserId,
-        event: "LINE_ITEM_REMOVED",
-        description: `Item removido: ${item.description}`,
-        before: JSON.stringify(item),
-      },
-    });
-
-    // Audit Log
-    await this.auditService.log({
-      workspaceId,
-      actorUserId,
-      action: "contract.line_item_deleted",
-      entityType: "CONTRACT",
-      entityId: contractId,
-      before: item,
-      ipAddress,
-      userAgent,
-    });
-
-    return { success: true };
+  async updateLineItem(contractId: string, lineItemId: string, input: Partial<ContractLineItemCreateInput>, workspaceId: string, actorUserId: string, ipAddress?: string, userAgent?: string) {
+    try { return await saveContractLineItem(prisma, workspaceId, contractId, input, actorUserId, lineItemId, { ipAddress, userAgent }); }
+    catch (error) { return this.lineItemError(error); }
+  }
+  async deleteLineItem(contractId: string, lineItemId: string, workspaceId: string, actorUserId: string, ipAddress?: string, userAgent?: string) {
+    try { return await removeContractLineItem(prisma, workspaceId, contractId, lineItemId, actorUserId, { ipAddress, userAgent }); }
+    catch (error) { return this.lineItemError(error); }
   }
 }

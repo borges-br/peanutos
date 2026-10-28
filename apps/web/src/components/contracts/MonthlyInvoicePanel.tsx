@@ -32,7 +32,7 @@ export default function MonthlyInvoicePanel({ invoice, onReload }: { invoice: an
       if (operation === 'save') await apiRequest(`/invoices/${invoice.id}`, { method: 'PATCH', body: JSON.stringify({ scheduledFor: localDateTimeToIso(form.scheduled), dueDate: `${form.dueDate}T00:00:00.000Z`, emailRecipients: form.emails.split(/[\n;,]+/).map((email: string) => email.trim()).filter(Boolean), paymentMethod: form.paymentMethod, pixKey: form.pixKey || null, observations: form.observations || null, discountAmount: Number(form.discountAmount) }) });
       if (operation === 'approve') await apiRequest(`/invoices/${invoice.id}/approve-monthly`, { method: 'POST' });
       if (operation === 'refresh-base') {
-        if (!window.confirm('Atualizar os itens fixos deste rascunho com o contrato atual? Os adicionais serão preservados e a conferência será desfeita.')) return;
+        if (!window.confirm('Atualizar mensalidade e adicionais recorrentes deste rascunho? Os itens pontuais serão preservados e a conferência será desfeita.')) return;
         await apiRequest(`/invoices/${invoice.id}`, { method: 'PATCH', body: JSON.stringify({ refreshBase: true }) });
       }
       if (operation === 'retry') {
@@ -45,8 +45,9 @@ export default function MonthlyInvoicePanel({ invoice, onReload }: { invoice: an
   }
   return <section className="rounded-xl border border-primary/30 bg-surface p-md space-y-md select-text">
     <div className="flex flex-wrap justify-between gap-sm"><h3 className="font-semibold">Cobrança mensal · {event.periodKey}</h3><div className="flex flex-wrap gap-sm items-center"><a href={`/dashboard/contracts/${invoice.contractId}`} className="text-primary underline text-sm">Contrato {event.contract?.number}</a><Button variant="ghost" onClick={onReload} disabled={saving || dirty}>Atualizar situação</Button></div></div>
-    <p className="text-sm text-on-surface-variant">A mensalidade fixa está preservada. Adicione serviços e materiais na aba Itens; eles valem somente para esta competência. Chamado e O.S. são opcionais.</p>
+    <p className="text-sm text-on-surface-variant">A mensalidade e os adicionais recorrentes são copiados do contrato. Adicione os itens pontuais na aba Itens; eles valem somente para esta competência. Chamado e O.S. são opcionais.</p>
     {error && <p role="alert" className="text-error text-sm">{error}</p>}
+    {event.needsRecurringRefresh && invoice.status === 'DRAFT' && <p role="alert" className="text-warning text-sm">Os itens do contrato mudaram. Use Atualizar itens recorrentes, revise os valores e confira novamente.</p>}
     {invoice.status === 'DRAFT' && <>
       <div className="grid md:grid-cols-3 gap-md">
         <Input label={`Emissão/envio (${timeZone})`} type="datetime-local" value={form.scheduled || ''} onChange={value => change('scheduled', value.target.value)} />
@@ -61,8 +62,8 @@ export default function MonthlyInvoicePanel({ invoice, onReload }: { invoice: an
       </div>
       <div className="flex flex-wrap gap-sm">
         <Button onClick={() => action('save')} loading={saving} disabled={saving}>Salvar rascunho</Button>
-        <Button variant="secondary" onClick={() => action('approve')} disabled={saving || dirty || !!event.approvedAt}>Conferir e agendar</Button>
-        <Button variant="ghost" onClick={() => action('refresh-base')} disabled={saving || dirty}>Atualizar mensalidade do contrato</Button>
+        <Button variant="secondary" onClick={() => action('approve')} disabled={saving || dirty || !!event.approvedAt || !!event.needsRecurringRefresh}>Conferir e agendar</Button>
+        <Button variant="ghost" onClick={() => action('refresh-base')} disabled={saving || dirty}>Atualizar itens recorrentes</Button>
         <a className="text-primary underline text-sm self-center" href={`/dashboard/invoices/${invoice.id}/preview`}>Conferir prévia do PDF</a>
       </div>
       <p className="text-xs text-on-surface-variant">{event.approvedAt ? `Conferida em ${formatDateTime(event.approvedAt)}.` : 'Aguardando conferência.'} Qualquer alteração no rascunho exige nova conferência. {event.contract?.billingAutoIssue ? 'A emissão ocorrerá na data programada.' : 'Emissão automática desativada no contrato; use Emitir na data programada.'} {event.contract?.billingAutoEmail ? 'Email automático ativado.' : 'Email automático desativado.'}</p>

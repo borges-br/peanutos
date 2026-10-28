@@ -46,11 +46,11 @@ export default function ContractBillingPanel({ contract, onSaved }: { contract: 
     } catch (cause: any) { setError(cause.message || 'Não foi possível preparar a competência.'); }
     finally { setSaving(false); }
   }
-  const recurring = (contract.lineItems || []).filter((item: any) => item.recurring);
+  const recurring = (contract.lineItems || []).filter((item: any) => item.recurring && item.billingRole !== 'ADDON');
   const sum = recurring.reduce((total: number, item: any) => total + Math.round(Number(item.quantity) * item.unitPriceCents), 0);
   const money = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
   return <div className="space-y-lg">
-    <p className="text-sm text-on-surface-variant">A mensalidade é copiada para cada mês. Serviços e materiais avulsos são adicionados na fatura da competência e não alteram os meses seguintes. O envio por WhatsApp continua manual.</p>
+    <p className="text-sm text-on-surface-variant">A cobrança reúne a mensalidade, os adicionais recorrentes vigentes (com rateio conforme cada item) e os pontuais deste mês. Cadastre ou converta os recorrentes na aba Itens. O envio por WhatsApp continua manual.</p>
     {error && <p role="alert" className="text-error text-sm">{error}</p>}
     {success && <p role="status" className="text-success text-sm">{success}</p>}
     {recurring.length > 0 && sum !== contract.monthlyAmountCents && <p className="text-warning text-sm">Os itens fixos somam {money(sum)}, mas a mensalidade é {money(contract.monthlyAmountCents)}. Ajuste os itens ou a mensalidade antes de preparar o mês.</p>}
@@ -84,7 +84,7 @@ export default function ContractBillingPanel({ contract, onSaved }: { contract: 
       <table className="w-full text-sm text-left"><thead><tr className="border-b border-outline-variant"><th className="p-sm">Competência</th><th className="p-sm">Emissão programada</th><th className="p-sm">Vencimento</th><th className="p-sm">Total</th><th className="p-sm">Conferência / email</th><th className="p-sm">Fatura</th></tr></thead>
         <tbody>{(contract.billingScheduleEvents || []).map((event: any) => <tr key={event.id} className="border-b border-outline-variant/30">
           <td className="p-sm">{event.periodKey}</td><td className="p-sm">{formatDateTime(event.scheduledFor)}</td><td className="p-sm">{event.invoice ? formatCalendarDate(event.invoice.dueDate) : '--'}</td><td className="p-sm">{money(event.amountCents)}</td>
-          <td className="p-sm">{event.status === 'CANCELLED' ? 'Cancelada' : event.approvedAt ? 'Conferida' : 'A conferir'} · {emailLabels[event.emailStatus] || event.status}</td>
+          <td className="p-sm">{event.status === 'CANCELLED' ? 'Cancelada' : event.needsRecurringRefresh ? 'Atualizar itens' : event.approvedAt ? 'Conferida' : 'A conferir'} · {emailLabels[event.emailStatus] || event.status}</td>
           <td className="p-sm">{event.invoiceId ? <a className="text-primary underline" href={`/dashboard/invoices/${event.invoiceId}`}>{event.invoice?.number || 'Abrir fatura'}</a> : 'Previsão antiga'}</td>
         </tr>)}</tbody>
       </table>

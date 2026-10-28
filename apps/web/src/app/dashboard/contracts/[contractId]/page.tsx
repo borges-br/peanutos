@@ -9,11 +9,11 @@ import { useAuth } from '../../../../context/AuthContext';
 import { useI18n } from '../../../../i18n/useI18n';
 import Button from '../../../../components/ui/Button';
 import Badge from '../../../../components/ui/Badge';
-import Input from '../../../../components/ui/Input';
 import Select from '../../../../components/ui/Select';
 import ErrorState from '../../../../components/ui/ErrorState';
 import RestrictedState from '../../../../components/ui/RestrictedState';
 import ContractBillingPanel from '../../../../components/contracts/ContractBillingPanel';
+import ContractItemsPanel from '../../../../components/contracts/ContractItemsPanel';
 
 type TabType = 'summary' | 'items' | 'quotas' | 'recurrence' | 'history';
 
@@ -32,11 +32,6 @@ export default function ContractDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [statusValue, setStatusValue] = useState('');
   const [statusSaving, setStatusSaving] = useState(false);
-  const [lineItemSaving, setLineItemSaving] = useState(false);
-  const [lineItemDescription, setLineItemDescription] = useState('');
-  const [lineItemType, setLineItemType] = useState('SERVICE');
-  const [lineItemQuantity, setLineItemQuantity] = useState('1');
-  const [lineItemUnitPrice, setLineItemUnitPrice] = useState('0');
 
   const hasFinancialPrivilege = user ? ['OWNER', 'ADMIN', 'FINANCIAL'].includes(user.role) : false;
 
@@ -92,60 +87,6 @@ export default function ContractDetailPage() {
       window.alert(err.message || 'Falha ao alterar status do contrato.');
     } finally {
       setStatusSaving(false);
-    }
-  };
-
-  const addLineItem = async () => {
-    if (!lineItemDescription.trim()) {
-      window.alert('Informe a descrição do item do contrato.');
-      return;
-    }
-    const quantity = Number(lineItemQuantity);
-    const unitPriceCents = Math.round((Number(lineItemUnitPrice) || 0) * 100);
-    if (!quantity || quantity <= 0 || unitPriceCents < 0) {
-      window.alert('Informe quantidade positiva e valor válido.');
-      return;
-    }
-
-    setLineItemSaving(true);
-    try {
-      const item = await apiRequest<any>(`/contracts/${contractId}/line-items`, {
-        method: 'POST',
-        body: JSON.stringify({
-          description: lineItemDescription.trim(),
-          itemType: lineItemType,
-          quantity,
-          unitPriceCents,
-          recurring: true,
-        }),
-      });
-      setContract((prev: any) => ({
-        ...prev,
-        lineItems: [...(prev.lineItems || []), item],
-      }));
-      setLineItemDescription('');
-      setLineItemType('SERVICE');
-      setLineItemQuantity('1');
-      setLineItemUnitPrice('0');
-    } catch (err: any) {
-      window.alert(err.message || 'Falha ao adicionar item ao contrato.');
-    } finally {
-      setLineItemSaving(false);
-    }
-  };
-
-  const deleteLineItem = async (lineItemId: string) => {
-    if (!window.confirm('Remover este item do contrato?')) return;
-    try {
-      await apiRequest(`/contracts/${contractId}/line-items/${lineItemId}`, {
-        method: 'DELETE',
-      });
-      setContract((prev: any) => ({
-        ...prev,
-        lineItems: (prev.lineItems || []).filter((item: any) => item.id !== lineItemId),
-      }));
-    } catch (err: any) {
-      window.alert(err.message || 'Falha ao remover item do contrato.');
     }
   };
 
@@ -302,111 +243,7 @@ export default function ContractDetailPage() {
         )}
 
         {/* Tab Content: Items */}
-        {activeTab === 'items' && (
-          <div className="flex flex-col gap-md">
-            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider font-label-caps border-b border-outline-variant/30 pb-2">
-              {t.contracts.contractItems}
-            </h3>
-
-            {hasFinancialPrivilege && (
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-sm items-end border border-outline-variant/50 bg-surface-container-low/40 rounded-lg p-md">
-                <div className="md:col-span-4">
-                  <Input
-                    label="Descrição"
-                    value={lineItemDescription}
-                    onChange={(event) => setLineItemDescription(event.target.value)}
-                    disabled={lineItemSaving}
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Select
-                    label="Tipo"
-                    value={lineItemType}
-                    onChange={(event) => setLineItemType(event.target.value)}
-                    options={[
-                      { value: 'SERVICE', label: 'Serviço' },
-                      { value: 'LICENSE', label: 'Licença' },
-                      { value: 'STORAGE', label: 'Storage' },
-                      { value: 'SUPPORT', label: 'Suporte' },
-                      { value: 'MONITORING', label: 'Monitoramento' },
-                      { value: 'BACKUP', label: 'Backup' },
-                      { value: 'OTHER', label: 'Outro' },
-                    ]}
-                    disabled={lineItemSaving}
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Input
-                    label="Qtd"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={lineItemQuantity}
-                    onChange={(event) => setLineItemQuantity(event.target.value)}
-                    disabled={lineItemSaving}
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Input
-                    label="Unit. (R$)"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={lineItemUnitPrice}
-                    onChange={(event) => setLineItemUnitPrice(event.target.value)}
-                    disabled={lineItemSaving}
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Button variant="primary" onClick={addLineItem} loading={lineItemSaving} className="w-full">
-                    Adicionar
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {(!contract.lineItems || contract.lineItems.length === 0) ? (
-              <p className="text-sm font-medium text-on-surface-variant/50 text-center py-6">Nenhum item registrado para este contrato.</p>
-            ) : (
-              <div className="overflow-x-auto border border-outline-variant rounded-xl shadow">
-                <table className="w-full text-left border-collapse text-xs font-mono">
-                  <thead>
-                    <tr className="border-b border-outline-variant bg-surface-container-low font-sans text-on-surface-variant">
-                      <th className="p-sm px-md font-semibold">Descrição</th>
-                      <th className="p-sm px-md font-semibold">Tipo</th>
-                      <th className="p-sm px-md font-semibold text-right">Qtd</th>
-                      <th className="p-sm px-md font-semibold text-right">Valor Unitário</th>
-                      <th className="p-sm px-md font-semibold text-right">Valor Total</th>
-                      {hasFinancialPrivilege && <th className="p-sm px-md font-semibold text-right">Ações</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="text-on-surface font-medium">
-                    {contract.lineItems.map((item: any) => (
-                      <tr key={item.id} className="border-b border-outline-variant/20 hover:bg-surface-container-low/50">
-                        <td className="p-sm px-md font-sans text-sm">{item.description}</td>
-                        <td className="p-sm px-md font-sans text-xs">
-                          <Badge variant="neutral" className="text-[10px] py-0 px-2">
-                            {item.itemType}
-                          </Badge>
-                        </td>
-                        <td className="p-sm px-md text-right">{item.quantity}</td>
-                        <td className="p-sm px-md text-right">{formatCurrency(item.unitPriceCents)}</td>
-                        <td className="p-sm px-md text-right text-primary font-bold">{formatCurrency(item.totalPriceCents)}</td>
-                        {hasFinancialPrivilege && (
-                          <td className="p-sm px-md text-right">
-                            <Button variant="ghost" onClick={() => deleteLineItem(item.id)} className="py-1 px-2 text-error">
-                              <span className="material-symbols-outlined text-[16px]">delete</span>
-                            </Button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+        {activeTab === 'items' && <ContractItemsPanel contract={contract} canEdit={hasFinancialPrivilege} onSaved={fetchContractDetails} />}
 
         {/* Tab Content: Quotas */}
         {activeTab === 'quotas' && (

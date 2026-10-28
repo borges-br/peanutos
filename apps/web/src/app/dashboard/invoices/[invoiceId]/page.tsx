@@ -123,12 +123,14 @@ export default function InvoiceDetailPage() {
       unitPrice: Number(item.unitPrice || 0),
       unitCost: Number(item.unitCost || 0),
       billingKind: item.billingKind || null,
+      sourceContractLineItemId: item.sourceContractLineItemId || null,
+      recurrenceSnapshot: item.recurrenceSnapshot || null,
       sourceTicketId: item.sourceTicketId || null,
       sourceServiceOrderId: item.sourceServiceOrderId || null,
     }));
 
   const handleEditItemChange = (index: number, field: string, value: any) => {
-    if (editItems[index]?.billingKind === 'BASE') return;
+    if (['BASE', 'RECURRING'].includes(editItems[index]?.billingKind)) return;
     const next = [...editItems];
     const item = { ...next[index] };
     if (['quantity', 'unitPrice', 'unitCost'].includes(field)) {
@@ -151,7 +153,7 @@ export default function InvoiceDetailPage() {
   };
 
   const handleRemoveEditItem = (index: number) => {
-    if (editItems.length <= 1 || editItems[index]?.billingKind === 'BASE') return;
+    if (editItems.length <= 1 || ['BASE', 'RECURRING'].includes(editItems[index]?.billingKind)) return;
     setEditItems(editItems.filter((_, idx) => idx !== index));
   };
 
@@ -180,6 +182,7 @@ export default function InvoiceDetailPage() {
             unitPrice: item.unitPrice,
             unitCost: item.type === 'MATERIAL' ? item.unitCost : 0,
             billingKind: item.billingKind,
+            sourceContractLineItemId: item.sourceContractLineItemId || null,
             sourceTicketId: item.sourceTicketId || null,
             sourceServiceOrderId: item.sourceServiceOrderId || null,
           })),
@@ -498,7 +501,7 @@ export default function InvoiceDetailPage() {
               <div className="flex flex-col gap-sm">
                 {editItems.map((item, index) => (
                   <div key={index} className="p-md bg-surface-container-low border border-outline-variant/40 rounded-xl flex flex-col gap-md">
-                    {invoice.billingScheduleEvent && <p className="text-xs text-on-surface-variant">{item.billingKind === 'BASE' ? 'Mensalidade fixa copiada do contrato' : 'Adicional somente desta competência'}</p>}
+                    {invoice.billingScheduleEvent && <p className="text-xs text-on-surface-variant">{item.billingKind === 'BASE' ? 'Mensalidade fixa copiada do contrato' : item.billingKind === 'RECURRING' ? `Adicional recorrente · ${item.recurrenceSnapshot?.note || ''}` : 'Adicional somente desta competência'}</p>}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-sm w-full">
                       <div className="md:col-span-2">
                         <Select
@@ -509,7 +512,7 @@ export default function InvoiceDetailPage() {
                             { value: 'SERVICE', label: 'Serviço' },
                             { value: 'MATERIAL', label: 'Material' },
                           ]}
-                          disabled={editSaving || item.billingKind === 'BASE'}
+                          disabled={editSaving || ['BASE', 'RECURRING'].includes(item.billingKind)}
                         />
                       </div>
                       <div className="md:col-span-4">
@@ -517,7 +520,7 @@ export default function InvoiceDetailPage() {
                           label="Descrição"
                           value={item.description}
                           onChange={(e) => handleEditItemChange(index, 'description', e.target.value)}
-                          disabled={editSaving || item.billingKind === 'BASE'}
+                          disabled={editSaving || ['BASE', 'RECURRING'].includes(item.billingKind)}
                           required
                         />
                       </div>
@@ -528,7 +531,7 @@ export default function InvoiceDetailPage() {
                           min="1"
                           value={item.quantity}
                           onChange={(e) => handleEditItemChange(index, 'quantity', e.target.value)}
-                          disabled={editSaving || item.billingKind === 'BASE'}
+                          disabled={editSaving || ['BASE', 'RECURRING'].includes(item.billingKind)}
                           required
                         />
                       </div>
@@ -537,7 +540,7 @@ export default function InvoiceDetailPage() {
                           label="Un."
                           value={item.unit}
                           onChange={(e) => handleEditItemChange(index, 'unit', e.target.value)}
-                          disabled={editSaving || item.billingKind === 'BASE'}
+                          disabled={editSaving || ['BASE', 'RECURRING'].includes(item.billingKind)}
                         />
                       </div>
                       <div className="md:col-span-2">
@@ -548,7 +551,7 @@ export default function InvoiceDetailPage() {
                           min="0"
                           value={item.unitPrice}
                           onChange={(e) => handleEditItemChange(index, 'unitPrice', e.target.value)}
-                          disabled={editSaving || item.billingKind === 'BASE'}
+                          disabled={editSaving || ['BASE', 'RECURRING'].includes(item.billingKind)}
                         />
                       </div>
                       <div className="md:col-span-2">
@@ -559,11 +562,11 @@ export default function InvoiceDetailPage() {
                           min="0"
                           value={item.unitCost}
                           onChange={(e) => handleEditItemChange(index, 'unitCost', e.target.value)}
-                          disabled={editSaving || item.billingKind === 'BASE' || item.type !== 'MATERIAL'}
+                          disabled={editSaving || ['BASE', 'RECURRING'].includes(item.billingKind) || item.type !== 'MATERIAL'}
                         />
                       </div>
                     </div>
-                    {invoice.billingScheduleEvent && item.billingKind !== 'BASE' && <div className="grid md:grid-cols-2 gap-sm">
+                    {invoice.billingScheduleEvent && !['BASE', 'RECURRING'].includes(item.billingKind) && <div className="grid md:grid-cols-2 gap-sm">
                       <Select label="Chamado relacionado (opcional)" value={item.sourceTicketId || ''} onChange={value => handleEditItemChange(index, 'sourceTicketId', value.target.value || null)} disabled={editSaving} options={[{ value: '', label: 'Sem vínculo com chamado' }, ...sourceTickets.map((ticket: any) => ({ value: ticket.id, label: `${ticket.number || ''} ${ticket.title || ticket.subject || ''}` }))]} />
                       <Select label="O.S. relacionada (opcional)" value={item.sourceServiceOrderId || ''} onChange={value => handleEditItemChange(index, 'sourceServiceOrderId', value.target.value || null)} disabled={editSaving} options={[{ value: '', label: 'Sem vínculo com O.S.' }, ...sourceOrders.map((order: any) => ({ value: order.id, label: `${order.number || ''} ${order.title || ''}` }))]} />
                     </div>}
@@ -571,7 +574,7 @@ export default function InvoiceDetailPage() {
                       <span>Total venda: {formatCurrency(item.quantity * item.unitPrice)}</span>
                       <span>Custo interno: {formatCurrency(item.type === 'MATERIAL' ? item.quantity * item.unitCost : 0)}</span>
                       {editItems.length > 1 && (
-                        <Button variant="ghost" onClick={() => handleRemoveEditItem(index)} disabled={editSaving || item.billingKind === 'BASE'} className="text-error py-1 px-2 text-xs">
+                        <Button variant="ghost" onClick={() => handleRemoveEditItem(index)} disabled={editSaving || ['BASE', 'RECURRING'].includes(item.billingKind)} className="text-error py-1 px-2 text-xs">
                           Remover
                         </Button>
                       )}

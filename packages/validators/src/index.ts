@@ -565,6 +565,11 @@ export const contractLineItemCreateSchema = z.object({
   quantity: z.number().positive({ message: 'A quantidade deve ser um número positivo' }),
   unitPriceCents: z.number().int().min(0, { message: 'O valor unitário deve ser maior ou igual a zero' }),
   recurring: z.boolean().default(true),
+  billingRole: z.enum(['BASE', 'ADDON']).default('BASE'),
+  startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data de início inválida').optional().nullable(),
+  endsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data de término inválida').optional().nullable(),
+  endMode: z.enum(['OPEN', 'CONTRACT', 'DATE']).default('CONTRACT'),
+  proration: z.enum(['NONE', 'DAILY']).default('NONE'),
 });
 
 export type ContractLineItemCreateInput = z.infer<typeof contractLineItemCreateSchema>;
@@ -625,7 +630,8 @@ export const invoiceItemCreateSchema = z.object({
   unitCost: z.coerce.number().min(0, { message: 'O custo unitário deve ser maior ou igual a zero' }).optional().default(0),
   totalPrice: z.coerce.number().min(0).optional().nullable(),
   totalCost: z.coerce.number().min(0).optional().nullable(),
-  billingKind: z.enum(['BASE', 'EXTRA']).optional().nullable(),
+  billingKind: z.enum(['BASE', 'RECURRING', 'EXTRA']).optional().nullable(),
+  sourceContractLineItemId: z.string().uuid().optional().nullable(),
   sourceTicketId: z.string().uuid().optional().nullable(),
   sourceServiceOrderId: z.string().uuid().optional().nullable(),
 });
