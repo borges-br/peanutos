@@ -14,12 +14,21 @@ Os exemplos abaixo são para Bash em um servidor Linux. Execute a partir do repo
 2. Registre a versão/imagem dos containers antigos e preserve `.env.production` e as chaves de criptografia em local seguro. Identifique as montagens com `docker inspect peanut-minio` e `docker volume ls`. Não suponha o nome do volume: versões anteriores usavam prefixos diferentes.
 3. Com os escritores parados, faça backup do PostgreSQL e do armazenamento. Copie os backups para fora do servidor. Um dump do banco sozinho contém referências, **não os bytes das imagens/PDFs**.
 
+Antes dos comandos de Compose, descubra o projeto da instalação existente. O nome explícito impede criar outro volume de banco por engano:
+
+```bash
+STACK_NAME=$(docker inspect peanut-api --format '{{ index .Config.Labels "com.docker.compose.project" }}')
+test -n "$STACK_NAME" || { echo "Projeto existente não identificado"; exit 1; }
+```
+
+Todos os exemplos usam `-p "$STACK_NAME"`. Confira também o nome real do volume do banco e as redes; o `name:` do Compose novo não deve renomear a instalação existente.
+
 Exemplo para PostgreSQL, sem redirecionamento binário do PowerShell:
 
 ```bash
 mkdir -p backups
 chmod 700 backups
-docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml stop api worker
+docker compose -p "$STACK_NAME" --env-file .env.production -f infra/docker/docker-compose.production.yml stop api worker
 docker exec peanut-postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f /tmp/peanut-before-storage.dump'
 docker cp peanut-postgres:/tmp/peanut-before-storage.dump ./backups/peanut-before-storage.dump
 ```
@@ -55,8 +64,8 @@ Publique/construa as imagens com este código, fixe a tag de implantação e pre
 Suba PostgreSQL/Redis, execute o migrator com a nova imagem e mantenha API/worker parados até terminar a cópia. A migração de banco adiciona `Workspace.timeZone`; não altera registros de arquivos.
 
 ```bash
-docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml up -d postgres redis
-docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml run --rm migrator
+docker compose -p "$STACK_NAME" --env-file .env.production -f infra/docker/docker-compose.production.yml up -d postgres redis
+docker compose -p "$STACK_NAME" --env-file .env.production -f infra/docker/docker-compose.production.yml run --rm migrator
 ```
 
 O Compose novo monta o mesmo volume na API e no worker. As imagens inicializam `/data/storage` para o usuário `node` (UID/GID 1000). Uma restauração feita como root deve corrigir a propriedade para `1000:1000`, mantendo a pasta privada. Não altere o nome do volume depois da cópia.
@@ -83,7 +92,7 @@ Não use `localhost` para apontar de dentro do container ao servidor antigo. Use
 
 ```bash
 chmod 600 backups/migration.env
-docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml \
+docker compose -p "$STACK_NAME" --env-file .env.production -f infra/docker/docker-compose.production.yml \
   run --rm --no-deps --env-from-file backups/migration.env \
   -v "$PWD/backups:/backup" api \
   node scripts/migrate-storage.cjs --source=s3 --report=/backup/storage-migration-report.json
@@ -96,7 +105,7 @@ Se a versão de Compose não oferecer `--env-from-file`, exporte temporariamente
 Exemplo: `/srv/peanut-export/peanut-documents/<workspace>/logos/imagem.png`.
 
 ```bash
-docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml \
+docker compose -p "$STACK_NAME" --env-file .env.production -f infra/docker/docker-compose.production.yml \
   run --rm --no-deps -v /srv/peanut-export:/export:ro -v "$PWD/backups:/backup" api \
   node scripts/migrate-storage.cjs --source=directory --source-dir=/export --report=/backup/storage-migration-report.json
 ```
@@ -104,7 +113,7 @@ docker compose --env-file .env.production -f infra/docker/docker-compose.product
 ### Verificação independente do destino
 
 ```bash
-docker compose --env-file .env.production -f infra/docker/docker-compose.production.yml \
+docker compose -p "$STACK_NAME" --env-file .env.production -f infra/docker/docker-compose.production.yml \
   run --rm --no-deps -v "$PWD/backups:/backup" api \
   node scripts/migrate-storage.cjs --source=verify --report=/backup/storage-migration-report-verify.json
 ```

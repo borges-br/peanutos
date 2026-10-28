@@ -5,7 +5,7 @@ Esta atualização troca o armazenamento antigo por um volume privado compartilh
 ## Antes do redeploy
 
 1. Abra a execução **Publish Docker images** no GitHub Actions. Confirme sucesso de **Build web**, **Build api**, **Build worker** e **Build migrator**, todos no mesmo commit.
-2. Use a mesma tag imutável nas quatro imagens: `sha-<sete-primeiros-caracteres-do-commit>`. O workflow também publica `master` e `latest` quando o push ocorre na branch padrão, mas essas tags mudam em publicações futuras.
+2. Use a mesma tag imutável nas quatro imagens: `sha-<sete-primeiros-caracteres-do-commit>`. O workflow também publica `master` e `latest` quando o push ocorre na branch padrão, mas essas tags mudam em publicações futuras. Commits que alteram apenas documentação não geram novas imagens: use a tag do commit cuja execução publicou os quatro serviços, não presuma uma tag para todo HEAD do Git.
 3. Na stack existente, registre repositório, referência Git, caminhos de Compose, variáveis, redes, imagens e montagens atuais. Preserve o nome da stack e os volumes reais do PostgreSQL/Redis. Desative temporariamente atualizações GitOps automáticas durante a migração.
 4. Preserve as chaves `JWT_SECRET`, `APP_ENCRYPTION_KEY`/alias legado e `WEBHOOK_ENCRYPTION_KEY`, sem substituí-las pelos exemplos. Não apague as variáveis SMTP antigas até importar ou recadastrar e conferir as configurações.
 5. Siga o [guia de preservação dos arquivos](storage-migration.md): pare gravações, faça backup consistente de banco e objetos e copie os dados para `peanut_storage_data`. Os relatórios devem indicar zero falhas e a quantidade esperada de registros verificados.
@@ -31,7 +31,7 @@ Em **Stacks > sua stack > Edit stack settings** (o nome pode variar conforme a v
 - `PEANUT_IMAGE_TAG=sha-<commit7>`, igual para os quatro serviços.
 - Preserve domínio, CORS, senhas do banco/Redis e chaves mestras. O Compose define `STORAGE_PATH=/data/storage` para API e worker.
 
-Se uma imagem exigir autenticação, cadastre o GHCR em **Registries** com acesso de leitura aos pacotes; um login feito apenas no terminal não garante que o Portainer use a mesma credencial. Confira as montagens: API e worker devem usar o mesmo `peanut_storage_data`; PostgreSQL deve continuar com seu volume anterior. Se o nome antigo difere do Compose, ajuste a referência do volume antes de atualizar.
+Se uma imagem exigir autenticação, cadastre o GHCR em **Registries** com usuário `borges-br` e token pessoal clássico com `read:packages` e acesso aos pacotes; um login feito apenas no terminal não garante que o Portainer use a mesma credencial. A preparação pelo terminal também exige autenticação própria com `docker login ghcr.io -u borges-br`; digite o token apenas no prompt apropriado, nunca no chat nem no Compose. Não torne pacotes públicos só para contornar um erro 401/403. Confira as montagens: API e worker devem usar o mesmo `peanut_storage_data`; PostgreSQL deve continuar com seu volume anterior. Se o nome antigo difere do Compose, ajuste a referência do volume antes de atualizar.
 
 Depois de concluir backup, migrations, cópia e verificação, use **Pull and redeploy**, habilite **Re-pull image and redeploy** e confirme **Update**. Não escolha limpeza/prune dos serviços antigos durante a migração. Não desconecte a stack do Git para tentar atualizar.
 
