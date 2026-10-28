@@ -10,6 +10,7 @@ import Breadcrumbs from '../../../components/layout/Breadcrumbs';
 import AuthenticatedImage from '../../../components/ui/AuthenticatedImage';
 import AvatarCropModal from '../../../components/ui/AvatarCropModal';
 
+import BillingGatewaySettings from '../../../components/settings/BillingGatewaySettings';
 import SmtpSettingsPanel from '../../../components/settings/SmtpSettingsPanel';
 import OperationalSettingsPanel from '../../../components/settings/OperationalSettingsPanel';
 
@@ -66,6 +67,7 @@ export default function SettingsPage() {
   const [generalLoading, setGeneralLoading] = useState(true);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('geral');
+  useEffect(() => { if (new URLSearchParams(window.location.search).get('tab') === 'integracoes') setActiveTab('integracoes'); }, []);
   const [successSaved, setSuccessSaved] = useState(false);
 
 
@@ -499,6 +501,7 @@ export default function SettingsPage() {
   const renderIntegracoes = () => (
     <div className="space-y-lg">
       <SmtpSettingsPanel canEdit={isEditable} />
+      <BillingGatewaySettings canEdit={isEditable} />
       <Card title="Webhooks"><p className="text-sm mb-md">Integre eventos do sistema com seus endpoints.</p><Button variant="secondary" onClick={() => router.push('/dashboard/webhooks')}>Configurar webhooks</Button></Card>
     </div>
   );

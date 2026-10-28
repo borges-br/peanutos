@@ -2,6 +2,7 @@
 
 import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
 
+import InvoiceGatewayPanel from '../../../../components/contracts/InvoiceGatewayPanel';
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../../lib/api';
 import { useParams, useRouter } from 'next/navigation';
@@ -269,6 +270,7 @@ export default function InvoiceDetailPage() {
   return (
     <div className="flex flex-col gap-lg max-w-4xl mx-auto select-none">
       {hasFinancialPrivilege && invoice.billingScheduleEvent && <MonthlyInvoicePanel invoice={invoice} onReload={fetchInvoice} />}
+      {hasFinancialPrivilege && <InvoiceGatewayPanel invoice={invoice} onReload={fetchInvoice} />}
       {/* Header */}
       <header className="flex justify-between items-center w-full border-b border-outline-variant/30 pb-lg">
         <div className="flex flex-col gap-xs">

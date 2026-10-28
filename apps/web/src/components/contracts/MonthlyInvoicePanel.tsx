@@ -1,5 +1,6 @@
 'use client';
 
+import InvoiceEmailPreview from './InvoiceEmailPreview';
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../lib/api';
 import { dateKey } from '@peanut/utils/dist/timezone';
@@ -8,7 +9,7 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 
-const labels: Record<string, string> = { NOT_REQUESTED: 'Envio manual', PAUSED: 'SMTP desativado ou indisponível', QUEUED: 'Aguardando PDF/envio', SENDING: 'Enviando', SENT: 'Aceito pelo servidor SMTP', PARTIAL: 'Aceitação parcial', FAILED: 'Falha no envio', UNKNOWN: 'Confirmação pendente', CANCELLED: 'Cancelado' };
+const labels: Record<string, string> = { NOT_REQUESTED: 'Envio manual', PAUSED: 'Envio pausado; veja o motivo abaixo', QUEUED: 'Aguardando PDF/envio', SENDING: 'Enviando', SENT: 'Aceito pelo servidor SMTP', PARTIAL: 'Aceitação parcial', FAILED: 'Falha no envio', UNKNOWN: 'Confirmação pendente', CANCELLED: 'Cancelado' };
 
 export default function MonthlyInvoicePanel({ invoice, onReload }: { invoice: any; onReload: () => Promise<void> }) {
   const { timeZone, localDateTimeToIso, formatDateTime } = useWorkspaceFormatters();
@@ -73,5 +74,7 @@ export default function MonthlyInvoicePanel({ invoice, onReload }: { invoice: an
       {['FAILED', 'PARTIAL', 'UNKNOWN'].includes(event.emailStatus) && invoice.status !== 'DRAFT' && invoice.status !== 'CANCELLED' && <Button variant="secondary" onClick={() => action('retry')} disabled={saving}>Nova tentativa de email</Button>}
     </div>
     {invoice.status !== 'DRAFT' && invoice.status !== 'CANCELLED' && <div className="text-sm space-y-sm"><p>WhatsApp manual: baixe o PDF na prévia e anexe à conversa.</p><div className="flex flex-wrap gap-sm">{(event.contract?.billingWhatsappNumbers || []).map((phone: string) => <a key={phone} className="text-primary underline" target="_blank" rel="noopener noreferrer" href={`https://wa.me/${phone}?text=${encodeURIComponent(`Olá! Segue a fatura ${invoice.number}, referente à competência ${event.periodKey}.`)}`}>Abrir WhatsApp · {phone}</a>)}<a className="text-primary underline" href={`/dashboard/invoices/${invoice.id}/preview`}>Abrir PDF para baixar</a></div></div>}
+    <a className="inline-block text-primary underline text-sm" href={`/dashboard/invoices/${invoice.id}/preview`}>Visualizar PDF antes da emissão e envio</a>
+    <InvoiceEmailPreview invoiceId={invoice.id} />
   </section>;
 }

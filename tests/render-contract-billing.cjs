@@ -24,9 +24,9 @@ async function main() {
     const addonRows = addons.map(item => ({ type: item.type, description: item.description, quantity: String(item.quantity), unit: item.unit, unitPrice: money(Number(item.unitPrice)), totalPrice: money(Number(item.quantity.mul(item.unitPrice))), billingKind: item.billingKind, billingNote: item.recurrenceSnapshot.note }));
     const short = [makeItem('Mensalidade de suporte e manutenção', 1700.31, 'BASE'), ...addonRows, makeItem('Retirada e devolução de nobreak para conserto', 125.50, 'EXTRA')];
     const shortTotal = (170031 + addons.reduce((sum, item) => sum + Math.round(Number(item.quantity.mul(item.unitPrice)) * 100), 0) + 12550) / 100;
-    for (const [name, items] of [['monthly-short', short], ['monthly-long', [short[0], ...Array.from({ length: 80 }, (_, index) => makeItem(`Serviço adicional ${index + 1} - descrição detalhada para validar múltiplas páginas e quebra da tabela`, 25.50, 'EXTRA'))]]]) {
-      const total = name === 'monthly-short' ? shortTotal : 1700.31 + 80 * 25.50;
-      const html = renderA4Document({ ...seed, data: { number: 'FAT-DEMO-202610', status: 'ISSUED', issueDate: '27/10/2026', dueDate: '05/11/2026', billingPeriod: '2026-10', contractNumber: 'CTR-DEMO', paymentMethod: 'PIX', pixKey: 'chave-ficticia@example.invalid', items, totalAmount: money(total), subtotalServices: money(total), subtotalMaterials: money(0) } });
+    for (const [name, items] of [['monthly-short', short], ['monthly-bank', short], ['monthly-long', [short[0], ...Array.from({ length: 80 }, (_, index) => makeItem(`Serviço adicional ${index + 1} - descrição detalhada para validar múltiplas páginas e quebra da tabela`, 25.50, 'EXTRA'))]]]) {
+      const total = name === 'monthly-long' ? 1700.31 + 80 * 25.50 : shortTotal;
+      const html = renderA4Document({ ...seed, data: { number: 'FAT-DEMO-202610', status: name === 'monthly-short' ? 'DRAFT' : 'ISSUED', bankPaymentUrl: name === 'monthly-bank' ? 'https://www.asaas.com/i/qa-synthetic' : null, issueDate: '27/10/2026', dueDate: '05/11/2026', billingPeriod: '2026-10', contractNumber: 'CTR-DEMO', paymentMethod: 'PIX', pixKey: 'chave-ficticia@example.invalid', items, totalAmount: money(total), subtotalServices: money(total), subtotalMaterials: money(0) } });
       fs.writeFileSync(path.join(output, `${name}.html`), html);
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'load' });

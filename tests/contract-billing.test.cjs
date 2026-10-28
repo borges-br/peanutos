@@ -52,6 +52,10 @@ function fixture() {
   };
   let transactionTail = Promise.resolve();
   const db = {
+    billingCharge: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
+    billingCustomer: { updateMany: async () => ({ count: 0 }) },
+    billingGatewayEvent: { findMany: async () => [] },
+    emailTemplate: { findFirst: async () => null },
     workspaceEmailSettings: { findUnique: async () => ({ enabled: true, host: 'smtp.example.invalid', port: 587, security: 'STARTTLS', username: '', passwordEncrypted: null, fromEmail: 'billing@example.invalid', fromName: 'Billing Test', revision: 1 }) },
     $queryRaw: async () => { state.locks++; return []; },
     $transaction: fn => {

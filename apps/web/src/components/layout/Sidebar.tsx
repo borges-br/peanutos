@@ -101,6 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
             {renderNavItem(t.navigation.invoices, 'receipt_long', '/dashboard/invoices')}
             {renderNavItem(t.navigation.contracts, 'description', '/dashboard/contracts')}
             {renderNavItem(t.navigation.recurringFinancials, 'account_balance_wallet', '/dashboard/financials')}
+            {renderNavItem('Templates de email', 'mail', '/dashboard/templates-email')}
           </div>
         </div>
 

@@ -139,6 +139,7 @@ export interface InvoicePdfTemplateData {
     dueDate: string;
     paymentMethod: string;
     pixKey?: string | null;
+    bankPaymentUrl?: string | null;
     subtotalServices?: string | null;
     subtotalMaterials?: string | null;
     discountAmount?: string | null;
@@ -218,6 +219,7 @@ export interface RenderA4DocumentParams {
     number: string;
     billingPeriod?: string | null;
     contractNumber?: string | null;
+    bankPaymentUrl?: string | null;
     status: string;
     issueDate: string;
     dueDate: string;
@@ -617,9 +619,9 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
           ${t.paymentInstructions}
         </div>
         <div>${t.favored}: ${legalName || brandName}</div>
-        <div>${t.preferredMethod}: ${paymentMethod}</div>
+        <div>${t.preferredMethod}: ${data.bankPaymentUrl ? 'Cobrança bancária vinculada' : paymentMethod}</div>
         <div style="font-weight: bold; margin-top: 4px; color: ${primaryColor}; font-size: 9pt; font-family: monospace;">
-          ${t.pixKey}: ${pixKey}
+          ${data.bankPaymentUrl ? `<a href="${escapeHtml(data.bankPaymentUrl)}" style="color: ${primaryColor};">Consultar cobrança e pagamento</a>` : `${t.pixKey}: ${pixKey}`}
         </div>
       </div>
     `,

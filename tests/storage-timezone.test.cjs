@@ -11,6 +11,7 @@ const Module = require('node:module');
 const root = path.resolve(__dirname, '..');
 const apiRequire = Module.createRequire(path.join(root, 'apps/api/package.json'));
 const { LocalObjectStorage, zonedDateTime, dateKey, calendarDateKey } = require('../packages/utils/dist');
+const realDb = require('../packages/db/dist');
 const documents = require('../packages/documents/dist');
 const { transferFile, verifyFile } = require('../apps/api/scripts/migrate-storage.cjs');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'peanut-storage-test-'));
@@ -35,6 +36,7 @@ const source = {
   items: [{ type: 'SERVICE', description: 'Teste', quantity: 1, unit: 'UN', unitPrice: 10, totalPrice: 10 }],
 };
 const db = {
+  billingCharge: { findMany: async () => [] },
   workspace: {
     findUnique: async () => workspace,
     update: async ({ where, data }) => { assert.equal(where.id, 'ws'); return workspace = { ...workspace, ...data }; },
@@ -72,7 +74,7 @@ const rendered = [];
 const pdfBytes = Buffer.from('%PDF-1.4 test stub');
 const originalLoad = Module._load;
 Module._load = function (id, ...args) {
-  if (id === '@peanut/db') return { prisma: db };
+  if (id === '@peanut/db') return { prisma: db, getInvoiceBankLink: realDb.getInvoiceBankLink };
   if (id === '@peanut/documents') return {
     ...documents, renderA4Document: params => { rendered.push(params); return documents.renderA4Document(params); },
   };

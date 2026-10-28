@@ -66,7 +66,7 @@ export async function saveContractLineItem(db: PrismaClient, workspaceId: string
     if (itemId && !before) return invalid('Item do contrato não encontrado.');
     const data = normalize(input, before);
     const after = itemId ? await tx.contractLineItem.update({ where: { id: itemId }, data }) : await tx.contractLineItem.create({ data: { workspaceId, contractId, ...data } });
-    await tx.billingScheduleEvent.updateMany({ where: { workspaceId, contractId, invoice: { status: 'DRAFT' } }, data: { approvedAt: null, approvedById: null, needsRecurringRefresh: true } });
+    await tx.billingScheduleEvent.updateMany({ where: { workspaceId, contractId, invoice: { status: 'DRAFT' } }, data: { approvedAt: null, approvedById: null, emailTemplateSnapshot: Prisma.DbNull, needsRecurringRefresh: true } });
     await tx.contractHistory.create({ data: { workspaceId, contractId, actorUserId, event: itemId ? 'LINE_ITEM_UPDATED' : 'LINE_ITEM_ADDED',
       description: `${itemId ? 'Item atualizado' : 'Item adicionado'}: ${after.description}. Rascunhos precisam atualizar os itens; faturas emitidas foram preservadas.`,
       before: before ? JSON.stringify(before) : null, after: JSON.stringify(after) } });
@@ -83,7 +83,7 @@ export async function removeContractLineItem(db: PrismaClient, workspaceId: stri
     const before = await tx.contractLineItem.findFirst({ where: { id: itemId, contractId, workspaceId } });
     if (!before) return invalid('Item do contrato não encontrado.');
     await tx.contractLineItem.delete({ where: { id: itemId } });
-    await tx.billingScheduleEvent.updateMany({ where: { workspaceId, contractId, invoice: { status: 'DRAFT' } }, data: { approvedAt: null, approvedById: null, needsRecurringRefresh: true } });
+    await tx.billingScheduleEvent.updateMany({ where: { workspaceId, contractId, invoice: { status: 'DRAFT' } }, data: { approvedAt: null, approvedById: null, emailTemplateSnapshot: Prisma.DbNull, needsRecurringRefresh: true } });
     await tx.contractHistory.create({ data: { workspaceId, contractId, actorUserId, event: 'LINE_ITEM_REMOVED', description: `Item removido: ${before.description}. Rascunhos precisam atualizar os itens; faturas emitidas foram preservadas.`, before: JSON.stringify(before) } });
     await tx.auditLog.create({ data: { workspaceId, actorUserId, action: 'contract.line_item_deleted', entityType: 'CONTRACT', entityId: contractId, beforeJson: JSON.stringify(before), ...request, severity: 'INFO' } });
     return { success: true };

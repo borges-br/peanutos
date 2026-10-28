@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { prisma, BillingScheduleStatus } from "@peanut/db";
+import { prisma, BillingScheduleStatus, recurringAddonItems } from "@peanut/db";
 import { dateKey, calendarDateKey, zonedDateTime } from "@peanut/utils";
 import { AuditService } from "../audit/audit.service";
 
@@ -35,7 +35,7 @@ export class FinancialsService {
             },
           },
           select: {
-            monthlyAmountCents: true, startDate: true, endDate: true,
+            monthlyAmountCents: true, startDate: true, endDate: true, currency: true, lineItems: true,
           },
         }),
         prisma.contract.groupBy({
@@ -48,7 +48,8 @@ export class FinancialsService {
         prisma.billingScheduleEvent.findMany({
           where: {
             workspaceId,
-            status: "PENDING",
+            status: { in: ["PENDING", "DRAFT_READY"] },
+            scheduledFor: { gte: now },
           },
           orderBy: {
             scheduledFor: "asc",
@@ -88,10 +89,18 @@ export class FinancialsService {
         }),
       ]);
 
+    const gatewayReceipts = await prisma.billingReceipt.findMany({ where: { occurredAt: { gte: monthStart, lt: nextMonthStart }, charge: { invoice: { workspaceId }, connection: { environment: 'PRODUCTION' } } } });
+    const gatewayReceived = {
+      grossCents: gatewayReceipts.reduce((sum, row) => sum + row.grossCents, 0),
+      knownNetCents: gatewayReceipts.reduce((sum, row) => sum + (row.netCents || 0), 0),
+      knownFeesCents: gatewayReceipts.filter(row => row.netCents !== null).reduce((sum, row) => sum + row.grossCents - row.netCents!, 0),
+      hasUnconfirmedRefundNet: gatewayReceipts.some(row => row.netCents === null),
+      entries: gatewayReceipts.length,
+    };
     // Compute metrics
-    const effectiveContracts = recurringContracts.filter(contract => calendarDateKey(contract.startDate, workspace.timeZone) <= today && (!contract.endDate || calendarDateKey(contract.endDate, workspace.timeZone) >= today));
+    const effectiveContracts = recurringContracts.filter(contract => contract.currency === 'BRL' && calendarDateKey(contract.startDate, workspace.timeZone) <= today && (!contract.endDate || calendarDateKey(contract.endDate, workspace.timeZone) >= today));
     const totalMrrCents = effectiveContracts.reduce(
-      (acc, c) => acc + c.monthlyAmountCents,
+      (acc, c) => acc + c.monthlyAmountCents + recurringAddonItems(c, period, workspace.timeZone).reduce((sum: number, item: any) => sum + Math.round(Number(item.quantity.mul(item.unitPrice)) * 100), 0),
       0,
     );
 
@@ -145,6 +154,7 @@ export class FinancialsService {
     });
 
     return {
+      gatewayReceived,
       totalMrrCents,
       activeContracts: activeContractsCount,
       averageContractValueCents,

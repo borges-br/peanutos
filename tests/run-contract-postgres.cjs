@@ -25,7 +25,7 @@ try {
   const cli = createRequire(path.join(root, 'packages/db/package.json')).resolve('prisma/build/index.js');
   const migration = spawnSync(process.execPath, [cli, 'migrate', 'deploy', '--schema', path.join(root, 'packages/db/prisma/schema.prisma')], { cwd: root, env, stdio: 'inherit', windowsHide: true });
   if (migration.status !== 0) throw new Error('Migrations failed in the test database.');
-  const result = spawnSync(process.execPath, ['--test', 'tests/contract-billing-postgres.test.cjs', 'tests/settings-postgres.test.cjs'], { cwd: root, env, stdio: 'inherit', windowsHide: true });
+  const result = spawnSync(process.execPath, ['--test', 'tests/contract-billing-postgres.test.cjs', 'tests/settings-postgres.test.cjs', 'tests/financial-postgres.test.cjs'], { cwd: root, env, stdio: 'inherit', windowsHide: true });
   process.exitCode = result.status === 0 ? 0 : 1;
 } catch (error) { console.error(error.message); process.exitCode = 1; }
 finally {

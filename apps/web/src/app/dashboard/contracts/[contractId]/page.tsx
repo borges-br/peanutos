@@ -14,6 +14,7 @@ import ErrorState from '../../../../components/ui/ErrorState';
 import RestrictedState from '../../../../components/ui/RestrictedState';
 import ContractBillingPanel from '../../../../components/contracts/ContractBillingPanel';
 import ContractItemsPanel from '../../../../components/contracts/ContractItemsPanel';
+import ContractFinancialSummary from '../../../../components/contracts/ContractFinancialSummary';
 
 type TabType = 'summary' | 'items' | 'quotas' | 'recurrence' | 'history';
 
@@ -181,6 +182,8 @@ export default function ContractDetailPage() {
           </Button>
         </div>
       </header>
+      {hasFinancialPrivilege && ['RECURRING_SUPPORT', 'HYBRID'].includes(contract.type) && <ContractFinancialSummary contract={contract} onSaved={fetchContractDetails} />}
+
 
       {/* Navigation Tabs */}
       <div className="border-b border-outline-variant/30 flex gap-sm overflow-x-auto">

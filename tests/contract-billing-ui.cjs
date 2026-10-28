@@ -8,7 +8,10 @@ const { createServer } = require('node:net');
 const root = path.resolve(__dirname, '..');
 const webRequire = createRequire(path.join(root, 'apps/web/package.json'));
 const { chromium } = createRequire(path.join(root, 'apps/worker/package.json'))('playwright');
-const { recurringBaseItems, recurringAddonItems, invoiceAmounts } = require('../packages/db/dist');
+const { recurringBaseItems, recurringAddonItems, invoiceAmounts, contractPeriodSummary, buildFinancialForecast } = require('../packages/db/dist');
+const { renderBillingEmail, DEFAULT_BILLING_EMAIL, BILLING_EMAIL_VARIABLES } = require('../packages/utils/dist');
+const emailTemplates = [], gatewayConnections = [], charges = [];
+const agreementView = () => ({ ...contract, startDate: new Date(contract.startDate), endDate: null, lineItems: contract.lineItems.map(row => ({ ...row, startsOn: row.startsOn ? new Date(row.startsOn) : null, endsOn: row.endsOn ? new Date(row.endsOn) : null })) });
 const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const contract = { id: id(3), workspaceId: id(1), clientId: id(2), title: 'Suporte mensal de demonstração', number: 'CTR-DEMO', status: 'ACTIVE', type: 'RECURRING_SUPPORT', startDate: '2026-01-01T00:00:00Z', endDate: null, monthlyAmountCents: 170031, currency: 'BRL', billingDay: 8, billingIssueDay: 8, billingIssueTime: '09:00', billingAutoIssue: true, billingAutoEmail: true, billingEmailRecipients: ['finance@example.invalid', 'director@example.invalid'], billingWhatsappNumbers: [], billingPaymentMethod: 'PIX', billingPixKey: 'demo-pix', client: { id: id(2), legalName: 'Cliente Demonstração', tradeName: 'Cliente Demonstração' }, lineItems: [{ id: id(10), description: 'Licença complementar', itemType: 'LICENSE', quantity: '1', unitPriceCents: 10000, totalPriceCents: 10000, recurring: true, billingRole: 'BASE' }], billingScheduleEvents: [], history: [], maxUsers: null, maxAssets: null };
 const event = { id: id(5), contractId: contract.id, periodKey: '2026-10', scheduledFor: '2026-10-28T12:00:00Z', status: 'DRAFT_READY', invoiceId: id(6), amountCents: 170031, approvedAt: null, emailStatus: 'NOT_REQUESTED', emailRecipients: contract.billingEmailRecipients, emailLastError: null };
@@ -35,7 +38,7 @@ async function main() {
     const executablePath = [chromium.executablePath(), 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe'].find(file => fs.existsSync(file));
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'Asia/Tokyo' });
-    await context.addInitScript(() => localStorage.setItem('peanut_token', 'synthetic-test-token'));
+    await context.addInitScript(() => { if (window.top === window) localStorage.setItem('peanut_token', 'synthetic-test-token'); });
     await context.route('**/*', async route => {
       const request = route.request(); const url = new URL(request.url());
       if (!url.pathname.includes('/api/v1/')) {
@@ -46,7 +49,26 @@ async function main() {
       const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
       if (method === 'OPTIONS') return route.fulfill({ status: 204, headers });
       let result = {};
-      if (endpoint === '/auth/me') result = user;
+      if (endpoint === `/financials/contracts/${contract.id}/summary`) result = contractPeriodSummary(agreementView(), url.searchParams.get('period'), user.timeZone, contract.billingScheduleEvents.length ? { ...event, invoice } : undefined);
+      else if (endpoint === '/financials/forecast') result = buildFinancialForecast([agreementView()], contract.billingScheduleEvents.length ? [{...invoice, dueDate:new Date(invoice.dueDate)}] : [], url.searchParams.get('period'), user.timeZone, new Date('2026-10-28T12:00:00Z'));
+      else if (endpoint === '/financials/mrr') result = {totalMrrCents:175192, activeContracts:1, averageContractValueCents:175192,contractsByStatus:{ACTIVE:1},nextBillingEvents:[]};
+      else if (endpoint === '/financials/email-templates/preview') result = renderBillingEmail(request.postDataJSON(),{cliente:'Cliente Demonstração',empresa:'Empresa Demonstração',fatura:'FAT-DEMO',contrato:'CTR-DEMO',competencia:'2026-11',total:'R$ 1.250,00',vencimento:'10/11/2026',fuso:user.timeZone});
+      else if (endpoint === '/financials/email-templates') {
+        if (method === 'POST') {result={id:id(40),...request.postDataJSON(),revision:1};emailTemplates.push(result);}
+        else result={data:emailTemplates,builtin:DEFAULT_BILLING_EMAIL,variables:BILLING_EMAIL_VARIABLES};
+      }
+      else if (endpoint === `/financials/invoices/${invoice.id}/email-preview`) result={...renderBillingEmail(emailTemplates[0]||DEFAULT_BILLING_EMAIL,{cliente:contract.client.legalName,empresa:'Empresa Demonstração',fatura:invoice.number,contrato:contract.number,competencia:event.periodKey,total:'R$ 1.877,42',vencimento:'08/11/2026',fuso:user.timeZone}),templateName:emailTemplates[0]?.name||'Cobrança mensal',frozen:!!event.approvedAt,recipients:event.emailRecipients};
+      else if (endpoint === '/financials/gateways') {
+        if (method === 'PUT') { const input=request.postDataJSON();result={id:id(50),provider:'ASAAS',environment:input.environment,enabled:input.enabled,revision:1,hasApiKey:!!input.apiKey,hasWebhookToken:!!input.webhookToken}; gatewayConnections.push(result); }
+        else result=gatewayConnections;
+      }
+      else if (endpoint.includes('/webhook-info')) result={url:'https://finance.example.invalid/api/v1/financial-hooks/asaas/'+id(50),events:['PAYMENT_RECEIVED','PAYMENT_REFUNDED']};
+      else if (endpoint === `/financials/invoices/${invoice.id}/charges`) {
+        if(method==='POST') {result={id:id(51),...request.postDataJSON(),amountCents:187742,state:'REQUESTED',connection:{provider:'ASAAS',environment:'SANDBOX'},entries:[]}; charges.push(result);event.approvedAt=null;}
+        else result={data:charges,suggestedType:'PIX',connections:gatewayConnections};
+      }
+      else if(endpoint.endsWith('/cancel-request')) {charges[0].state='CANCELLED';event.approvedAt=null;result=charges[0];}
+      else if (endpoint === '/auth/me') result = user;
       else if (endpoint === '/auth/refresh') result = { user, accessToken: 'synthetic-test-token' };
       else if (endpoint.startsWith(`/contracts/${contract.id}/line-items`)) {
         const input = request.postDataJSON();
@@ -142,11 +164,55 @@ async function main() {
     await page.screenshot({ path: path.join(output, 'invoice-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: path.join(output, 'invoice-mobile.png'), fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`http://127.0.0.1:${port}/dashboard/contracts/${contract.id}`);
+    await page.getByLabel('Mês da cobrança',{exact:true}).fill('2026-10');
+    await page.getByRole('region',{name:'Total da cobrança do contrato'}).getByText('R$ 1.877,42',{exact:true}).waitFor();
+    await page.getByRole('region',{name:'Total da cobrança do contrato'}).scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(output,'financial-contract-total.png'),fullPage:true});
+    await page.goto(`http://127.0.0.1:${port}/dashboard/templates-email`);
+    await page.getByLabel('Nome do modelo',{exact:true}).fill('Cobrança mensal personalizada');
+    await page.getByLabel('Assunto do email',{exact:true}).fill('Fatura {fatura} para {cliente}');
+    await page.getByLabel('Mensagem do email',{exact:true}).fill('Olá, {cliente}.\n\n**Total: {total}**\nVencimento: {vencimento}\n\n{empresa}');
+    await page.getByRole('button',{name:'Salvar modelo',exact:true}).click();
+    await page.getByRole('status').getByText(/Modelo salvo/).waitFor();
+    assert.equal(emailTemplates.length,1);
+    await page.frameLocator('iframe[title="Prévia do template de email"]').getByText('Cliente Demonstração.',{exact:false}).waitFor();
+    await page.screenshot({path:path.join(output,'financial-email-editor.png'),fullPage:true});
+    await page.goto(`http://127.0.0.1:${port}/dashboard/financials`);
+    await page.getByLabel('Mês previsto',{exact:true}).waitFor();
+    await page.getByRole('heading',{name:'Previsão de recebimentos',exact:true}).waitFor();
+    assert.equal(await page.getByText('Dia 10/mês',{exact:true}).count(),0);
+    await page.screenshot({path:path.join(output,'financial-forecast.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    await page.screenshot({path:path.join(output,'financial-forecast-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1440,height:1000});
+    await page.goto(`http://127.0.0.1:${port}/dashboard/configuracoes?tab=integracoes`);
+    await page.getByLabel('Ambiente do ASAAS',{exact:true}).waitFor();
+    await page.getByLabel('Chave de API',{exact:true}).fill('synthetic-key');
+    await page.getByLabel('Token de autenticação do webhook',{exact:true}).fill('synthetic-webhook-token-12345678901234567890');
+    await page.getByLabel('Habilitar esta conexão para novas cobranças').check();
+    await page.getByRole('button',{name:'Salvar integração',exact:true}).click();
+    await page.getByText('URL do webhook:',{exact:true}).waitFor();
+    assert.equal(gatewayConnections[0].environment,'SANDBOX');
+    await page.screenshot({path:path.join(output,'financial-gateway-settings.png'),fullPage:true});
+    await page.goto(`http://127.0.0.1:${port}/dashboard/invoices/${invoice.id}`);
+    await page.getByRole('button',{name:'Visualizar email antes do envio',exact:true}).click();
+    await page.frameLocator('iframe[title="Prévia do email da fatura"]').getByText('Total: R$ 1.877,42',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Fechar prévia',exact:true}).click();
+    await page.getByLabel('Conexão para a cobrança',{exact:true}).selectOption(id(50));
+    page.once('dialog', dialog=>dialog.accept());
+    await page.getByRole('button',{name:'Programar cobrança na emissão',exact:true}).click();
+    await page.getByText('Programada para a emissão',{exact:true}).waitFor();
+    assert.equal(charges[0].state,'REQUESTED');assert.equal(event.approvedAt,null);
+    await page.getByRole('button',{name:'Remover programação',exact:true}).click();
+    await page.getByText('Cancelada no provedor',{exact:true}).waitFor();
     user.role = 'TECHNICIAN'; await page.reload();
     await page.getByRole('heading', { name: /Fatura/ }).first().waitFor();
     assert.equal(await page.getByRole('heading', { name: 'Cobrança mensal · 2026-10' }).count(), 0);
     assert.deepEqual(errors, []);
-    console.log('UI passed: recurring item conversion, dates, per-item proration, open end, monthly snapshot, isolated extras, approval, time zone, restricted role and mobile screenshots.');
+    console.log('UI passed: contract totals, per-item proration, invoice snapshots, extras, email editor and real-data preview, forecast and mobile, ASAAS settings, per-invoice scheduling/cancellation and restricted role.');
   } finally { if (browser) await browser.close(); server.kill(); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

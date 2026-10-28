@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { calendarDateKey, dateKey, zonedDateTime } from '@peanut/utils';
 import { randomUUID } from 'node:crypto';
 import { recurringAddonItems } from './contract-items';
+import { resolveBillingEmailTemplate, invoiceEmailValues } from './billing-email';
 
 export class ContractBillingError extends Error {}
 const fail = (message: string): never => { throw new ContractBillingError(message); };
@@ -147,7 +148,7 @@ export async function updateContractInvoice(db: BillingDb, invoiceId: string, wo
     if (issueKey < calendarDateKey(contract.startDate, zone) || (contract.endDate && issueKey > calendarDateKey(contract.endDate, zone))) return fail('Data de emissão fora da vigência do contrato.');
     if (calendarDateKey(dueDate, zone) < issueKey) return fail('O vencimento não pode ser anterior à emissão.');
     await tx.invoiceItem.deleteMany({ where: { invoiceId } });
-    await tx.billingScheduleEvent.update({ where: { id: invoice.billingScheduleEvent.id }, data: { approvedAt: null, approvedById: null, ...(input.refreshBase ? { needsRecurringRefresh: false } : {}), scheduledFor, amountCents: Math.round(Number(amounts.totals.totalAmount) * 100), ...(input.emailRecipients !== undefined ? { emailRecipients: input.emailRecipients } : {}) } });
+    await tx.billingScheduleEvent.update({ where: { id: invoice.billingScheduleEvent.id }, data: { approvedAt: null, approvedById: null, emailTemplateSnapshot: Prisma.DbNull, ...(input.refreshBase ? { needsRecurringRefresh: false } : {}), scheduledFor, amountCents: Math.round(Number(amounts.totals.totalAmount) * 100), ...(input.emailRecipients !== undefined ? { emailRecipients: input.emailRecipients } : {}) } });
     return tx.invoice.update({ where: { id: invoiceId }, data: { ...amounts.totals, dueDate, issueDate: scheduledFor, paymentMethod: input.paymentMethod ?? invoice.paymentMethod, pixKey: input.pixKey !== undefined ? input.pixKey : invoice.pixKey, observations: input.observations !== undefined ? input.observations : invoice.observations, discountReason: input.discountReason !== undefined ? input.discountReason : invoice.discountReason, items: { create: amounts.rows } }, include: { items: { orderBy: { sortOrder: 'asc' } }, billingScheduleEvent: true } });
   });
 }
@@ -155,7 +156,7 @@ export async function updateContractInvoice(db: BillingDb, invoiceId: string, wo
 export async function approveContractInvoice(db: BillingDb, invoiceId: string, workspaceId: string, actorUserId: string) {
   return db.$transaction(async tx => {
     await lockInvoice(tx, invoiceId, workspaceId);
-    const invoice = await tx.invoice.findFirst({ where: { id: invoiceId, workspaceId }, include: { items: true, billingScheduleEvent: { include: { contract: { include: { workspace: true } } } } } });
+    const invoice = await tx.invoice.findFirst({ where: { id: invoiceId, workspaceId }, include: { client: true, items: true, billingScheduleEvent: { include: { contract: { include: { workspace: true } } } } } });
     const event = invoice?.billingScheduleEvent;
     if (!invoice || !event || invoice.status !== 'DRAFT') return fail('Somente uma cobrança mensal em rascunho pode ser agendada.');
     if (event.needsRecurringRefresh) return fail('Os itens do contrato mudaram. Atualize os itens recorrentes deste rascunho antes de conferir.');
@@ -163,7 +164,9 @@ export async function approveContractInvoice(db: BillingDb, invoiceId: string, w
     if (!invoice.items.length || Number(invoice.totalAmount) <= 0) return fail('Revise os itens e o valor da cobrança antes de agendar.');
     if (event.contract.billingAutoEmail && !event.emailRecipients.length) return fail('Informe os emails dos destinatários antes de agendar.');
     await tx.contractHistory.create({ data: { workspaceId, contractId: event.contractId, actorUserId, event: 'BILLING_PERIOD_APPROVED', description: `Competência ${event.periodKey} conferida e agendada (${invoice.number}).` } });
-    return tx.billingScheduleEvent.update({ where: { id: event.id }, data: { approvedAt: new Date(), approvedById: actorUserId } });
+    const template = await resolveBillingEmailTemplate(tx, workspaceId, event.contract.billingEmailTemplateId);
+    const values = invoiceEmailValues(invoice, event.contract, event.contract.workspace, event.periodKey);
+    return tx.billingScheduleEvent.update({ where: { id: event.id }, data: { approvedAt: new Date(), approvedById: actorUserId, emailTemplateSnapshot: { ...template, values } } });
   });
 }
 

@@ -2,6 +2,8 @@
 
 import { useWorkspaceFormatters } from '../../../i18n/useWorkspaceFormatters';
 
+import FinancialForecast from '../../../components/contracts/FinancialForecast';
+
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../../lib/api';
 import { useRouter } from 'next/navigation';
@@ -106,6 +108,9 @@ export default function FinancialsOverviewPage() {
         </div>
       </header>
 
+      <FinancialForecast />
+      {metrics.gatewayReceived && <section className="border border-outline-variant rounded-xl p-md space-y-sm"><h3 className="font-semibold">Movimentações conciliadas nos gateways neste mês</h3><p className="text-xs text-on-surface-variant">Somente produção. Estes valores detalham recebimentos bancários; não devem ser somados novamente ao total de faturas pagas.</p><dl className="grid md:grid-cols-3 gap-md"><div><dt className="text-xs">Bruto conciliado</dt><dd className="font-mono text-xl">{formatCurrency(metrics.gatewayReceived.grossCents)}</dd></div><div><dt className="text-xs">Tarifas identificadas</dt><dd className="font-mono text-xl">{formatCurrency(metrics.gatewayReceived.knownFeesCents)}</dd></div><div><dt className="text-xs">Líquido informado pelo provedor</dt><dd className="font-mono text-xl">{metrics.gatewayReceived.hasUnconfirmedRefundNet ? 'Revisar estornos no provedor' : formatCurrency(metrics.gatewayReceived.knownNetCents)}</dd></div></dl><p className="text-xs text-on-surface-variant">Líquido bancário não representa lucro: despesas operacionais e impostos não estão descontados aqui.</p></section>}
+
       {/* Main MRR highlight card */}
       <div className="bg-gradient-to-br from-surface to-surface-container-low border border-primary/20 p-lg rounded-xl shadow-xl flex justify-between items-center relative overflow-hidden">
         <div className="flex flex-col gap-sm z-10">
@@ -138,7 +143,7 @@ export default function FinancialsOverviewPage() {
 
         <div className="bg-surface border border-outline-variant p-md rounded-xl shadow-lg flex flex-col gap-xs">
           <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">{t.financials.nextBilling}</span>
-          <span className="text-2xl font-bold font-mono text-warning mt-1">Dia 10/mês</span>
+          <span className="text-2xl font-bold font-mono text-warning mt-1">{metrics.nextBillingEvents?.[0] ? formatDate(metrics.nextBillingEvents[0].scheduledFor) : 'Sem data preparada'}</span>
           <span className="text-[11px] text-on-surface-variant/60">{t.financials.nextBillingDesc}</span>
         </div>
       </div>
@@ -147,7 +152,7 @@ export default function FinancialsOverviewPage() {
         <div className="bg-surface border border-outline-variant p-lg rounded-xl shadow-lg flex flex-col gap-md">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-sm border-b border-outline-variant/30 pb-md">
             <div>
-              <h3 className="text-sm font-semibold text-on-surface">Recebido líquido do mês</h3>
+              <h3 className="text-sm font-semibold text-on-surface">Recebimentos registrados no mês</h3>
               <p className="text-[12px] text-on-surface-variant">
                 Faturas pagas em {metrics.monthlyReceived.period}. Custos de material são internos e não aparecem no PDF do cliente.
               </p>
@@ -171,7 +176,7 @@ export default function FinancialsOverviewPage() {
               </div>
             </div>
             <div className="bg-surface-container-low border border-primary/30 rounded-lg p-md">
-              <span className="text-[11px] text-on-surface-variant uppercase font-semibold">Líquido estimado</span>
+              <span className="text-[11px] text-on-surface-variant uppercase font-semibold">Após custo de materiais</span>
               <div className="text-2xl font-bold font-mono text-primary mt-xs">
                 {formatCurrency(metrics.monthlyReceived.netReceivedCents)}
               </div>

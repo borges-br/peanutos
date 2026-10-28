@@ -1,5 +1,5 @@
-import { prisma as defaultDb, prepareContractPeriod, issueContractInvoice, contractCoversPeriod, loadWorkspaceSmtpConfig } from '@peanut/db';
-import { dateKey, calendarDateKey, LocalObjectStorage } from '@peanut/utils';
+import { prisma as defaultDb, prepareContractPeriod, issueContractInvoice, contractCoversPeriod, loadWorkspaceSmtpConfig, resolveBillingEmailTemplate, invoiceEmailValues, processBillingGatewayEvents, processRequestedInvoiceCharges, getInvoiceBankLink } from '@peanut/db';
+import { dateKey, calendarDateKey, LocalObjectStorage, renderBillingEmail } from '@peanut/utils';
 import { createHash } from 'node:crypto';
 import { createWorkspaceMailTransport } from './email-settings';
 
@@ -9,6 +9,7 @@ export type MailTransport = { sendMail(message: any): Promise<{ accepted?: Array
 
 /** Scan is repeatable: unique contract/month, locked issuance and claimed deliveries. */
 export async function runContractBilling(db: Db, pdfQueue: PdfQueue, store: LocalObjectStorage, now = new Date(), transport?: MailTransport | null) {
+  await processBillingGatewayEvents(db, now);
   const contracts = await db.contract.findMany({ where: { status: 'ACTIVE', type: { in: ['RECURRING_SUPPORT', 'HYBRID'] }, monthlyAmountCents: { gt: 0 } }, include: { workspace: true } });
   for (const contract of contracts) {
     const today = dateKey(now, contract.workspace.timeZone);
@@ -23,9 +24,12 @@ export async function runContractBilling(db: Db, pdfQueue: PdfQueue, store: Loca
     catch (error: any) { console.warn(`[Contract Billing] Could not issue ${event.id}: ${error.message}`); }
   }
 
+  await processRequestedInvoiceCharges(db);
+
   // Recover queue failures after a committed issuance without creating another invoice.
-  const pdfs = await db.billingScheduleEvent.findMany({ where: { status: 'GENERATED_FUTURE_INVOICE', emailPdfFileObjectId: null, invoice: { status: { in: ['ISSUED', 'OVERDUE'] } } }, take: 100 });
+  const pdfs = await db.billingScheduleEvent.findMany({ where: { status: 'GENERATED_FUTURE_INVOICE', emailPdfFileObjectId: null, invoice: { status: { in: ['ISSUED', 'OVERDUE', 'PAID'] } } }, take: 100 });
   for (const event of pdfs) {
+    try { await getInvoiceBankLink(db, event.invoiceId!, true); } catch { continue; }
     await pdfQueue.add('generate-pdf', { workspaceId: event.workspaceId, actorUserId: event.approvedById, entityType: 'INVOICE', entityId: event.invoiceId, documentType: 'INVOICE' }, {
       jobId: `monthly-pdf-${event.id}`, attempts: 3, backoff: { type: 'exponential', delay: 10000 }, removeOnComplete: 100, removeOnFail: 100,
     });
@@ -40,10 +44,13 @@ export async function sendContractEmails(db: Db, store: LocalObjectStorage, now 
     emailStatus: { in: ['QUEUED', 'FAILED', 'PAUSED'] }, emailAttempts: { lt: 5 }, emailPdfFileObjectId: { not: null },
     scheduledFor: { lte: now }, approvedAt: { not: null },
     OR: [{ emailNextAttemptAt: null }, { emailNextAttemptAt: { lte: now } }],
-    invoice: { status: { in: ['ISSUED', 'OVERDUE'] } }, contract: { status: 'ACTIVE', billingAutoEmail: true },
+    invoice: { status: { in: ['ISSUED', 'OVERDUE', 'PAID'] } }, contract: { status: 'ACTIVE', billingAutoEmail: true },
   }, include: { invoice: true, contract: { include: { workspace: true } } }, orderBy: { scheduledFor: 'asc' }, take: 50 });
   for (const candidate of candidates) {
     if (!contractCoversPeriod(candidate.contract, candidate.periodKey, candidate.contract.workspace.timeZone)) continue;
+    let bankLink: string | null;
+    try { bankLink = await getInvoiceBankLink(db, candidate.invoiceId!, true); }
+    catch { await db.billingScheduleEvent.update({ where: { id: candidate.id }, data: { emailStatus: 'PAUSED', emailLastError: 'Aguardando geração ou conciliação da cobrança bancária escolhida nesta fatura.' } }); continue; }
     let config;
     try { config = await loadWorkspaceSmtpConfig(db, candidate.workspaceId); } catch { /* Keep credentials out of logs. */ }
     const sender = config ? (transport === undefined ? createWorkspaceMailTransport(config) : transport) : null;
@@ -54,7 +61,7 @@ export async function sendContractEmails(db: Db, store: LocalObjectStorage, now 
     const claimed = await db.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${candidate.invoiceId}::uuid AND "workspaceId" = ${candidate.workspaceId}::uuid FOR UPDATE`;
       const current = await tx.billingScheduleEvent.findUnique({ where: { id: candidate.id }, include: { invoice: true, contract: true } });
-      if (!current?.invoice || !['ISSUED', 'OVERDUE'].includes(current.invoice.status) || !current.contract.billingAutoEmail || current.contract.status !== 'ACTIVE') return false;
+      if (!current?.invoice || !['ISSUED', 'OVERDUE', 'PAID'].includes(current.invoice.status) || !current.contract.billingAutoEmail || current.contract.status !== 'ACTIVE') return false;
       const result = await tx.billingScheduleEvent.updateMany({ where: { id: candidate.id, emailStatus: { in: ['QUEUED', 'FAILED', 'PAUSED'] }, emailAttempts: { lt: 5 }, OR: [{ emailNextAttemptAt: null }, { emailNextAttemptAt: { lte: now } }] }, data: { emailStatus: 'SENDING', emailAttemptedAt: now, emailAttempts: { increment: 1 }, emailLastError: null } });
       return result.count === 1;
     });
@@ -78,14 +85,14 @@ export async function sendContractEmails(db: Db, store: LocalObjectStorage, now 
       const domain = config.fromEmail.match(/@([a-z0-9.-]+)/i)?.[1] || 'peanut.invalid';
       const messageId = candidate.emailMessageId || `<contract-${candidate.id}@${domain}>`;
       await db.billingScheduleEvent.update({ where: { id: candidate.id }, data: { emailMessageId: messageId } });
-      const zone = candidate.contract.workspace.timeZone;
-      const due = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(invoice.dueDate);
-      const total = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: candidate.currency || 'BRL' } as any).format(Number(invoice.totalAmount));
+      const snapshot = candidate.emailTemplateSnapshot as any;
+      const template = snapshot || await resolveBillingEmailTemplate(db, candidate.workspaceId, candidate.contract.billingEmailTemplateId);
+      const mail = snapshot?.rendered || renderBillingEmail(template, { ...(snapshot?.values || invoiceEmailValues(invoice, candidate.contract, candidate.contract.workspace, candidate.periodKey)), link_pagamento: bankLink || '' });
+      if (!snapshot?.rendered) await db.billingScheduleEvent.update({ where: { id: candidate.id }, data: { emailTemplateSnapshot: { ...template, rendered: mail } } });
       sending = true;
       const info = await sender.sendMail({
         from: { name: config.fromName, address: config.fromEmail }, replyTo: config.replyTo, to: recipients, messageId,
-        subject: `Fatura ${invoice.number} | ${candidate.periodKey} | ${candidate.contract.workspace.brandName || candidate.contract.workspace.name}`,
-        text: `Olá,\n\nSegue em anexo a fatura ${invoice.number}, referente ao contrato ${candidate.contract.number}, competência ${candidate.periodKey}.\n\nTotal: ${total}\nVencimento: ${due}\n\nA mensalidade e os serviços/materiais adicionais deste mês estão discriminados no mesmo PDF.\n\nAtenciosamente,\n${candidate.contract.workspace.brandName || candidate.contract.workspace.name}\nFuso da emissão: ${zone}`,
+        subject: mail.subject, text: mail.text, html: mail.html,
         attachments: [{ filename: file.originalFilename, content, contentType: 'application/pdf' }],
         disableFileAccess: true, disableUrlAccess: true,
       });

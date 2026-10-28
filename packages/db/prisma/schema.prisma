@@ -197,6 +197,8 @@ model Workspace {
   // Relationships
   users                    User[]
   emailSettings            WorkspaceEmailSettings?
+  emailTemplates           EmailTemplate[]
+  billingConnections       BillingConnection[]
   clients                  Client[]
   clientUsers         ClientUser[]
   assets              Asset[]
@@ -226,6 +228,113 @@ model Workspace {
   documentTemplateSettings DocumentTemplateSetting[]
 
   @@map("workspaces")
+}
+
+model BillingConnection {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  provider String @db.VarChar(30)
+  environment String @db.VarChar(20)
+  enabled Boolean @default(false)
+  apiKeyEncrypted String? @db.Text
+  webhookTokenEncrypted String? @db.Text
+  revision Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  charges BillingCharge[]
+  customers BillingCustomer[]
+  events BillingGatewayEvent[]
+  @@unique([workspaceId, provider, environment])
+  @@map("billing_connections")
+}
+
+model BillingCustomer {
+  id String @id @default(uuid()) @db.Uuid
+  connectionId String @db.Uuid
+  clientId String @db.Uuid
+  state String @db.VarChar(30)
+  externalId String? @db.VarChar(100)
+  updatedAt DateTime @updatedAt
+  connection BillingConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  @@unique([connectionId, clientId])
+  @@map("billing_customers")
+}
+
+model BillingCharge {
+  id String @id @default(uuid()) @db.Uuid
+  invoiceId String @db.Uuid
+  connectionId String @db.Uuid
+  externalReference String @db.VarChar(150)
+  externalId String? @db.VarChar(100)
+  externalCustomerId String? @db.VarChar(100)
+  billingType String @db.VarChar(20)
+  amountCents Int
+  dueDate DateTime @db.Date
+  state String @db.VarChar(30)
+  providerStatus String? @db.VarChar(50)
+  paymentUrl String? @db.Text
+  bankSlipUrl String? @db.Text
+  receivedCents Int @default(0)
+  netReceivedCents Int @default(0)
+  lastError String? @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  connection BillingConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  entries BillingReceipt[]
+  @@unique([invoiceId, connectionId])
+  @@unique([connectionId, externalId])
+  @@unique([connectionId, externalReference])
+  @@map("billing_charges")
+}
+
+model BillingReceipt {
+  id String @id @default(uuid()) @db.Uuid
+  chargeId String @db.Uuid
+  principalCents Int
+  grossCents Int
+  netCents Int?
+  occurredAt DateTime
+  description String @db.VarChar(100)
+  createdAt DateTime @default(now())
+  charge BillingCharge @relation(fields: [chargeId], references: [id], onDelete: Restrict)
+  @@index([chargeId, occurredAt])
+  @@map("billing_receipts")
+}
+
+model BillingGatewayEvent {
+  id String @id @default(uuid()) @db.Uuid
+  connectionId String @db.Uuid
+  externalEventId String @db.VarChar(200)
+  paymentId String @db.VarChar(100)
+  event String @db.VarChar(100)
+  processedAt DateTime?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  lastError String? @db.Text
+  createdAt DateTime @default(now())
+  connection BillingConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  @@unique([connectionId, externalEventId])
+  @@index([processedAt, nextAttemptAt])
+  @@map("billing_gateway_events")
+}
+
+model EmailTemplate {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  name String @db.VarChar(100)
+  subject String @db.VarChar(200)
+  body String @db.Text
+  isDefault Boolean @default(false)
+  active Boolean @default(true)
+  revision Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@unique([workspaceId, name])
+  @@index([workspaceId, active])
+  @@map("email_templates")
 }
 
 model WorkspaceEmailSettings {
@@ -671,6 +780,7 @@ model Invoice {
   ticket        Ticket?       @relation(fields: [ticketId], references: [id], onDelete: SetNull)
   items         InvoiceItem[]
   billingScheduleEvent BillingScheduleEvent?
+  billingCharges BillingCharge[]
 
   @@index([workspaceId, status, dueDate])
   @@map("invoices")
@@ -730,6 +840,9 @@ model Contract {
   billingWhatsappNumbers String[]       @default([])
   billingPaymentMethod   String         @default("PIX") @db.VarChar(30)
   billingPixKey          String?        @db.VarChar(100)
+  // Tenant ownership is validated before selecting a template.
+  billingEmailTemplateId String?        @db.Uuid
+  gatewayBillingType String @default("PIX") @db.VarChar(20)
   currency               String         @default("BRL") @db.VarChar(3)
   slaPolicyId            String?        @db.Uuid
   maxUsers               Int?
@@ -820,6 +933,7 @@ model BillingScheduleEvent {
   approvedAt   DateTime?
   approvedById String?               @db.Uuid
   needsRecurringRefresh Boolean      @default(false)
+  emailTemplateSnapshot Json?
   emailRecipients String[]           @default([])
   emailStatus  String                @default("NOT_REQUESTED") @db.VarChar(30)
   emailAcceptedRecipients String[]   @default([])

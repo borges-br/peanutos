@@ -1,3 +1,4 @@
+import { BillingGatewayController, AsaasWebhookController } from './billing-gateway.controller';
 import { Module } from "@nestjs/common";
 import { FinancialsController } from "./financials.controller";
 import { FinancialsService } from "./financials.service";
@@ -6,7 +7,7 @@ import { AuthModule } from "../auth/auth.module";
 
 @Module({
   imports: [AuditModule, AuthModule],
-  controllers: [FinancialsController],
+  controllers: [FinancialsController, BillingGatewayController, AsaasWebhookController],
   providers: [FinancialsService],
 })
 export class FinancialsModule {}

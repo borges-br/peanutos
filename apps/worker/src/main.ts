@@ -8,7 +8,7 @@ import { Worker, Job, Queue } from 'bullmq';
 import { runContractBilling } from './contract-billing';
 import { testWorkspaceEmailConnection } from './email-settings';
 import type { RenderA4DocumentParams } from '@peanut/documents';
-import { prisma, freezeContractDocument } from '@peanut/db';
+import { prisma, freezeContractDocument, getInvoiceBankLink } from '@peanut/db';
 import * as crypto from 'crypto';
 import * as https from 'https';
 import * as http from 'http';
@@ -716,6 +716,7 @@ const pdfWorker = new Worker(
         : typedDocumentType === 'QUOTE'
           ? source.validUntil
           : source.scheduledFor || source.completedAt || null;
+    const bankPaymentUrl = entityType === 'INVOICE' ? await getInvoiceBankLink(prisma, entityId, source.status !== 'DRAFT') : null;
     const sourceItems = source.items?.length
       ? source.items
       : typedDocumentType === 'SERVICE_ORDER'
@@ -758,6 +759,7 @@ const pdfWorker = new Worker(
       dueDate: typedDocumentType === 'SERVICE_ORDER'
         ? dueDate ? formatDocumentDateTime(dueDate, 'pt-BR', workspace.timeZone) : '--/--/----'
         : formatDate(dueDate),
+      bankPaymentUrl,
       paymentMethod: typedDocumentType === 'INVOICE' ? source.paymentMethod : null,
       pixKey: typedDocumentType === 'INVOICE' ? source.pixKey : null,
       totalAmount: formatCurrency(source.totalAmount || 0),
@@ -905,7 +907,7 @@ const pdfWorker = new Worker(
             }),
           },
         });
-        if (entityType === 'INVOICE' && source.billingScheduleEvent && ['ISSUED', 'OVERDUE'].includes(source.status)) {
+        if (entityType === 'INVOICE' && source.billingScheduleEvent && ['ISSUED', 'OVERDUE', 'PAID'].includes(source.status)) {
           await tx.billingScheduleEvent.updateMany({
             where: { id: source.billingScheduleEvent.id, invoiceId: entityId, emailPdfFileObjectId: null },
             data: { emailPdfFileObjectId: fileObject.id, documentSnapshot: JSON.parse(JSON.stringify(finalRenderParams)) },

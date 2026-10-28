@@ -8,17 +8,19 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 
-const emailLabels: Record<string, string> = { NOT_REQUESTED: 'Manual', PAUSED: 'SMTP desativado ou indisponível', QUEUED: 'Aguardando PDF/envio', SENDING: 'Enviando', SENT: 'Aceito pelo servidor', PARTIAL: 'Aceitação parcial', FAILED: 'Falha', UNKNOWN: 'Confirmação pendente', CANCELLED: 'Cancelado' };
+const emailLabels: Record<string, string> = { NOT_REQUESTED: 'Manual', PAUSED: 'Envio pausado', QUEUED: 'Aguardando PDF/envio', SENDING: 'Enviando', SENT: 'Aceito pelo servidor', PARTIAL: 'Aceitação parcial', FAILED: 'Falha', UNKNOWN: 'Confirmação pendente', CANCELLED: 'Cancelado' };
 
 export default function ContractBillingPanel({ contract, onSaved }: { contract: any; onSaved: () => Promise<void> }) {
   const { timeZone, formatDateTime, formatCalendarDate } = useWorkspaceFormatters();
+  const [templates, setTemplates] = useState<any[]>([]);
+  useEffect(() => { apiRequest('/financials/email-templates').then(data => setTemplates(data.data)).catch(() => {}); }, []);
   const [form, setForm] = useState<any>({});
   const [period, setPeriod] = useState(() => dateKey(new Date(), timeZone).slice(0, 7));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   useEffect(() => {
-    setForm({ title: contract.title, startDate: String(contract.startDate).slice(0, 10), endDate: contract.endDate?.slice(0, 10) || '', monthlyAmount: (contract.monthlyAmountCents / 100).toFixed(2), billingDay: contract.billingDay, billingIssueDay: contract.billingIssueDay || contract.billingDay, billingIssueTime: contract.billingIssueTime || '09:00', billingAutoIssue: contract.billingAutoIssue, billingAutoEmail: contract.billingAutoEmail, emails: (contract.billingEmailRecipients || []).join('\n'), phones: (contract.billingWhatsappNumbers || []).join('\n'), billingPaymentMethod: contract.billingPaymentMethod || 'PIX', billingPixKey: contract.billingPixKey || '' });
+    setForm({ title: contract.title, startDate: String(contract.startDate).slice(0, 10), endDate: contract.endDate?.slice(0, 10) || '', monthlyAmount: (contract.monthlyAmountCents / 100).toFixed(2), billingDay: contract.billingDay, billingIssueDay: contract.billingIssueDay || contract.billingDay, billingIssueTime: contract.billingIssueTime || '09:00', billingAutoIssue: contract.billingAutoIssue, billingAutoEmail: contract.billingAutoEmail, emails: (contract.billingEmailRecipients || []).join('\n'), phones: (contract.billingWhatsappNumbers || []).join('\n'), billingPaymentMethod: contract.billingPaymentMethod || 'PIX', billingPixKey: contract.billingPixKey || '', billingEmailTemplateId: contract.billingEmailTemplateId || '', gatewayBillingType: contract.gatewayBillingType || 'PIX' });
   }, [contract]);
   const change = (field: string, value: any) => { setForm((old: any) => ({ ...old, [field]: value })); setSuccess(''); };
   const split = (value: string) => value.split(/[\n;,]+/).map(part => part.trim()).filter(Boolean);
@@ -31,7 +33,7 @@ export default function ContractBillingPanel({ contract, onSaved }: { contract: 
         billingIssueDay: Number(form.billingIssueDay), billingIssueTime: form.billingIssueTime,
         billingAutoIssue: !!form.billingAutoIssue, billingAutoEmail: !!form.billingAutoEmail,
         billingEmailRecipients: split(form.emails), billingWhatsappNumbers: split(form.phones).map(phone => phone.replace(/\D/g, '')),
-        billingPaymentMethod: form.billingPaymentMethod, billingPixKey: form.billingPixKey || null,
+        gatewayBillingType: form.gatewayBillingType || 'PIX', billingEmailTemplateId: form.billingEmailTemplateId || null, billingPaymentMethod: form.billingPaymentMethod, billingPixKey: form.billingPixKey || null,
       }) });
       await onSaved(); setSuccess('Contrato salvo. Competências já preparadas conservam os valores e destinatários copiados; revise-as individualmente.');
     } catch (cause: any) { setError(cause.message || 'Não foi possível salvar.'); }
@@ -67,6 +69,10 @@ export default function ContractBillingPanel({ contract, onSaved }: { contract: 
         <Select label="Pagamento" value={form.billingPaymentMethod || 'PIX'} onChange={event => change('billingPaymentMethod', event.target.value)} options={[{ value: 'PIX', label: 'Pix' }, { value: 'TRANSFER', label: 'Transferência' }, { value: 'CASH', label: 'Dinheiro' }, { value: 'OTHER', label: 'Outro' }]} />
         <Input label="Chave Pix (opcional)" value={form.billingPixKey || ''} maxLength={100} onChange={event => change('billingPixKey', event.target.value)} />
       </div>
+      <Select label="Forma sugerida para cobranças bancárias" value={form.gatewayBillingType || 'PIX'} onChange={event => change('gatewayBillingType', event.target.value)} options={[{ value: 'PIX', label: 'Pix' }, { value: 'BOLETO', label: 'Boleto' }]} />
+      <p className="text-xs text-on-surface-variant">O padrão sugere a forma de pagamento; a criação da cobrança é escolhida individualmente em cada fatura.</p>
+      <Select label="Modelo de email da cobrança" value={form.billingEmailTemplateId || ''} onChange={event => change('billingEmailTemplateId', event.target.value)} options={[{ value: '', label: 'Padrão do workspace' }, ...templates.map(row => ({ value: row.id, label: row.name }))]} />
+      <a href="/dashboard/templates-email" className="text-primary underline text-sm">Criar ou editar templates de email</a>
       <div className="grid md:grid-cols-2 gap-md">
         <label className="text-sm space-y-xs"><span>Emails do financeiro e diretores (um por linha)</span><textarea value={form.emails || ''} onChange={event => change('emails', event.target.value)} rows={4} className="block w-full rounded border border-outline-variant bg-surface p-sm" /></label>
         <label className="text-sm space-y-xs"><span>WhatsApp para envio manual (com DDI, um por linha)</span><textarea value={form.phones || ''} onChange={event => change('phones', event.target.value)} rows={4} className="block w-full rounded border border-outline-variant bg-surface p-sm" /></label>

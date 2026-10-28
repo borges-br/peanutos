@@ -138,3 +138,5 @@ export function decryptSensitiveData<T = unknown>(cipherText: string): T {
     return decrypted as T;
   }
 }
+
+export * from './billing-email';

@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from "@nestjs/common";
-import { prisma, ContractStatus, ContractType, prepareContractPeriod, ContractBillingError, saveContractLineItem, removeContractLineItem } from "@peanut/db";
+import { prisma, Prisma, ContractStatus, ContractType, prepareContractPeriod, ContractBillingError, saveContractLineItem, removeContractLineItem } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
 import {
@@ -242,6 +242,7 @@ export class ContractsService {
       input.number ||
       `CTR-${clientCodeSource.substring(0, 3).toUpperCase()}-${Date.now().toString().substring(6)}`;
 
+    if (input.billingEmailTemplateId && !await prisma.emailTemplate.findFirst({ where: { id: input.billingEmailTemplateId, workspaceId, active: true } })) throw new BadRequestException('Modelo de email não disponível neste workspace.');
     const newContract = await prisma.contract.create({
       data: {
         workspaceId,
@@ -264,6 +265,8 @@ export class ContractsService {
         billingWhatsappNumbers: [...new Set(input.billingWhatsappNumbers)],
         billingPaymentMethod: input.billingPaymentMethod,
         billingPixKey: input.billingPixKey || null,
+        billingEmailTemplateId: input.billingEmailTemplateId || null,
+        gatewayBillingType: input.gatewayBillingType || 'PIX',
         currency: input.currency,
         slaPolicyId: input.slaPolicyId || null,
         maxUsers: input.maxUsers !== undefined ? input.maxUsers : null,
@@ -410,17 +413,18 @@ export class ContractsService {
         data.includedOnsiteHours = input.includedOnsiteHours;
       if (input.notes !== undefined) data.notes = input.notes;
 
-      for (const field of ['billingIssueDay', 'billingIssueTime', 'billingAutoIssue', 'billingAutoEmail', 'billingEmailRecipients', 'billingWhatsappNumbers', 'billingPaymentMethod', 'billingPixKey'] as const) {
+      for (const field of ['billingIssueDay', 'billingIssueTime', 'billingAutoIssue', 'billingAutoEmail', 'billingEmailRecipients', 'billingWhatsappNumbers', 'billingPaymentMethod', 'billingPixKey', 'billingEmailTemplateId', 'gatewayBillingType'] as const) {
         if (input[field] !== undefined) data[field] = input[field];
       }
       if (data.billingEmailRecipients) data.billingEmailRecipients = [...new Set(data.billingEmailRecipients.map((email: string) => email.toLowerCase()))];
+      if (input.billingEmailTemplateId && !await tx.emailTemplate.findFirst({ where: { id: input.billingEmailTemplateId, workspaceId, active: true } })) throw new BadRequestException('Modelo de email não disponível neste workspace.');
       const updatedContract = await tx.contract.update({
         where: { id },
         data,
       });
 
       const affectsRecurringItems = ['title', 'startDate', 'endDate', 'monthlyAmountCents', 'currency'].some(field => field in data && JSON.stringify(data[field]) !== JSON.stringify((contract as any)[field]));
-      if (affectsRecurringItems) await tx.billingScheduleEvent.updateMany({ where: { contractId: id, workspaceId, invoice: { status: 'DRAFT' } }, data: { approvedAt: null, approvedById: null, needsRecurringRefresh: true } });
+      if (affectsRecurringItems) await tx.billingScheduleEvent.updateMany({ where: { contractId: id, workspaceId, invoice: { status: 'DRAFT' } }, data: { approvedAt: null, approvedById: null, emailTemplateSnapshot: Prisma.DbNull, needsRecurringRefresh: true } });
 
       // Write ContractHistory record
       await tx.contractHistory.create({

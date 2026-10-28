@@ -1,3 +1,4 @@
+import { getInvoiceBankLink } from '@peanut/db';
 import {
   Injectable,
   NotFoundException,
@@ -570,6 +571,7 @@ export class InvoicesService {
         await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoiceId}::uuid AND "workspaceId" = ${workspaceId}::uuid FOR UPDATE`;
         const current = await tx.invoice.findFirst({ where: { id: invoiceId, workspaceId }, include: { billingScheduleEvent: true } });
         if (!current || current.status !== oldStatus) throw new BadRequestException('A fatura mudou durante a operação. Recarregue a página.');
+        if (['PAID', 'CANCELLED'].includes(newStatus) && await tx.billingCharge.count({ where: { invoiceId, connection: { environment: 'PRODUCTION' }, state: { notIn: ['FAILED', 'CANCELLED', 'REFUNDED'] } } })) throw new BadRequestException('Existe cobrança bancária vinculada. Concilie o recebimento ou cancele no provedor e sincronize antes de mudar a baixa local.');
         if (current.billingScheduleEvent?.emailStatus === 'SENDING') throw new BadRequestException('Há um envio de email em andamento. Aguarde sua conclusão.');
         if (current.billingScheduleEvent && newStatus === 'CANCELLED') await tx.billingScheduleEvent.update({ where: { id: current.billingScheduleEvent.id }, data: { status: 'CANCELLED', approvedAt: null, emailStatus: 'CANCELLED' } });
         return tx.invoice.update({ where: { id: invoiceId }, data: dataToUpdate });
@@ -909,6 +911,7 @@ export class InvoicesService {
 
     const renderData = {
       number: invoice.number,
+      bankPaymentUrl: await getInvoiceBankLink(prisma, invoice.id, invoice.status !== 'DRAFT'),
       billingPeriod: invoice.billingScheduleEvent?.periodKey,
       contractNumber: invoice.billingScheduleEvent?.contract.number,
       status: invoice.status,

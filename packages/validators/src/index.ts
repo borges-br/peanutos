@@ -516,6 +516,8 @@ const contractBaseSchema = z.object({
   billingEmailRecipients: z.array(z.string().trim().email().max(254)).max(50).default([]),
   billingWhatsappNumbers: z.array(z.string().regex(/^\d{10,15}$/, 'Use telefone com código do país e somente números')).max(30).default([]),
   billingPaymentMethod: z.enum(['PIX', 'TRANSFER', 'CASH', 'OTHER']).default('PIX'),
+  gatewayBillingType: z.enum(['PIX', 'BOLETO']).optional(),
+  billingEmailTemplateId: z.string().uuid().optional().nullable(),
   billingPixKey: z.string().max(100).optional().nullable(),
   currency: z.string().length(3, { message: 'A moeda deve ter exatamente 3 caracteres (ex: BRL)' }).default('BRL'),
   slaPolicyId: z.string().uuid({ message: 'ID de SLA inválido' }).optional().nullable(),
