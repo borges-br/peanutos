@@ -1,33 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { useWorkspaceFormatters } from '../../i18n/useWorkspaceFormatters';
-
-export const AppFooter: React.FC = () => {
-  const { formatDateTime } = useWorkspaceFormatters();
-  const { user } = useAuth();
-  const [mounted, setMounted] = useState(false);
-  const [currentDate] = useState(() => new Date('2026-05-24T15:32:12-03:00')); // consistent date format as requested in specs
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
-
-  const userPart = user?.name ? ` · Usuário: ${user.name}` : '';
-  const dateStr = formatDateTime(currentDate);
-
+import React from "react";
+export default function AppFooter() {
   return (
-    <footer className="h-6 bg-surface-container-lowest border-t border-outline-variant/30 flex items-center px-md z-40 select-none select-text text-[10px] text-on-surface-variant font-mono">
-      <div className="flex items-center justify-between w-full">
-        <p>
-          2026 Peanut OS · Ambiente: Homologação · Última atualização: {dateStr}{userPart}
-        </p>
-      </div>
+    <footer className="app-footer">
+      <span>Peanut OS</span>
+      <a href="/dashboard/configuracoes/preferencias/aparencia">
+        Personalizar sua experiência
+      </a>
     </footer>
   );
-};
-
-export default AppFooter;
+}

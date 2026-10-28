@@ -53,7 +53,7 @@ export async function apiRequest<T = any>(
     let errorMessage = 'Ocorreu um erro no servidor';
     try {
       const errorData = await response.json();
-      errorMessage = errorData.message || errorMessage;
+      errorMessage = response.status >= 500 ? 'Não foi possível concluir agora. Tente novamente.' : response.status === 403 ? 'Seu perfil não tem acesso a esta ação.' : Array.isArray(errorData.message) ? errorData.message.join('. ') : errorData.message || errorMessage;
     } catch (e) {
       // Ignored
     }
@@ -95,7 +95,7 @@ export async function apiBlobRequest(
     let errorMessage = 'Ocorreu um erro no servidor';
     try {
       const errorData = await response.json();
-      errorMessage = errorData.message || errorMessage;
+      errorMessage = response.status >= 500 ? 'Não foi possível concluir agora. Tente novamente.' : response.status === 403 ? 'Seu perfil não tem acesso a esta ação.' : Array.isArray(errorData.message) ? errorData.message.join('. ') : errorData.message || errorMessage;
     } catch {
       // ignore
     }

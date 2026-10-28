@@ -484,7 +484,7 @@ export default function AuditoriaPage() {
                         </td>
                         <td className="p-md">{getCriticalityBadge(event.severity)}</td>
                         <td className="p-md text-right">
-                          <button className="material-symbols-outlined text-outline group-hover:text-primary transition-colors">
+                          <button aria-label="Ver detalhes da atividade" onClick={(e)=>{e.stopPropagation();setSelectedEventId(event.id);}} className="material-symbols-outlined text-outline group-hover:text-primary transition-colors">
                             visibility
                           </button>
                         </td>

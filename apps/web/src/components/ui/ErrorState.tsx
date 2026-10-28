@@ -12,7 +12,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({ title, description, onRe
   const { t } = useI18n();
 
   return (
-    <div className="flex flex-col items-center justify-center text-center p-xl bg-surface border border-error-container/20 rounded-xl gap-sm shadow-xl shadow-black/10">
+    <div role="alert" className="flex flex-col items-center justify-center text-center p-xl bg-surface border border-error-container/20 rounded-xl gap-sm shadow-xl shadow-black/10">
       <span className="material-symbols-outlined text-4xl text-error/80 mb-2">
         error
       </span>

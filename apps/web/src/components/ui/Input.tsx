@@ -18,12 +18,15 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         )}
         <input
           id={inputId}
+          aria-invalid={!!error}
+          aria-describedby={error ? inputId+"-error" : props["aria-describedby"]}
           ref={ref}
-          className={`bg-surface-container-lowest border border-outline-variant rounded-lg px-4 py-2 text-body-sm text-on-surface placeholder-on-surface-variant/40 outline-none focus:border-primary transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${error ? 'border-error/50 focus:border-error' : ''} ${className}`}
+          aria-label={label || props["aria-label"] || props.placeholder}
+          className={`bg-surface-container-lowest border border-outline-variant rounded-lg px-4 py-2 text-body-sm text-on-surface placeholder-on-surface-variant/70 outline-none focus:border-primary transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${error ? 'border-error/50 focus:border-error' : ''} ${className}`}
           {...props}
         />
         {error && (
-          <span className="text-[11px] text-error mt-0.5">{error}</span>
+          <span role="alert" id={inputId+"-error"} className="text-xs text-error mt-0.5">{error}</span>
         )}
       </div>
     );

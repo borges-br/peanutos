@@ -464,7 +464,7 @@ export default function SettingsPage() {
         <div className="p-lg space-y-md">
           {[
             { title: 'Gerenciar Usuários Internos', desc: 'Convide novos membros e configure acessos.', path: '/dashboard/configuracoes/usuarios-internos', label: 'Acessar Usuários' },
-            { title: 'Matriz de Permissões (RBAC)', desc: 'Visualize papéis: OWNER, ADMIN, FINANCIAL, TECHNICIAN, READ_ONLY.', path: '/dashboard/configuracoes/permissoes', label: 'Acessar RBAC' },
+            { title: 'Permissões da equipe', desc: 'Consulte o acesso de cada perfil.', path: '/dashboard/configuracoes/permissoes', label: 'Ver permissões' },
           ].map(({ title, desc, path, label }) => (
             <div key={path} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-md border border-outline-variant/30 hover:border-primary/40 rounded-xl bg-surface-container/20 transition-all gap-md">
               <div>
@@ -476,24 +476,13 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
-      <div className="md:col-span-4">
-        <Card title="Resumo das Contas">
-          <div className="space-y-sm text-[13px]">
-            {['Proprietário (OWNER)', 'Administradores', 'Técnicos', 'Desativadas'].map((label, i) => (
-              <div key={i} className="flex justify-between items-center py-1 border-b border-outline-variant/20 last:border-0">
-                <span className="text-on-surface-variant">{label}</span>
-                <span className="font-mono text-primary font-bold">{i === 0 ? '1' : '--'}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+
     </div>
   );
 
   const renderNotificacoes = () => (
     <Card title="Alertas e notificações">
-      <p className="text-sm mb-md">Ajuste os prazos dos alertas na aba Operação e os endpoints na configuração de Webhooks. O SMTP para envio de faturas fica na aba Integrações.</p>
+      <p className="text-sm mb-md">Ajuste os prazos dos alertas na aba Operação e os destinos das automações. O servidor de email para envio de faturas fica na aba Integrações.</p>
       <Button variant="secondary" onClick={() => setActiveTab('operacao')}>Configurar alertas</Button>
     </Card>
   );
@@ -506,25 +495,7 @@ export default function SettingsPage() {
     </div>
   );
 
-  const renderModulos = () => (
-    <div className="bg-surface border border-outline-variant rounded-xl overflow-hidden shadow animate-fade-in">
-      <table className="w-full text-left border-collapse text-[13px]">
-        <thead className="bg-surface-container font-label-caps text-on-surface-variant border-b border-outline-variant">
-          <tr>
-            {['MÓDULO', 'STATUS', 'VERSÃO', 'LICENÇA'].map(h => <th key={h} className="p-md font-semibold">{h}</th>)}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-outline-variant/30">
-          <tr className="hover:bg-surface-container/20">
-            <td className="p-md font-medium text-on-surface">Core Engine System</td>
-            <td className="p-md"><div className="flex items-center gap-xs"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span>Operacional</span></div></td>
-            <td className="p-md font-mono text-on-surface-variant/80 text-[11px]">v2.4.0</td>
-            <td className="p-md text-right text-[11px] font-bold text-primary">CORPORATIVO</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
+  const renderModulos = () => <div className="settings-panel space-y-md"><h2>Seu espaço de trabalho</h2><Button variant="outline" onClick={()=>router.push('/dashboard/configuracoes/preferencias/aparencia')}>Personalizar aparência</Button><Button variant="outline" onClick={()=>router.push('/dashboard/configuracoes/usuarios-internos')}>Gerenciar equipe</Button></div>;
 
   const renderTabContent = () => {
     switch (activeTab) {

@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { calendarDateKey, dateKey } from '@peanut/utils';
 import { contractBillingDates, contractCoversPeriod, monthBounds, recurringBaseItems, invoiceAmounts, ContractBillingError } from './contract-billing';
-import { recurringAddonItems } from './contract-items';
+import { recurringAddonItems, oneOffItems } from './contract-items';
 
 const amount = (value: any) => new Prisma.Decimal(value || 0).mul(100).toDecimalPlaces(0).toNumber();
 export function shiftMonth(period: string, delta: number) {
@@ -21,10 +21,10 @@ export function contractPeriodSummary(contract: any, period: string, zone: strin
   const sumKind = (kind: string) => (invoice?.items || []).filter((item: any) => (item.billingKind || 'EXTRA') === kind).reduce((sum: number, item: any) => sum + amount(item.totalPrice ?? new Prisma.Decimal(item.quantity).mul(item.unitPrice)), 0);
   const baseCents = invoice ? sumKind('BASE') : contract.monthlyAmountCents;
   const recurringCents = invoice ? sumKind('RECURRING') : projectedRecurringCents;
-  const extraCents = invoice ? sumKind('EXTRA') : 0;
+  const extraCents = invoice ? sumKind('EXTRA') : oneOffItems(contract, period).reduce((sum: number, item: any) => sum + amount(item.quantity.mul(item.unitPrice)), 0);
   const discountCents = invoice ? amount(invoice.discountAmount) : 0;
   return { period, baseCents, recurringCents, extraCents, discountCents,
-    totalCents: invoice ? amount(invoice.totalAmount) : baseCents + recurringCents,
+    totalCents: invoice ? amount(invoice.totalAmount) : baseCents + recurringCents + extraCents,
     ruleTotalCents: contract.monthlyAmountCents + projectedRecurringCents,
     invoiceId: invoice?.id || null, invoiceStatus: invoice?.status || null,
     needsRecurringRefresh: !!event?.needsRecurringRefresh, warning,
@@ -69,7 +69,7 @@ export function buildFinancialForecast(contracts: any[], invoices: any[], period
         const dueDate = calendarDateKey(dates.dueDate, zone);
         if (dueDate.slice(0, 7) !== period) continue;
         if (contract.endDate && dateKey(dates.scheduledFor, zone) > calendarDateKey(contract.endDate, zone)) continue;
-        const totals = invoiceAmounts([...recurringBaseItems(contract), ...recurringAddonItems(contract, competence, zone)]);
+        const totals = invoiceAmounts([...recurringBaseItems(contract), ...recurringAddonItems(contract, competence, zone), ...oneOffItems(contract, competence)]);
         rows.push({ id: `contract-${contract.id}-${competence}`, contractId: contract.id, invoiceId: null, customer: label(contract),
           description: `${contract.number} · ${competence}`, periodKey: competence, dueDate, amountCents: amount(totals.totals.totalAmount), kind: 'PROJECTED', status: 'A_PREPARAR' });
       } catch (e: any) { warnings.push(`${contract.number} (${competence}): ${e.message}`); }

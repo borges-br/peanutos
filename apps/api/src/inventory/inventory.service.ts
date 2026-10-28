@@ -19,6 +19,13 @@ const QUOTA_COUNTED_ASSET_STATUSES = [
 
 @Injectable()
 export class InventoryService {
+  async groups(workspaceId: string) {
+    const [total, clients] = await Promise.all([
+      prisma.asset.count({ where: { workspaceId } }),
+      prisma.client.findMany({ where: { workspaceId, assets: { some: { workspaceId } } }, select: { id: true, legalName: true, tradeName: true, _count: { select: { assets: { where: { workspaceId } } } } }, orderBy: { legalName: 'asc' } }),
+    ]);
+    return { total, clients };
+  }
   constructor(
     private readonly auditService: AuditService,
     private readonly contractsQuotaService: ContractsQuotaService,

@@ -10,6 +10,14 @@ function civil(value: unknown, label: string) {
 const displayDate = (value: string) => value.split('-').reverse().join('/');
 const cents = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
+export function oneOffItems(contract: any, period: string) {
+  return (contract.lineItems || []).filter((item: any) => item.billingRole === 'ONE_OFF' && item.chargePeriod === period).map((item: any) => ({
+    type: 'SERVICE', description: `${item.description} · Realizado em ${item.servicePeriod.slice(5)}/${item.servicePeriod.slice(0, 4)}`,
+    quantity: new Prisma.Decimal(item.quantity), unit: 'UN', unitPrice: new Prisma.Decimal(item.unitPriceCents).div(100), billingKind: 'EXTRA',
+    sourceContractLineItemId: item.id, recurrenceSnapshot: { servicePeriod: item.servicePeriod, chargePeriod: period, oneOff: true },
+  }));
+}
+
 /** All financial rules are copied into the invoice; issued snapshots never follow edits. */
 export function recurringAddonItems(contract: any, period: string, zone: string) {
   const bounds = monthBounds(period);
@@ -42,7 +50,13 @@ function normalize(input: any, previous?: any) {
   const total = quantity.mul(data.unitPriceCents).toDecimalPlaces(0);
   if (total.gt(2147483647)) return invalid('Valor total do item excede o limite permitido.');
   const billingRole = data.billingRole || 'BASE', endMode = data.endMode || 'CONTRACT', proration = data.proration || 'NONE';
-  if (!['BASE', 'ADDON'].includes(billingRole) || !['OPEN', 'CONTRACT', 'DATE'].includes(endMode) || !['NONE', 'DAILY'].includes(proration)) return invalid('Regra de recorrência inválida.');
+  if (!['BASE', 'ADDON', 'ONE_OFF'].includes(billingRole) || !['OPEN', 'CONTRACT', 'DATE'].includes(endMode) || !['NONE', 'DAILY'].includes(proration)) return invalid('Regra de cobrança inválida.');
+  let servicePeriod: string | null = null, chargePeriod: string | null = null;
+  if (billingRole === 'ONE_OFF') {
+    monthBounds(data.servicePeriod); monthBounds(data.chargePeriod);
+    servicePeriod = data.servicePeriod; chargePeriod = data.chargePeriod;
+    if (chargePeriod! < servicePeriod!) return invalid('O mês da cobrança não pode ser anterior ao serviço.');
+  }
   let startsOn: Date | null = null, endsOn: Date | null = null;
   if (billingRole === 'ADDON') {
     if (data.recurring === false) return invalid('O adicional recorrente precisa estar marcado como recorrente.');
@@ -55,7 +69,7 @@ function normalize(input: any, previous?: any) {
     }
   }
   return { description: data.description.trim(), itemType: data.itemType, quantity, unitPriceCents: data.unitPriceCents,
-    totalPriceCents: total.toNumber(), recurring: data.recurring ?? true, billingRole, startsOn, endsOn, endMode, proration };
+    totalPriceCents: total.toNumber(), recurring: billingRole === 'ONE_OFF' ? false : data.recurring ?? true, billingRole, servicePeriod, chargePeriod, startsOn, endsOn, endMode, proration };
 }
 
 export async function saveContractLineItem(db: PrismaClient, workspaceId: string, contractId: string, input: any, actorUserId: string, itemId?: string, request: { ipAddress?: string; userAgent?: string } = {}) {
@@ -64,6 +78,7 @@ export async function saveContractLineItem(db: PrismaClient, workspaceId: string
     if (!await tx.contract.findFirst({ where: { id: contractId, workspaceId } })) return invalid('Contrato não encontrado.');
     const before = itemId ? await tx.contractLineItem.findFirst({ where: { id: itemId, contractId, workspaceId } }) : null;
     if (itemId && !before) return invalid('Item do contrato não encontrado.');
+    if (before?.billingRole === 'ONE_OFF' && await tx.invoiceItem.findFirst({ where: { sourceContractLineItemId: itemId, invoice: { workspaceId, status: { not: 'DRAFT' } } } })) return invalid('Este pontual já está em uma fatura emitida. A cobrança original foi preservada.');
     const data = normalize(input, before);
     const after = itemId ? await tx.contractLineItem.update({ where: { id: itemId }, data }) : await tx.contractLineItem.create({ data: { workspaceId, contractId, ...data } });
     await tx.billingScheduleEvent.updateMany({ where: { workspaceId, contractId, invoice: { status: 'DRAFT' } }, data: { approvedAt: null, approvedById: null, emailTemplateSnapshot: Prisma.DbNull, needsRecurringRefresh: true } });
@@ -82,6 +97,7 @@ export async function removeContractLineItem(db: PrismaClient, workspaceId: stri
     if (!await tx.contract.findFirst({ where: { id: contractId, workspaceId } })) return invalid('Contrato não encontrado.');
     const before = await tx.contractLineItem.findFirst({ where: { id: itemId, contractId, workspaceId } });
     if (!before) return invalid('Item do contrato não encontrado.');
+    if (before.billingRole === 'ONE_OFF' && await tx.invoiceItem.findFirst({ where: { sourceContractLineItemId: itemId, invoice: { workspaceId, status: { not: 'DRAFT' } } } })) return invalid('Este pontual já está em uma fatura emitida e não pode ser removido.');
     await tx.contractLineItem.delete({ where: { id: itemId } });
     await tx.billingScheduleEvent.updateMany({ where: { workspaceId, contractId, invoice: { status: 'DRAFT' } }, data: { approvedAt: null, approvedById: null, emailTemplateSnapshot: Prisma.DbNull, needsRecurringRefresh: true } });
     await tx.contractHistory.create({ data: { workspaceId, contractId, actorUserId, event: 'LINE_ITEM_REMOVED', description: `Item removido: ${before.description}. Rascunhos precisam atualizar os itens; faturas emitidas foram preservadas.`, before: JSON.stringify(before) } });

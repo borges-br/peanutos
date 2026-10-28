@@ -1,191 +1,141 @@
-import React, { useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import { useAuth } from '../../context/AuthContext';
-import { useI18n } from '../../i18n/useI18n';
-import logoImg from '../../../images/layout/logo.webp';
-import AvatarCropModal from '../ui/AvatarCropModal';
-import AuthenticatedImage from '../ui/AuthenticatedImage';
-
-interface SidebarProps {
+"use client";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import logoImg from "../../../images/layout/logo.webp";
+import { usePathname } from "next/navigation";
+import { useAuth } from "../../context/AuthContext";
+import { destinations } from "../../lib/navigation";
+export default function Sidebar({
+  onCloseMobile,
+}: {
   onCloseMobile?: () => void;
-}
-
-export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
-  const router = useRouter();
-  const pathname = usePathname();
+}) {
   const { user, logout } = useAuth();
-  const { t } = useI18n();
-
-  const userDisplayName = user?.name || t.auth.userFallback;
-  const userRoleName = user?.role || t.auth.administratorFallback;
-  const userInitials = userDisplayName.substring(0, 2).toUpperCase();
-
-  const handleNavigation = (path: string) => {
-    router.push(path);
-    if (onCloseMobile) {
-      onCloseMobile();
+  const path = usePathname();
+  const [pins, setPins] = useState<string[]>([]);
+  const key = "peanut:pins:" + user?.workspaceId + ":" + user?.id;
+  useEffect(() => {
+    try {
+      setPins(JSON.parse(localStorage.getItem(key) || "[]"));
+    } catch {
+      setPins([]);
     }
-  };
-
-  const isRouteActive = (path: string) => {
-    if (path === '/dashboard') {
-      return pathname === '/dashboard';
-    }
-    return pathname?.startsWith(path);
-  };
-
-  const renderNavItem = (label: string, icon: string, path: string) => {
-    const active = isRouteActive(path);
+  }, [key]);
+  function pin(href: string) {
+    const next = pins.includes(href)
+      ? pins.filter((p) => p !== href)
+      : [...pins, href];
+    setPins(next);
+    localStorage.setItem(key, JSON.stringify(next));
+  }
+  const entries = destinations.filter(
+    (d) => !d.roles || d.roles.includes(user?.role),
+  );
+  const icons = [
+    "space_dashboard",
+    "groups",
+    "devices",
+    "confirmation_number",
+    "construction",
+    "description",
+    "receipt_long",
+    "account_balance_wallet",
+    "request_quote",
+    "mail",
+    "folder",
+    "picture_as_pdf",
+    "settings",
+    "palette",
+    "webhook",
+    "history",
+  ];
+  function item(d: (typeof destinations)[number]) {
+    const active =
+      entries
+        .filter((e) =>
+          e.href === "/dashboard" ? path === e.href : path?.startsWith(e.href),
+        )
+        .sort((a, b) => b.href.length - a.href.length)[0]?.href === d.href;
     return (
-      <button
-        onClick={() => handleNavigation(path)}
-        className={`flex items-center gap-md w-full px-md py-sm hover:bg-surface-container-high transition-all text-on-surface-variant hover:text-on-surface rounded duration-150 text-left ${active ? 'active-nav font-medium' : ''}`}
-      >
-        <span className="material-symbols-outlined text-[18px]">{icon}</span>
-        <span className="font-body-sm">{label}</span>
-      </button>
-    );
-  };
-
-  const [showCropModal, setShowCropModal] = useState(false);
-
-  return (
-    <aside className="w-sidebar-width bg-surface border-r border-outline-variant flex flex-col py-lg h-full select-none z-50">
-      {/* Sidebar Header */}
-      <div className="px-md mb-xl">
-        <div className="flex items-center gap-sm">
-          <div className="w-8 h-8 flex items-center justify-center rounded-lg overflow-hidden">
-            <img src={logoImg.src} alt="Peanut OS Logo" className="w-full h-full object-contain" />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-headline-md text-sm font-bold text-primary tracking-tight">Peanut OS</span>
-            <span className="text-[10px] font-label-caps uppercase tracking-widest text-on-surface-variant opacity-60">
-              Central de TI
-            </span>
-          </div>
-        </div>
+      <div key={d.href} className={"nav-row " + (active ? "active-nav" : "")}>
+        <Link
+          href={d.href}
+          onClick={onCloseMobile}
+          aria-current={active ? "page" : undefined}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            {icons[destinations.indexOf(d)]}
+          </span>
+          <span>{d.label}</span>
+        </Link>
+        <button
+          className={"pin-button " + (pins.includes(d.href) ? "is-pinned" : "")}
+          onClick={() => pin(d.href)}
+          aria-label={
+            (pins.includes(d.href) ? "Desafixar " : "Fixar ") + d.label
+          }
+          aria-pressed={pins.includes(d.href)}
+        >
+          ☆
+        </button>
       </div>
-
-      {/* Navigation Groups */}
-      <nav className="flex-1 overflow-y-auto px-xs space-y-md">
-        {/* Geral */}
-        <div>
-          <p className="px-md mb-xs font-label-caps text-label-caps uppercase text-on-surface-variant opacity-60">
-            {t.navigation.general}
-          </p>
-          <div className="space-y-base">
-            {renderNavItem(t.navigation.home, 'dashboard', '/dashboard')}
-          </div>
-        </div>
-
-        {/* Operação */}
-        <div>
-          <p className="px-md mb-xs font-label-caps text-label-caps uppercase text-on-surface-variant opacity-60">
-            {t.navigation.operations}
-          </p>
-          <div className="space-y-base">
-            {renderNavItem(t.navigation.clients, 'groups', '/dashboard/clients')}
-            {renderNavItem(t.navigation.technicalInventory, 'inventory_2', '/dashboard/inventory')}
-            {renderNavItem(t.navigation.tickets, 'confirmation_number', '/dashboard/tickets')}
-            {renderNavItem(t.navigation.serviceOrders, 'construction', '/dashboard/service-orders')}
-          </div>
-        </div>
-
-        {/* Comercial */}
-        <div>
-          <p className="px-md mb-xs font-label-caps text-label-caps uppercase text-on-surface-variant opacity-60">
-            {t.navigation.commercial}
-          </p>
-          <div className="space-y-base">
-            {renderNavItem(t.navigation.quotes, 'request_quote', '/dashboard/quotes')}
-            {renderNavItem(t.navigation.invoices, 'receipt_long', '/dashboard/invoices')}
-            {renderNavItem(t.navigation.contracts, 'description', '/dashboard/contracts')}
-            {renderNavItem(t.navigation.recurringFinancials, 'account_balance_wallet', '/dashboard/financials')}
-            {renderNavItem('Templates de email', 'mail', '/dashboard/templates-email')}
-          </div>
-        </div>
-
-        {/* Documentos */}
-        <div>
-          <p className="px-md mb-xs font-label-caps text-label-caps uppercase text-on-surface-variant opacity-60">
-            {t.navigation.documents}
-          </p>
-          <div className="space-y-base">
-            {renderNavItem(t.navigation.centralDocuments, 'folder_shared', '/dashboard/documentos')}
-            {renderNavItem(t.navigation.templatesA4, 'grid_view', '/dashboard/templates-a4')}
-          </div>
-        </div>
-
-        {/* Automação */}
-        <div>
-          <p className="px-md mb-xs font-label-caps text-label-caps uppercase text-on-surface-variant opacity-60">
-            {t.navigation.automation}
-          </p>
-          <div className="space-y-base">
-            {renderNavItem(t.navigation.webhooks, 'webhook', '/dashboard/webhooks')}
-          </div>
-        </div>
-
-        {/* Sistema */}
-        <div>
-          <p className="px-md mb-xs font-label-caps text-label-caps uppercase text-on-surface-variant opacity-60">
-            {t.navigation.system}
-          </p>
-          <div className="space-y-base">
-            {renderNavItem(t.navigation.audit, 'history_edu', '/dashboard/auditoria')}
-            {renderNavItem(t.navigation.settings, 'settings', '/dashboard/configuracoes')}
-          </div>
-        </div>
-      </nav>
-
-      {/* Sidebar Footer / User Profile */}
-      <div className="mt-auto px-md pt-md border-t border-outline-variant">
-        <div className="flex items-center gap-sm p-sm bg-surface-container/10 border border-outline-variant/10 rounded-lg">
-          {/* Avatar button */}
-          <button
-            onClick={() => setShowCropModal(true)}
-            className="w-10 h-10 bg-surface-container-highest rounded-full flex items-center justify-center border border-outline-variant overflow-hidden hover:opacity-85 transition-opacity shrink-0 cursor-pointer"
-            title="Alterar foto"
-            aria-label="Alterar foto de perfil"
-          >
-            <AuthenticatedImage
-              src={user?.avatarUrl}
-              alt={userDisplayName}
-              className="w-full h-full object-cover"
-              fallback={<span className="font-bold text-primary text-sm">{userInitials}</span>}
-            />
-          </button>
-
-          {/* User info button */}
-          <button
-            onClick={() => handleNavigation('/dashboard/configuracoes/perfil')}
-            className="flex-1 min-w-0 text-left hover:text-primary transition-colors cursor-pointer group"
-            title="Abrir configurações do perfil"
-            aria-label="Abrir configurações do perfil"
-          >
-            <p className="font-title-sm text-xs truncate text-on-surface font-semibold group-hover:text-primary transition-colors">{userDisplayName}</p>
-            <p className="text-[10px] text-on-surface-variant truncate uppercase tracking-wider">{userRoleName}</p>
-          </button>
-
-          {/* Logout button */}
-          <button
-            onClick={logout}
-            className="material-symbols-outlined text-error-container hover:text-error transition-colors p-1 cursor-pointer shrink-0"
-            title={t.auth.logout}
-            aria-label={t.auth.logout}
-          >
-            logout
-          </button>
-        </div>
-
-        {/* Global Avatar Crop Modal */}
-        <AvatarCropModal
-          isOpen={showCropModal}
-          onClose={() => setShowCropModal(false)}
+    );
+  }
+  return (
+    <aside className="app-sidebar">
+      <Link href="/dashboard" className="brand" onClick={onCloseMobile}>
+        <img
+          src={logoImg.src}
+          alt=""
+          width={40}
+          height={40}
+          className="rounded-xl"
         />
+        <span>
+          <strong>
+            peanut<span className="text-primary">os</span>
+          </strong>
+          <small>Seu trabalho, conectado.</small>
+        </span>
+      </Link>
+      <nav aria-label="Navegação principal" className="sidebar-navigation">
+        {pins.length > 0 && (
+          <section>
+            <h2>Seus atalhos</h2>
+            {entries.filter((d) => pins.includes(d.href)).map(item)}
+          </section>
+        )}
+        {["Dia a dia", "Financeiro", "Documentos", "Preferências"].map(
+          (group) => (
+            <section key={group}>
+              <h2>{group}</h2>
+              {entries
+                .filter((d) => d.group === group && !pins.includes(d.href))
+                .map(item)}
+            </section>
+          ),
+        )}
+      </nav>
+      <div className="sidebar-account">
+        <Link href="/dashboard/configuracoes/perfil" onClick={onCloseMobile}>
+          <span className="profile-trigger">
+            {(user?.name || "P").slice(0, 2).toUpperCase()}
+          </span>
+          <span>
+            <strong>{user?.name}</strong>
+            <small>Minha conta</small>
+          </span>
+        </Link>
+        <button
+          onClick={logout}
+          className="icon-button"
+          aria-label="Sair da conta"
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            logout
+          </span>
+        </button>
       </div>
     </aside>
   );
-};
-
-export default Sidebar;
+}

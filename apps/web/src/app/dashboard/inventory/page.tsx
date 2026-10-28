@@ -1,46 +1,149 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { apiRequest } from '../../../lib/api';
-import { extractArray, extractRecord } from '../../../lib/api-shape';
-import { useRouter } from 'next/navigation';
-import { useI18n } from '../../../i18n/useI18n';
-import Button from '../../../components/ui/Button';
-import Badge from '../../../components/ui/Badge';
-import Input from '../../../components/ui/Input';
-import Select from '../../../components/ui/Select';
-import SearchableSelect from '../../../components/ui/SearchableSelect';
-import DataTable from '../../../components/ui/DataTable';
-import EmptyState from '../../../components/ui/EmptyState';
-import ErrorState from '../../../components/ui/ErrorState';
-import ClientPageHeader from '../../../components/layout/ClientPageHeader';
-import AssetCsvImportModal from '../../../components/inventory/AssetCsvImportModal';
+import React, { useState, useEffect } from "react";
+import { apiRequest } from "../../../lib/api";
+import { extractArray, extractRecord } from "../../../lib/api-shape";
+import { useRouter } from "next/navigation";
+import { useI18n } from "../../../i18n/useI18n";
+import Button from "../../../components/ui/Button";
+import Badge from "../../../components/ui/Badge";
+import Input from "../../../components/ui/Input";
+import Select from "../../../components/ui/Select";
+import SearchableSelect from "../../../components/ui/SearchableSelect";
+import DataTable from "../../../components/ui/DataTable";
+import EmptyState from "../../../components/ui/EmptyState";
+import ErrorState from "../../../components/ui/ErrorState";
+import ClientPageHeader from "../../../components/layout/ClientPageHeader";
+import AssetCsvImportModal from "../../../components/inventory/AssetCsvImportModal";
 
 export default function InventoryPage() {
+  const [selected, setSelected] = useState<string | null>(null),
+    [data, setData] = useState<any>(null),
+    [error, setError] = useState(""),
+    [query, setQuery] = useState(""),
+    [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let current = true;
+    apiRequest("/assets/groups")
+      .then((value) => {
+        if (current) {
+          setData(value);
+          setError("");
+        }
+      })
+      .catch(() => {
+        if (current) setError("Não foi possível carregar os inventários.");
+      });
+    return () => {
+      current = false;
+    };
+  }, [retry, selected]);
+  if (selected !== null)
+    return (
+      <div className="space-y-lg">
+        <Button variant="ghost" onClick={() => setSelected(null)}>
+          ← Inventários por cliente
+        </Button>
+        <InventoryTable key={selected} initialClientId={selected} />
+      </div>
+    );
+  return (
+    <div className="space-y-lg">
+      <header className="page-heading">
+        <div>
+          <span className="eyebrow">Equipamentos e ambientes</span>
+          <h1>Inventário</h1>
+        </div>
+      </header>
+      <Input
+        label="Encontrar inventário"
+        placeholder="Buscar cliente"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {error ? (
+        <div role="alert" className="notice-error">
+          {error}
+          <Button onClick={() => setRetry((v) => v + 1)}>
+            Tentar novamente
+          </Button>
+        </div>
+      ) : !data ? (
+        <div className="loading-panel" role="status">
+          Carregando inventários…
+        </div>
+      ) : (
+        <div className="inventory-grid">
+          <button
+            className="inventory-card inventory-all"
+            onClick={() => setSelected("")}
+          >
+            <span className="eyebrow">Visão completa</span>
+            <span className="inventory-card-title">Todos os equipamentos</span>
+            <span className="inventory-card-count">{data.total}</span>
+            <span>Explorar inventário ↗</span>
+          </button>
+          {data.clients
+            .filter((c: any) =>
+              (c.tradeName || c.legalName)
+                .toLocaleLowerCase()
+                .includes(query.toLocaleLowerCase()),
+            )
+            .map((c: any) => (
+              <button
+                key={c.id}
+                className="inventory-card"
+                onClick={() => setSelected(c.id)}
+              >
+                <span className="client-monogram">
+                  {(c.tradeName || c.legalName).slice(0, 2).toUpperCase()}
+                </span>
+                <span className="inventory-card-title">
+                  {c.tradeName || c.legalName}
+                </span>
+                <span className="inventory-card-count">
+                  {c._count.assets} <small>equipamentos</small>
+                </span>
+                <span className="text-primary">Abrir inventário ↗</span>
+              </button>
+            ))}
+        </div>
+      )}
+      {data && !data.clients.length && (
+        <div className="empty-panel">
+          Nenhum cliente tem equipamentos cadastrados. Abra a visão completa
+          para importar um inventário.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InventoryTable({ initialClientId }: { initialClientId: string }) {
   const router = useRouter();
   const { t } = useI18n();
 
   const [assets, setAssets] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [meta, setMeta] = useState<any>({ page: 1, totalPages: 1, total: 0 });
-  
+
   // Filters state
-  const [search, setSearch] = useState('');
-  const [clientId, setClientId] = useState('');
-  const [type, setType] = useState('');
-  const [status, setStatus] = useState('');
+  const [search, setSearch] = useState("");
+  const [clientId, setClientId] = useState(initialClientId);
+  const [type, setType] = useState("");
+  const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
-  
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
 
   const fetchClients = async () => {
     try {
-      const response = await apiRequest<unknown>('/clients?limit=500');
+      const response = await apiRequest<unknown>("/clients?limit=500");
       setClients(extractArray(response));
     } catch (err) {
-      console.error('Falha ao buscar clientes para filtros', err);
+      console.error("Falha ao buscar clientes para filtros", err);
     }
   };
 
@@ -48,18 +151,24 @@ export default function InventoryPage() {
     setLoading(true);
     setError(null);
     try {
-      const typeParam = type ? `&type=${type}` : '';
-      const statusParam = status ? `&status=${status}` : '';
-      const clientParam = clientId ? `&clientId=${clientId}` : '';
-      const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-      
+      const typeParam = type ? `&type=${type}` : "";
+      const statusParam = status ? `&status=${status}` : "";
+      const clientParam = clientId ? `&clientId=${clientId}` : "";
+      const searchParam = search ? `&search=${encodeURIComponent(search)}` : "";
+
       const response = await apiRequest<unknown>(
-        `/assets?page=${page}&limit=10${typeParam}${statusParam}${clientParam}${searchParam}`
+        `/assets?page=${page}&limit=10${typeParam}${statusParam}${clientParam}${searchParam}`,
       );
       const responseRecord = extractRecord(response);
       const assetsData = extractArray(response);
       setAssets(assetsData);
-      setMeta(responseRecord.meta || { page: 1, totalPages: 1, total: assetsData.length });
+      setMeta(
+        responseRecord.meta || {
+          page: 1,
+          totalPages: 1,
+          total: assetsData.length,
+        },
+      );
     } catch (err: any) {
       setError(err.message || t.states.errorTitle);
     } finally {
@@ -82,10 +191,10 @@ export default function InventoryPage() {
   };
 
   const handleClearFilters = () => {
-    setSearch('');
-    setClientId('');
-    setType('');
-    setStatus('');
+    setSearch("");
+    setClientId("");
+    setType("");
+    setStatus("");
     setPage(1);
   };
 
@@ -100,12 +209,18 @@ export default function InventoryPage() {
 
   const getStatusVariant = (val: string) => {
     switch (val) {
-      case 'OPERATIONAL': return 'success';
-      case 'MAINTENANCE': return 'warning';
-      case 'OUT_OF_STANDARD': return 'error';
-      case 'STOCK': return 'info';
-      case 'LOST': return 'purple';
-      default: return 'neutral';
+      case "OPERATIONAL":
+        return "success";
+      case "MAINTENANCE":
+        return "warning";
+      case "OUT_OF_STANDARD":
+        return "error";
+      case "STOCK":
+        return "info";
+      case "LOST":
+        return "purple";
+      default:
+        return "neutral";
     }
   };
 
@@ -128,16 +243,14 @@ export default function InventoryPage() {
       header: t.inventory.client,
       render: (asset: any) => (
         <span className="font-medium text-on-surface">
-          {asset.client?.tradeName || '--'}
+          {asset.client?.tradeName || "--"}
         </span>
       ),
     },
     {
       header: t.inventory.type,
       render: (asset: any) => (
-        <Badge variant="neutral">
-          {getLocalizedType(asset.type)}
-        </Badge>
+        <Badge variant="neutral">{getLocalizedType(asset.type)}</Badge>
       ),
     },
     {
@@ -151,7 +264,13 @@ export default function InventoryPage() {
     {
       header: t.inventory.assignedUser,
       render: (asset: any) => (
-        <span className={asset.assignedClientUser ? 'text-on-surface font-medium' : 'text-on-surface-variant/50 italic text-[12px]'}>
+        <span
+          className={
+            asset.assignedClientUser
+              ? "text-on-surface font-medium"
+              : "text-on-surface-variant/50 italic text-[12px]"
+          }
+        >
           {asset.assignedClientUser?.fullName || t.common.notAssigned}
         </span>
       ),
@@ -161,7 +280,7 @@ export default function InventoryPage() {
       render: (asset: any) => (
         <div className="flex flex-col py-0.5">
           <span className="font-mono text-technical-data text-on-surface">
-            {asset.serialNumber || '--'}
+            {asset.serialNumber || "--"}
           </span>
           {asset.assetTag && (
             <span className="text-[10px] bg-surface-container-highest text-on-surface-variant px-1.5 py-0.2 rounded w-fit mt-0.5 font-mono">
@@ -175,7 +294,7 @@ export default function InventoryPage() {
       header: t.inventory.location,
       render: (asset: any) => (
         <span className="text-on-surface-variant font-body-sm">
-          {asset.location || '--'}
+          {asset.location || "--"}
         </span>
       ),
     },
@@ -185,7 +304,11 @@ export default function InventoryPage() {
       render: (asset: any) => (
         <Button
           variant="outline"
-          onClick={() => router.push(`/dashboard/clients/${asset.clientId}/assets/${asset.id}`)}
+          onClick={() =>
+            router.push(
+              `/dashboard/clients/${asset.clientId}/assets/${asset.id}`,
+            )
+          }
           className="py-1 px-3"
         >
           {t.common.details}
@@ -201,7 +324,11 @@ export default function InventoryPage() {
         <div className="flex justify-between items-start">
           <div className="flex flex-col">
             <span className="font-bold text-on-surface">{asset.name}</span>
-            {asset.hostname && <span className="text-[11px] text-primary font-mono">{asset.hostname}</span>}
+            {asset.hostname && (
+              <span className="text-[11px] text-primary font-mono">
+                {asset.hostname}
+              </span>
+            )}
           </div>
           <Badge variant={getStatusVariant(asset.status)}>
             {getLocalizedStatus(asset.status)}
@@ -210,27 +337,45 @@ export default function InventoryPage() {
         <div className="h-[1px] bg-outline-variant/30 my-xs"></div>
         <div className="grid grid-cols-2 gap-xs text-[12px]">
           <div className="flex flex-col">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.inventory.client}</span>
-            <span className="mt-0.5 font-medium">{asset.client?.tradeName || '--'}</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">
+              {t.inventory.client}
+            </span>
+            <span className="mt-0.5 font-medium">
+              {asset.client?.tradeName || "--"}
+            </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.inventory.type}</span>
-            <span className="mt-0.5 truncate">{getLocalizedType(asset.type)}</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">
+              {t.inventory.type}
+            </span>
+            <span className="mt-0.5 truncate">
+              {getLocalizedType(asset.type)}
+            </span>
           </div>
           <div className="flex flex-col mt-xs">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.inventory.assignedUserShort}</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">
+              {t.inventory.assignedUserShort}
+            </span>
             <span className="truncate mt-0.5 italic text-on-surface-variant/80">
               {asset.assignedClientUser?.fullName || t.common.notAssigned}
             </span>
           </div>
           <div className="flex flex-col mt-xs">
-            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">{t.inventory.serialShort}</span>
-            <span className="font-mono mt-0.5">{asset.serialNumber || '--'}</span>
+            <span className="text-on-surface-variant font-medium uppercase text-[10px] tracking-wider">
+              {t.inventory.serialShort}
+            </span>
+            <span className="font-mono mt-0.5">
+              {asset.serialNumber || "--"}
+            </span>
           </div>
         </div>
         <Button
           variant="outline"
-          onClick={() => router.push(`/dashboard/clients/${asset.clientId}/assets/${asset.id}`)}
+          onClick={() =>
+            router.push(
+              `/dashboard/clients/${asset.clientId}/assets/${asset.id}`,
+            )
+          }
           className="w-full mt-sm justify-center py-2"
         >
           {t.common.details}
@@ -240,32 +385,40 @@ export default function InventoryPage() {
   };
 
   const clientOptions = [
-    { value: '', label: t.inventory.filters.allClients },
-    ...clients.map(c => ({ value: c.id, label: c.tradeName || c.legalName })),
+    { value: "", label: t.inventory.filters.allClients },
+    ...clients.map((c) => ({ value: c.id, label: c.tradeName || c.legalName })),
   ];
 
   const typeOptions = [
-    { value: '', label: t.inventory.filters.allTypes },
-    ...Object.entries(t.enums.assetType).map(([key, label]) => ({ value: key, label })),
+    { value: "", label: t.inventory.filters.allTypes },
+    ...Object.entries(t.enums.assetType).map(([key, label]) => ({
+      value: key,
+      label,
+    })),
   ];
 
   const statusOptions = [
-    { value: '', label: t.inventory.filters.allStatuses },
-    ...Object.entries(t.enums.assetStatus).map(([key, label]) => ({ value: key, label })),
+    { value: "", label: t.inventory.filters.allStatuses },
+    ...Object.entries(t.enums.assetStatus).map(([key, label]) => ({
+      value: key,
+      label,
+    })),
   ];
 
   return (
     <div className="flex flex-col gap-lg select-none">
       <ClientPageHeader
         breadcrumbs={[
-          { label: t.navigation.home, href: '/dashboard' },
+          { label: t.navigation.home, href: "/dashboard" },
           { label: t.navigation.technicalInventory },
         ]}
         title={t.navigation.technicalInventory}
         description={t.inventory.subtitle}
         primaryActions={
           <Button variant="outline" onClick={() => setShowImportModal(true)}>
-            <span className="material-symbols-outlined text-[16px] mr-1.5">upload_file</span>
+            <span className="material-symbols-outlined text-[16px] mr-1.5">
+              upload_file
+            </span>
             Importar CSV
           </Button>
         }
@@ -321,7 +474,11 @@ export default function InventoryPage() {
           </div>
 
           {(search || clientId || type || status) && (
-            <Button variant="ghost" onClick={handleClearFilters} className="text-error/80 hover:text-error py-1 px-3">
+            <Button
+              variant="ghost"
+              onClick={handleClearFilters}
+              className="text-error/80 hover:text-error py-1 px-3"
+            >
               {t.common.clearFilters}
             </Button>
           )}
@@ -331,11 +488,14 @@ export default function InventoryPage() {
       {error && <ErrorState onRetry={fetchAssets} />}
 
       {/* Data Section */}
-      {!error && (
-        loading ? (
+      {!error &&
+        (loading ? (
           <div className="flex flex-col gap-sm">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-10 bg-surface-container-low border border-outline-variant/30 rounded-xl animate-pulse" />
+              <div
+                key={i}
+                className="h-10 bg-surface-container-low border border-outline-variant/30 rounded-xl animate-pulse"
+              />
             ))}
           </div>
         ) : assets.length === 0 ? (
@@ -356,10 +516,10 @@ export default function InventoryPage() {
             <div className="flex flex-col sm:flex-row justify-between items-center gap-md border-t border-outline-variant/30 pt-md px-md">
               <span className="text-[13px] text-on-surface-variant font-mono">
                 {t.inventory.pagination
-                  .replace('{count}', String(assets.length))
-                  .replace('{total}', String(meta.total))
-                  .replace('{page}', String(meta.page))
-                  .replace('{totalPages}', String(meta.totalPages))}
+                  .replace("{count}", String(assets.length))
+                  .replace("{total}", String(meta.total))
+                  .replace("{page}", String(meta.page))
+                  .replace("{totalPages}", String(meta.totalPages))}
               </span>
               <div className="flex gap-sm">
                 <Button
@@ -381,8 +541,7 @@ export default function InventoryPage() {
               </div>
             </div>
           </div>
-        )
-      )}
+        ))}
 
       {showImportModal && (
         <AssetCsvImportModal

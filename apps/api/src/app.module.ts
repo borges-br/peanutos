@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { SearchModule } from './search/search.controller';
 import { HealthController } from "./health/health.controller";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
@@ -21,6 +22,7 @@ import { DocumentTemplatesModule } from "./document-templates/document-templates
 
 @Module({
   imports: [
+    SearchModule,
     AuditModule,
     AuthModule,
     WebhooksModule,

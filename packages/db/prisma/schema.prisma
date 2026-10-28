@@ -881,6 +881,8 @@ model ContractLineItem {
   totalPriceCents Int
   recurring       Boolean              @default(true)
   billingRole     String               @default("BASE") @db.VarChar(20)
+  servicePeriod   String?              @db.VarChar(7)
+  chargePeriod    String?              @db.VarChar(7)
   startsOn        DateTime?            @db.Date
   endsOn          DateTime?            @db.Date
   endMode         String               @default("CONTRACT") @db.VarChar(20)
@@ -895,6 +897,7 @@ model ContractLineItem {
   @@index([contractId])
   @@index([workspaceId])
   @@map("contract_line_items")
+  @@index([contractId, chargePeriod])
 }
 
 model ContractHistory {

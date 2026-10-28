@@ -169,7 +169,7 @@ export default function SetupPage() {
 
   if (checking) {
     return (
-      <main className="min-h-screen bg-[#08090D] flex items-center justify-center">
+      <main className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
       </main>
     );
@@ -261,7 +261,7 @@ export default function SetupPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#08090D] flex flex-col justify-center items-center p-md relative overflow-hidden select-none">
+    <main className="min-h-screen bg-background flex flex-col justify-center items-center p-md relative overflow-hidden select-none">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-[radial-gradient(circle,rgba(157,183,255,0.05)_0%,rgba(0,0,0,0)_70%)] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[45%] h-[45%] rounded-full bg-[radial-gradient(circle,rgba(157,183,255,0.05)_0%,rgba(0,0,0,0)_70%)] pointer-events-none" />
 

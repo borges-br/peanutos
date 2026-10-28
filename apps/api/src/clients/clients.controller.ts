@@ -30,6 +30,7 @@ export class ClientsController {
     @Query("limit") limit: number,
     @Query("search") search: string,
     @Query("status") status: ClientStatus,
+    @Query("contractGroup") contractGroup: string,
     @CurrentUser() user: any,
   ) {
     return this.clientsService.list(user.workspaceId, {
@@ -37,6 +38,7 @@ export class ClientsController {
       limit,
       search,
       status,
+      contractGroup,
     });
   }
 

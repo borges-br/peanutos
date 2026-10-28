@@ -264,9 +264,7 @@ export default function UserProfilePage() {
 
       {/* Tabs */}
       <nav className="flex border-b border-outline-variant gap-lg overflow-x-auto whitespace-nowrap scrollbar-hide text-[13px]">
-        <button className="pb-sm border-b-2 border-primary text-primary font-bold">Geral</button>
-        <button disabled className="pb-sm border-b-2 border-transparent text-on-surface-variant/40 cursor-not-allowed">Segurança — Planejado</button>
-        <button disabled className="pb-sm border-b-2 border-transparent text-on-surface-variant/40 cursor-not-allowed">Notificações — Planejado</button>
+        <span className="pb-sm border-b-2 border-primary text-primary font-bold">Dados do perfil</span>
       </nav>
 
       {/* Layout */}

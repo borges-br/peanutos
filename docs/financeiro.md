@@ -15,9 +15,15 @@
 
 ### Total e prévia do contrato
 
-O resumo **Total por competência**, no contrato, apresenta mensalidade, adicionais recorrentes, pontuais, descontos e total. Se o mês ainda não tem fatura, apresenta uma projeção pelas regras atuais, sem inventar pontuais futuros. Se existe fatura, apresenta seus valores salvos. Regras alteradas não substituem silenciosamente a fatura: o resumo mostra que ela precisa ser atualizada.
+O resumo **Total por competência**, no contrato, apresenta mensalidade, adicionais recorrentes, pontuais, descontos e total. Se o mês ainda não tem fatura, apresenta uma projeção pelas regras atuais, incluindo pontuais já lançados para o mês, sem estimar serviços ainda não registrados. Se existe fatura, apresenta seus valores salvos. Regras alteradas não substituem silenciosamente a fatura: o resumo mostra que ela precisa ser atualizada.
 
 **Preparar rascunho e visualizar PDF** cria somente o rascunho e abre sua prévia. Não emite nem envia. Nas competências existentes, a prévia é acessada diretamente. Salve alterações antes de gerar ou atualizar o documento.
+
+### Pontuais realizados em um mês e cobrados no seguinte
+
+Em **Contrato > Itens**, selecione **Pontual · cobrar uma vez**, informe o valor, o mês do serviço e **Cobrar na fatura de**. Exemplo: conserto realizado em outubro, cobrar em novembro. O lançamento aparece no total e na previsão antes do rascunho, entra no PDF daquele mês e não se repete em dezembro. Itens incluídos na mensalidade apenas detalham o preço fixo; adicionais recorrentes repetem durante sua vigência.
+
+Para um rascunho já existente, use **Atualizar itens do contrato** na fatura e confira novamente. A atualização traz também os pontuais lançados no contrato, preserva pontuais avulsos adicionados diretamente na fatura e mantém os documentos emitidos. Um pontual já faturado não pode ser transferido para outro mês pelo cadastro do contrato.
 
 ### Templates e envio
 
@@ -33,7 +39,7 @@ Em **Comercial > Recorrência Financeira**, o próximo mês aparece inicialmente
 
 | Grupo | Conteúdo |
 | --- | --- |
-| Contratos a preparar | Mensalidade e adicionais vigentes de competências que vencem no mês, ainda sem fatura. |
+| Contratos a preparar | Mensalidade, adicionais vigentes e pontuais já lançados de competências que vencem no mês, ainda sem fatura. |
 | Rascunhos | Valores efetivamente salvos em faturas ainda não emitidas, incluindo pontuais e descontos. |
 | Emitidas em aberto | Faturas emitidas e não pagas com vencimento no mês. |
 | Vencidos e não pagos | Atrasos até hoje, em uma lista separada. Não são somados automaticamente ao mês futuro. |

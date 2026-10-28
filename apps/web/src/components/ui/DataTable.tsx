@@ -22,9 +22,9 @@ export function DataTable<T>({ columns, data, mobileRender, rowKey }: DataTableP
           <thead>
             <tr className="border-b border-outline-variant bg-surface-container-low">
               {columns.map((col, idx) => (
-                <th
+                <th scope="col"
                   key={idx}
-                  className={`p-sm px-md font-label-caps text-label-caps uppercase text-on-surface-variant opacity-60 tracking-wider font-semibold ${col.className || ''}`}
+                  className={`p-sm px-md font-label-caps text-label-caps uppercase text-on-surface-variant tracking-wider font-semibold ${col.className || ''}`}
                 >
                   {col.header}
                 </th>

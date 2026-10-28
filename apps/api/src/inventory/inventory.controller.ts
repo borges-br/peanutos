@@ -30,6 +30,12 @@ export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
   @Roles("OWNER", "ADMIN", "TECHNICIAN", "READ_ONLY")
+  @Get('assets/groups')
+  async groups(@CurrentUser() user: any) {
+    return this.inventoryService.groups(user.workspaceId);
+  }
+
+  @Roles("OWNER", "ADMIN", "TECHNICIAN", "READ_ONLY")
   @Get("assets")
   async listGlobal(
     @Query("page") page: number,

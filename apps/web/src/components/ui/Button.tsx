@@ -8,7 +8,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ children, variant = 'primary', loading, planned, className = '', disabled, ...props }, ref) => {
-    const baseClasses = 'inline-flex items-center justify-center font-medium text-body-sm transition-all rounded-lg select-none px-4 py-1.5 focus:outline-none active:scale-95 duration-200';
+    const baseClasses = 'inline-flex items-center justify-center font-medium text-sm transition-colors rounded-lg select-none px-4 py-2 min-h-[44px] duration-150';
     
     const variantClasses = {
       primary: 'bg-primary text-on-primary-fixed hover:bg-primary-fixed-dim border border-primary/20 shadow-lg shadow-primary/5',
@@ -41,6 +41,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
+        aria-busy={!!loading}
         disabled={isDisabled}
         className={`${baseClasses} ${variantClasses[variant]} ${isDisabled ? 'opacity-40 cursor-not-allowed active:scale-100' : ''} ${className}`}
         {...props}

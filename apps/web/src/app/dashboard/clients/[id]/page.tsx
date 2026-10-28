@@ -505,18 +505,7 @@ export default function ClientDetailPage() {
               </Button>
             </section>
 
-            <section className="relative flex flex-col gap-sm rounded-xl border border-dashed border-outline-variant/40 bg-surface-container-lowest p-lg">
-              <div className="flex items-center gap-sm">
-                <span className="material-symbols-outlined text-[16px] text-on-surface-variant/60">lock</span>
-                <h4 className="text-sm font-semibold text-on-surface-variant opacity-70">{t.clients.shortcuts.contractsTitle}</h4>
-              </div>
-              <p className="text-[12px] leading-relaxed text-on-surface-variant/50 font-body-sm">
-                {t.clients.shortcuts.contractsDescription}
-              </p>
-              <span className="absolute right-lg top-lg rounded bg-secondary-container/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-tighter text-on-secondary-container">
-                {t.common.planned}
-              </span>
-            </section>
+            <section className="settings-panel space-y-md"><h4 className="font-semibold">Contratos do cliente</h4><Button variant="outline" onClick={()=>router.push('/dashboard/clients/'+clientId+'/contracts')}>Abrir contratos</Button></section>
           </div>
         </div>
       )}

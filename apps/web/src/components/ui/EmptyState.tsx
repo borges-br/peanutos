@@ -12,8 +12,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ title, description, acti
 
   return (
     <div className="flex flex-col items-center justify-center text-center p-xl bg-surface border border-outline-variant rounded-xl gap-sm shadow-xl shadow-black/10">
-      <span className="material-symbols-outlined text-4xl text-on-surface-variant/40 mb-2">
-        database_off
+      <span className="material-symbols-outlined text-4xl text-primary/70 mb-2">
+        inbox
       </span>
       <h3 className="font-title-sm text-sm font-semibold text-on-surface">
         {title || t.states.emptyTitle}

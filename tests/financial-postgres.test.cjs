@@ -140,4 +140,44 @@ else {
     assert.equal(guard.canActivate(context(BillingGatewayController.prototype.create,'FINANCIAL')),true);
     assert.equal(Reflect.getMetadata('__httpCode__',AsaasWebhookController.prototype.receive),200);
   });
+  test('October work is charged once in November, visible before draft and preserved after issue',async()=>{
+    const f=await fixture();
+    const c=await db.contract.create({data:{workspaceId:f.ws.id,clientId:f.client.id,number:'CTR-UX-'+randomUUID(),title:'Suporte',type:'RECURRING_SUPPORT',status:'ACTIVE',monthlyAmountCents:170031,startDate:new Date('2099-01-01'),endDate:new Date('2099-12-31'),billingDay:10,billingIssueDay:1}});
+    const old=await core.saveContractLineItem(db,f.ws.id,c.id,{description:'Nobreak revisão e duas baterias',itemType:'SERVICE',quantity:1,unitPriceCents:44800,billingRole:'BASE',recurring:true},f.user.id);
+    await assert.rejects(()=>prepareContractPeriod(db,c.id,f.ws.id,'2099-11',f.user.id),/soma dos itens fixos/);
+    const payload={description:old.description,itemType:'SERVICE',quantity:1,unitPriceCents:44800,billingRole:'ONE_OFF',servicePeriod:'2099-10',chargePeriod:'2099-11'};
+    const {contractLineItemUpdateSchema}=require('../packages/validators/dist');assert.equal(contractLineItemUpdateSchema.parse(payload).chargePeriod,'2099-11');
+    await core.saveContractLineItem(db,f.ws.id,c.id,payload,f.user.id,old.id);
+    await core.saveContractLineItem(db,f.ws.id,c.id,{description:'Adicionais mensais',itemType:'SERVICE',quantity:1,unitPriceCents:148600,billingRole:'ADDON',startsOn:'2099-10-01'},f.user.id);
+    const summary=await core.getContractPeriodSummary(db,f.ws.id,c.id,'2099-11');assert.equal(summary.warning,null);assert.equal(summary.extraCents,44800);assert.equal(summary.totalCents,363431);
+    const results=await Promise.all([prepareContractPeriod(db,c.id,f.ws.id,'2099-11',f.user.id),prepareContractPeriod(db,c.id,f.ws.id,'2099-11',f.user.id)]);
+    assert.equal(results[0].invoiceId,results[1].invoiceId);
+    let invoice=await db.invoice.findUnique({where:{id:results[0].invoiceId},include:{items:true}});assert.equal(Number(invoice.totalAmount),3634.31);assert.equal(invoice.items.filter(i=>i.sourceContractLineItemId===old.id).length,1);assert.match(invoice.items.find(i=>i.sourceContractLineItemId===old.id).description,/10\/2099/);
+    invoice=await updateContractInvoice(db,invoice.id,f.ws.id,{refreshBase:true});assert.equal(Number(invoice.totalAmount),3634.31);
+    const dec=await prepareContractPeriod(db,c.id,f.ws.id,'2099-12',f.user.id);assert.equal(Number(dec.invoice.totalAmount),3186.31);
+    await db.invoice.update({where:{id:invoice.id},data:{status:'ISSUED'}});
+    await assert.rejects(()=>core.saveContractLineItem(db,f.ws.id,c.id,{...payload,chargePeriod:'2099-12'},f.user.id,old.id),/emitida/);
+    await assert.rejects(()=>core.removeContractLineItem(db,f.ws.id,c.id,old.id,f.user.id),/emitida/);
+    assert.equal((await db.contract.findUnique({where:{id:c.id}})).monthlyAmountCents,170031);
+  });
+  test('global search uses real Portuguese text search, respects roles and isolates workspaces',async()=>{
+    const f=await fixture();const other=await fixture();
+    await db.client.update({where:{id:f.client.id},data:{legalName:'Revisões sintéticas Nobreak'}});
+    const {SearchController}=require('../apps/api/dist/search/search.controller');const controller=new SearchController();
+    const result=await controller.search({workspaceId:f.ws.id,role:'OWNER'},'revisão');assert.ok(result.data.some(r=>r.id===f.client.id));assert.ok(!result.data.some(r=>r.id===other.client.id));
+    const fin=await controller.search({workspaceId:f.ws.id,role:'OWNER'},f.invoice.number);assert.ok(fin.data.some(r=>r.id===f.invoice.id));
+    const tech=await controller.search({workspaceId:f.ws.id,role:'TECHNICIAN'},f.invoice.number);assert.equal(tech.data.length,0);
+    assert.deepEqual((await controller.search({workspaceId:f.ws.id,role:'OWNER'},"'; DROP TABLE clients; --")).data,[]);
+  });
+
+  test('client groups separate active agreements before pagination and inventory cards use database counts',async()=>{
+    const f=await fixture();const other=await db.client.create({data:{workspaceId:f.ws.id,legalName:'Avulso QA'}});
+    await db.contract.create({data:{workspaceId:f.ws.id,clientId:f.client.id,number:'GROUP-'+randomUUID(),title:'Suporte',type:'RECURRING_SUPPORT',status:'ACTIVE',monthlyAmountCents:10000,startDate:new Date('2020-01-01')}});
+    await db.asset.create({data:{workspaceId:f.ws.id,clientId:f.client.id,name:'QA equipamento'}});
+    const {ClientsService}=require('../apps/api/dist/clients/clients.service');const service=new ClientsService();
+    const active=await service.list(f.ws.id,{contractGroup:'active',limit:1});assert.equal(active.meta.total,1);assert.equal(active.data[0].id,f.client.id);assert.equal(active.data[0].contracts.length,1);assert.equal(active.data[0]._count.assets,1);
+    const rest=await service.list(f.ws.id,{contractGroup:'other'});assert.equal(rest.meta.total,1);assert.equal(rest.data[0].id,other.id);
+    const {InventoryService}=require('../apps/api/dist/inventory/inventory.service');const groups=await new InventoryService().groups(f.ws.id);assert.equal(groups.total,1);assert.equal(groups.clients.length,1);assert.equal(groups.clients[0]._count.assets,1);
+  });
+
 }

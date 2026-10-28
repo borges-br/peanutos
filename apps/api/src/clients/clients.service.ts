@@ -47,6 +47,7 @@ export class ClientsService {
       limit?: number;
       search?: string;
       status?: ClientStatus;
+      contractGroup?: string;
     },
   ) {
     const page = Math.max(1, Number(query.page) || 1);
@@ -60,6 +61,9 @@ export class ClientsService {
     if (query.status) {
       where.status = query.status;
     }
+    const activeContract = { workspaceId, status: 'ACTIVE' as const, startDate: { lte: new Date() }, OR: [{ endDate: null }, { endDate: { gte: new Date() } }] };
+    if (query.contractGroup === 'active') where.contracts = { some: activeContract };
+    if (query.contractGroup === 'other') where.contracts = { none: activeContract };
 
     if (query.search) {
       const searchPattern = query.search;
@@ -78,6 +82,7 @@ export class ClientsService {
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
+        include: { _count: { select: { assets: { where: { workspaceId } } } }, contracts: { where: activeContract, select: { id: true, number: true, title: true } } },
       }),
     ]);
 
