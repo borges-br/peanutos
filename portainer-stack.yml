@@ -1,8 +1,10 @@
 # Peanut OS - stack unica para a VPS existente, com NGINX Proxy Manager.
 # Docker Standalone. Imagens verificadas do commit 590d739.
 # Mantenha as variaveis e chaves existentes no Portainer; nao gere novas senhas.
+# Lista de variaveis: portainer.env.example (o .env.example e para desenvolvimento).
 # Antes do redeploy: backup, migrations, copia e verificacao dos arquivos.
-# Os volumes e as redes abaixo devem existir com estes nomes exatos.
+# Os volumes e a rede do proxy devem existir com estes nomes exatos.
+# O Compose pode recriar a rede interna da stack, preservando seu nome.
 # Preserve tambem o volume antigo peanutos-infra_minio_data para recuperacao.
 
 name: peanutos-infra
@@ -175,8 +177,8 @@ volumes:
 
 networks:
   peanutos_net:
-    external: true
     name: peanutos-infra_peanutos_net
+    driver: bridge
   npm_proxy:
     external: true
     name: rvproxy_npm_backend_network
