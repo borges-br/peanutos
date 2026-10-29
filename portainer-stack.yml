@@ -147,7 +147,7 @@ services:
         condition: service_completed_successfully
 
   web:
-    image: ghcr.io/borges-br/peanutos/peanut-web:sha-8ec4afe
+    image: ghcr.io/borges-br/peanutos/peanut-web:sha-683947f
     container_name: peanut-web
     restart: unless-stopped
     environment:
