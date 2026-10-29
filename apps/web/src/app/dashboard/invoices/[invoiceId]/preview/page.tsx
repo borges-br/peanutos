@@ -8,6 +8,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '../../../../../context/AuthContext';
 import { useI18n } from '../../../../../i18n/useI18n';
 import A4PreviewShell from '../../../../../components/ui/A4PreviewShell';
+import HtmlDocumentPreview from '../../../../../components/ui/HtmlDocumentPreview';
 import RestrictedState from '../../../../../components/ui/RestrictedState';
 
 export default function InvoiceA4PreviewPage() {
@@ -52,25 +53,14 @@ export default function InvoiceA4PreviewPage() {
     async function loadInvoice() {
       setLoading(true);
       setError(null);
+      setPreviewHtml(null);
       try {
         const data = await apiRequest(`/invoices/${invoiceId}`);
         setInvoice(data);
 
-        // Load dynamic HTML preview from API
-        const token = localStorage.getItem('peanut_token');
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-        const targetUrl = `${cleanBaseUrl}/invoices/${invoiceId}/preview`;
-
-        const res = await fetch(targetUrl, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-        });
-
-        if (res.ok) {
-          const html = await res.text();
-          setPreviewHtml(html);
-        } else {
-          console.error("Failed to load faithful preview:", res.statusText);
+        if (hasFinancialPrivilege) {
+          const preview = await apiBlobRequest(`/invoices/${invoiceId}/preview`);
+          setPreviewHtml(await preview.text());
         }
       } catch (err: any) {
         setError(err.message || t.invoices.notFound || 'Fatura não encontrada.');
@@ -81,7 +71,7 @@ export default function InvoiceA4PreviewPage() {
     if (invoiceId) {
       loadInvoice();
     }
-  }, [invoiceId]);
+  }, [invoiceId, hasFinancialPrivilege]);
 
   useEffect(() => {
     async function checkExistingDoc() {
@@ -264,6 +254,7 @@ export default function InvoiceA4PreviewPage() {
 
   return (
     <A4PreviewShell
+      fullDocument
       title={t.invoices.previewA4Title || "Preview A4 da Fatura"}
       subtitle={t.invoices.previewA4Subtitle || "Visualização do documento de cobrança oficial para impressão."}
       documentType={t.invoices.documentType || "FATURA COMERCIAL"}
@@ -333,16 +324,11 @@ export default function InvoiceA4PreviewPage() {
           )}
 
           {previewHtml ? (
-            <iframe
-              srcDoc={previewHtml}
-              className="w-full min-h-[920px] border border-outline-variant/30 rounded-lg shadow-inner bg-white"
-              title="Faithful Invoice A4 Preview"
-              sandbox="allow-same-origin allow-scripts"
-            />
+            <HtmlDocumentPreview html={previewHtml} title="Prévia da fatura" />
           ) : (
             <div className="flex flex-col justify-center items-center py-xl gap-sm text-on-surface-variant font-body-sm">
               <div className="w-8 h-8 rounded-full border-3 border-primary/10 border-t-primary animate-spin" />
-              <p>Carregando layout fiel...</p>
+              <p>Prévia indisponível.</p>
             </div>
           )}
         </div>

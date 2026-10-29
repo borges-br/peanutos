@@ -17,6 +17,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* A4 previews: scale the complete page once; scroll in the app, never inside it. */
+.document-viewport { width:100%; min-width:0; color:rgb(var(--color-on-surface)); }
+.document-zoom-toolbar { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px; padding:8px; border:1px solid rgb(var(--color-outline-variant)); border-radius:12px 12px 0 0; background:rgb(var(--color-surface)); }
+.document-zoom-toolbar output { display:block; min-width:48px; text-align:center; font-size:12px; font-variant-numeric:tabular-nums; }
+.document-zoom-toolbar button[aria-pressed=true] { color:rgb(var(--color-primary)); background:rgb(var(--color-primary)/.1); }
+.document-scroll-area { width:100%; min-width:0; overflow-x:auto; overflow-y:hidden; padding:16px; background:rgb(var(--color-surface-container-lowest)/.7); border:1px solid rgb(var(--color-outline-variant)); border-top:0; border-radius:0 0 12px 12px; box-sizing:border-box; }
+.document-stage { position:relative; }
+.document-paper { position:absolute; top:0; transform-origin:top left; display:flow-root; color-scheme:light; background:white; box-shadow:0 8px 30px #050e1b55; }
+.document-html-frame { display:block; max-width:none; border:0; background:white; color-scheme:light; }
+
 :root {
   --background: #08090d;
   --foreground: #e2e2e3;

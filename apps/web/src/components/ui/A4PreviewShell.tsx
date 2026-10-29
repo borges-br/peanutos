@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Button from './Button';
 import { useI18n } from '../../i18n/useI18n';
 import AuthenticatedImage from './AuthenticatedImage';
+import A4Viewport from './A4Viewport';
 
 interface A4PreviewShellProps {
   title: string;
@@ -19,6 +20,7 @@ interface A4PreviewShellProps {
   statusBadge?: React.ReactNode;
   backPath: string;
   children: React.ReactNode;
+  fullDocument?: boolean;
   companyName?: string;
   companySub?: string;
   companyLogoUrl?: string | null;
@@ -55,6 +57,7 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
   statusBadge,
   backPath,
   children,
+  fullDocument = false,
   companyName,
   companySub,
   companyLogoUrl,
@@ -121,24 +124,19 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
             ))
           ) : (
             <>
-              <Button variant="secondary" disabled title="A funcionalidade de impressão será liberada em breve">
-                <span className="material-symbols-outlined text-[16px] mr-1.5">print</span>
-                Imprimir — Planejado
-              </Button>
-
-              {showPdfAction !== false && (
+              {showPdfAction !== false && onPdfAction && (
                 <Button
                   variant="primary"
                   disabled={pdfActionDisabled || pdfActionLoading}
                   onClick={onPdfAction}
-                  title={onPdfAction ? undefined : "Exportação de PDF será liberada na próxima rodada"}
+
                 >
                   {pdfActionLoading ? (
                     <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin mr-1.5" />
                   ) : (
                     <span className="material-symbols-outlined text-[16px] mr-1.5">picture_as_pdf</span>
                   )}
-                  {pdfActionLabel || (onPdfAction ? "Gerar PDF" : "PDF — Planejado")}
+                  {pdfActionLabel || "Gerar PDF"}
                 </Button>
               )}
             </>
@@ -147,11 +145,11 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
       </header>
 
       {/* A4 Sheet Canvas */}
-      <div className="flex justify-center items-center py-xl bg-surface-container-lowest/50 border border-outline-variant/20 rounded-2xl overflow-x-auto">
-        <div className="w-[794px] h-[1123px] min-w-[794px] min-h-[1123px] bg-white text-black p-[50px] shadow-2xl relative flex flex-col font-sans select-text border border-black/10">
-          
+      {fullDocument ? children : <A4Viewport>
+        <div className="w-[794px] min-h-[1123px] bg-white text-black p-[50px] relative flex flex-col font-sans select-text border border-black/10">
+
           {/* Header A4 */}
-          <div 
+          <div
             className="flex justify-between items-start border-b-2 pb-md mb-md"
             style={{ borderBottomColor: primaryColorHex || '#000000' }}
           >
@@ -235,11 +233,10 @@ export const A4PreviewShell: React.FC<A4PreviewShellProps> = ({
           {/* Footer A4 */}
           <div className="border-t border-black/10 pt-md mt-lg flex justify-between items-end text-[10px] text-black/50 font-mono">
             <span>{displayFooterText}</span>
-            <span>Página 1 de 1</span>
           </div>
 
         </div>
-      </div>
+      </A4Viewport>}
     </div>
   );
 };

@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiBlobRequest, apiRequest } from '../../../../../lib/api';
 import A4PreviewShell from '../../../../../components/ui/A4PreviewShell';
+import HtmlDocumentPreview from '../../../../../components/ui/HtmlDocumentPreview';
 
 export default function ServiceOrderPreviewPage() {
   const { formatDateTime } = useWorkspaceFormatters();
@@ -24,17 +25,13 @@ export default function ServiceOrderPreviewPage() {
     async function load() {
       setLoading(true);
       setError(null);
+      setPreviewHtml(null);
       try {
         const data = await apiRequest<any>(`/service-orders/${serviceOrderId}`);
         setServiceOrder(data);
 
-        const token = localStorage.getItem('peanut_token');
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-        const url = `${baseUrl.replace(/\/$/, '')}/service-orders/${serviceOrderId}/preview`;
-        const response = await fetch(url, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (response.ok) setPreviewHtml(await response.text());
+        const preview = await apiBlobRequest(`/service-orders/${serviceOrderId}/preview`);
+        setPreviewHtml(await preview.text());
 
         const docs = await apiRequest<any>(`/documents?entityType=SERVICE_ORDER&entityId=${serviceOrderId}&limit=1`);
         setExistingDoc(docs.data?.[0] || null);
@@ -96,6 +93,7 @@ export default function ServiceOrderPreviewPage() {
 
   return (
     <A4PreviewShell
+      fullDocument
       title="Preview A4 da Ordem de Serviço"
       subtitle="Documento técnico para execução, aceite e histórico operacional."
       documentType="ORDEM DE SERVIÇO"
@@ -137,14 +135,9 @@ export default function ServiceOrderPreviewPage() {
           </div>
         )}
         {previewHtml ? (
-          <iframe
-            srcDoc={previewHtml}
-            className="w-full min-h-[920px] border border-outline-variant/30 rounded-lg shadow-inner bg-white"
-            title="Preview A4 da O.S."
-            sandbox="allow-same-origin"
-          />
+          <HtmlDocumentPreview html={previewHtml} title="Prévia da ordem de serviço" />
         ) : (
-          <div className="py-xl text-center text-on-surface-variant">Preview indisponível.</div>
+          <div className="py-xl text-center text-on-surface-variant">Prévia indisponível.</div>
         )}
       </div>
     </A4PreviewShell>

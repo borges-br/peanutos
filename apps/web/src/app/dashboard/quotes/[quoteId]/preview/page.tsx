@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiBlobRequest, apiRequest } from '../../../../../lib/api';
 import A4PreviewShell from '../../../../../components/ui/A4PreviewShell';
+import HtmlDocumentPreview from '../../../../../components/ui/HtmlDocumentPreview';
 
 export default function QuotePreviewPage() {
   const { formatCalendarDate } = useWorkspaceFormatters();
@@ -25,17 +26,13 @@ export default function QuotePreviewPage() {
     async function load() {
       setLoading(true);
       setError(null);
+      setPreviewHtml(null);
       try {
         const data = await apiRequest<any>(`/quotes/${quoteId}`);
         setQuote(data);
 
-        const token = localStorage.getItem('peanut_token');
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-        const url = `${baseUrl.replace(/\/$/, '')}/quotes/${quoteId}/preview`;
-        const response = await fetch(url, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (response.ok) setPreviewHtml(await response.text());
+        const preview = await apiBlobRequest(`/quotes/${quoteId}/preview`);
+        setPreviewHtml(await preview.text());
 
         const docs = await apiRequest<any>(`/documents?entityType=QUOTE&entityId=${quoteId}&limit=1`);
         setExistingDoc(docs.data?.[0] || null);
@@ -107,6 +104,7 @@ export default function QuotePreviewPage() {
 
   return (
     <A4PreviewShell
+      fullDocument
       title="Preview A4 do Orçamento"
       subtitle="Proposta comercial com valores de venda; custos internos não aparecem no documento."
       documentType="ORÇAMENTO"
@@ -148,14 +146,9 @@ export default function QuotePreviewPage() {
           </div>
         )}
         {previewHtml ? (
-          <iframe
-            srcDoc={previewHtml}
-            className="w-full min-h-[920px] border border-outline-variant/30 rounded-lg shadow-inner bg-white"
-            title="Preview A4 do orçamento"
-            sandbox="allow-same-origin"
-          />
+          <HtmlDocumentPreview html={previewHtml} title="Prévia do orçamento" />
         ) : (
-          <div className="py-xl text-center text-on-surface-variant">Preview indisponível.</div>
+          <div className="py-xl text-center text-on-surface-variant">Prévia indisponível.</div>
         )}
       </div>
     </A4PreviewShell>
