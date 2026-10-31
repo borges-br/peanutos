@@ -5,7 +5,7 @@ export default function AppFooter() {
   return (
     <footer className="app-footer">
       <span>{config?.name || 'Peanut OS'}</span>
-      <a href="/dashboard/configuracoes/preferencias/aparencia">
+      <a href="/dashboard/configuracoes/aparencia?secao=pessoal">
         Personalizar sua experiência
       </a>
     </footer>

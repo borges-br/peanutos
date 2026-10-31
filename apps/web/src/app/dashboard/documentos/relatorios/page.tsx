@@ -59,7 +59,7 @@ export default function AuthoredDocuments() {
         </Link>
         {["OWNER", "ADMIN"].includes(user?.role) && (
           <Link
-            href="/dashboard/configuracoes/marca"
+            href="/dashboard/configuracoes/aparencia?secao=empresa"
             className="text-primary text-sm"
           >
             Identidade dos documentos →

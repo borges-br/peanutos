@@ -165,9 +165,9 @@ export default function DocumentTemplates() {
         </div>
         <Link
           className="text-primary text-sm"
-          href="/dashboard/configuracoes/marca"
+          href="/dashboard/configuracoes/aparencia?secao=empresa"
         >
-          Ajustar marca e aparência →
+          Ajustar identidade da empresa →
         </Link>
       </header>
       {error && (

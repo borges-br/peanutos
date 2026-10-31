@@ -5,7 +5,8 @@ import BrandMark from "./BrandMark";
 import NavigationIcon from "./NavigationIcon";
 import { usePathname } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
-import { destinations } from "../../lib/navigation";
+import { destinations, canonicalDestinationHref } from "../../lib/navigation";
+import UserAvatar from "./UserAvatar";
 export default function Sidebar({
   onCloseMobile,
 }: {
@@ -17,7 +18,17 @@ export default function Sidebar({
   const key = "peanut:pins:" + user?.workspaceId + ":" + user?.id;
   useEffect(() => {
     try {
-      setPins(JSON.parse(localStorage.getItem(key) || "[]"));
+      const stored = JSON.parse(localStorage.getItem(key) || "[]");
+      const normalized = Array.from(
+        new Set<string>(
+          (Array.isArray(stored) ? stored : [])
+            .filter((href): href is string => typeof href === "string")
+            .map(canonicalDestinationHref),
+        ),
+      );
+      setPins(normalized);
+      if (JSON.stringify(stored) !== JSON.stringify(normalized))
+        localStorage.setItem(key, JSON.stringify(normalized));
     } catch {
       setPins([]);
     }
@@ -47,8 +58,7 @@ export default function Sidebar({
     "/dashboard/templates-a4": "picture_as_pdf",
     "/dashboard/documentos/relatorios": "edit_document",
     "/dashboard/configuracoes": "settings",
-    "/dashboard/configuracoes/preferencias/aparencia": "palette",
-    "/dashboard/configuracoes/marca": "design_services",
+    "/dashboard/configuracoes/aparencia": "palette",
     "/dashboard/webhooks": "webhook",
     "/dashboard/auditoria": "history",
   };
@@ -108,7 +118,7 @@ export default function Sidebar({
       <div className="sidebar-account">
         <Link href="/dashboard/configuracoes/perfil" onClick={onCloseMobile}>
           <span className="profile-trigger">
-            {(user?.name || "P").slice(0, 2).toUpperCase()}
+            <UserAvatar user={user} />
           </span>
           <span>
             <strong>{user?.name}</strong>

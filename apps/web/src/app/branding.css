@@ -298,6 +298,13 @@ html[data-visual-brand="true"][data-contrast="high"] .app-sidebar {
   margin-top: 8px;
   font-size: 14px;
 }
+.appearance-settings .brand-studio-header h2,
+.appearance-settings .page-heading h2 {
+  font-size: 22px;
+}
+.appearance-settings > section[hidden] {
+  display: none;
+}
 .brand-studio-actions {
   display: flex;
   gap: 8px;

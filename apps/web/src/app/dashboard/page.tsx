@@ -35,7 +35,7 @@ export default function DashboardOverviewPage() {
             results.map((r, i) => [
               cards[i]!.name,
               r.status === "fulfilled"
-                ? (r.value?.meta?.total ?? r.value?.data?.length ?? null)
+                ? (r.value?.meta?.total ?? r.value?.total ?? r.value?.data?.length ?? null)
                 : null,
             ]),
           ),
@@ -94,7 +94,7 @@ export default function DashboardOverviewPage() {
       <div className="flex flex-wrap gap-lg text-xs text-on-surface-variant pt-md">
         <Link
           className="text-primary"
-          href="/dashboard/configuracoes/preferencias/aparencia"
+          href="/dashboard/configuracoes/aparencia?secao=pessoal"
         >
           Personalizar aparência ↗
         </Link>

@@ -5,6 +5,15 @@ export type Destination = {
   group: string;
   roles?: string[];
 };
+export const APPEARANCE_PATH = "/dashboard/configuracoes/aparencia";
+export function canonicalDestinationHref(href: string) {
+  return [
+    "/dashboard/configuracoes/preferencias/aparencia",
+    "/dashboard/configuracoes/marca",
+  ].includes(href.split("?")[0]!)
+    ? APPEARANCE_PATH
+    : href;
+}
 const finance = ["OWNER", "ADMIN", "FINANCIAL"];
 export const destinations: Destination[] = [
   {
@@ -87,10 +96,11 @@ export const destinations: Destination[] = [
     roles: finance,
   },
   {
-    label: 'Relatórios e propostas',
-    href: '/dashboard/documentos/relatorios',
-    terms: 'relatorio tecnico proposta diagnostico recomendacao projeto documento elaborar',
-    group: 'Documentos',
+    label: "Relatórios e propostas",
+    href: "/dashboard/documentos/relatorios",
+    terms:
+      "relatorio tecnico proposta diagnostico recomendacao projeto documento elaborar",
+    group: "Documentos",
   },
   {
     label: "Configurações",
@@ -101,16 +111,10 @@ export const destinations: Destination[] = [
   },
   {
     label: "Aparência",
-    href: "/dashboard/configuracoes/preferencias/aparencia",
-    terms: "tema escuro cor contraste densidade fonte animacao personalizar",
+    href: APPEARANCE_PATH,
+    terms:
+      "tema escuro cor contraste densidade fonte animacao personalizar marca branding identidade logo simbolo sidebar whitelabel documentos leitura",
     group: "Preferências",
-  },
-  {
-    label: 'Marca e aparência',
-    href: '/dashboard/configuracoes/marca',
-    terms: 'branding identidade logo simbolo fonte tema sidebar whitelabel documentos',
-    group: 'Preferências',
-    roles: ['OWNER','ADMIN'],
   },
   {
     label: "Automações",

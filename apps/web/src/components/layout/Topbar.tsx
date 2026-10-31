@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { quickActions } from "../../lib/navigation";
 import CommandPalette from "./CommandPalette";
 import BrandMark from './BrandMark';
+import UserAvatar from "./UserAvatar";
 export default function Topbar({
   title,
   onMenuClick,
@@ -104,7 +105,7 @@ export default function Topbar({
               <Link href="/dashboard/templates-email">
                 Criar um modelo de email ↗
               </Link>
-              <Link href="/dashboard/configuracoes/preferencias/aparencia">
+              <Link href="/dashboard/configuracoes/aparencia?secao=pessoal">
                 Ajustar leitura e aparência ↗
               </Link>
             </div>
@@ -114,7 +115,7 @@ export default function Topbar({
             className="profile-trigger"
             aria-label="Abrir meu perfil"
           >
-            {(user?.name || "P").slice(0, 2).toUpperCase()}
+            <UserAvatar user={user} />
           </Link>
         </div>
       </header>
