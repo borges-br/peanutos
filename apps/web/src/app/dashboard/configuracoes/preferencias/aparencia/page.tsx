@@ -7,8 +7,10 @@ import {
   saveAppearance,
 } from "../../../../../lib/appearance";
 import Button from "../../../../../components/ui/Button";
+import {useBrand} from '../../../../../context/BrandContext';
 export default function AppearancePage() {
   const { user } = useAuth();
+  const {config}=useBrand();
   const [prefs, setPrefs] = useState(defaultAppearance),
     [notice, setNotice] = useState("");
   useEffect(() => {
@@ -38,7 +40,7 @@ export default function AppearancePage() {
           Restaurar padrão
         </Button>
       </header>
-      <section className="settings-panel">
+      {config?<section className="settings-panel"><h2>Identidade da empresa</h2><p className="text-sm text-on-surface-variant mt-2">As cores e fontes são definidas pela empresa. Ajuste abaixo suas preferências de leitura.</p></section>:<section className="settings-panel">
         <h2>Cor de destaque</h2>
         <div className="flex flex-wrap gap-md mt-md">
           {[
@@ -58,7 +60,7 @@ export default function AppearancePage() {
             </button>
           ))}
         </div>
-      </section>
+      </section>}
       <section className="settings-panel space-y-lg">
         <h2>Conforto de leitura</h2>
         <label className="preference-row">

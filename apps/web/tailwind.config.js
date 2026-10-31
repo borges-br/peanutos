@@ -75,7 +75,7 @@ module.exports = {
         sm: "8px",
       },
       fontFamily: {
-        sans: ["Geist", "Inter", "system-ui", "sans-serif"],
+        sans: ["var(--brand-font, Geist)", "Inter", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "monospace"],
       },
     },

@@ -28,6 +28,7 @@ let fileRows = [];
 let generatedRows = [];
 let auditRows = [];
 let transactionError = false;
+let visualSettings = null;
 const source = {
   id: 'entity', workspaceId: 'ws', number: 'TEST-1', status: 'DRAFT', clientName: 'Cliente Teste',
   issueDate: new Date(instant), createdAt: new Date(instant), dueDate: new Date('2026-10-30T00:00:00Z'),
@@ -36,6 +37,7 @@ const source = {
   items: [{ type: 'SERVICE', description: 'Teste', quantity: 1, unit: 'UN', unitPrice: 10, totalPrice: 10 }],
 };
 const db = {
+  workspaceVisualSettings: { findUnique: async ({where}) => { assert.equal(where.workspaceId,'ws'); return visualSettings; } },
   billingCharge: { findMany: async () => [] },
   workspace: {
     findUnique: async () => workspace,
@@ -74,7 +76,7 @@ const rendered = [];
 const pdfBytes = Buffer.from('%PDF-1.4 test stub');
 const originalLoad = Module._load;
 Module._load = function (id, ...args) {
-  if (id === '@peanut/db') return { prisma: db, getInvoiceBankLink: realDb.getInvoiceBankLink };
+  if (id === '@peanut/db') return { prisma: db, getInvoiceBankLink: realDb.getInvoiceBankLink, getPublishedDocumentIdentity: realDb.getPublishedDocumentIdentity };
   if (id === '@peanut/documents') return {
     ...documents, renderA4Document: params => { rendered.push(params); return documents.renderA4Document(params); },
   };
@@ -199,6 +201,22 @@ test('actual API previews and worker PDF inputs agree in three zones for all thr
       await verifyFile(store, fileRows.at(-1));
     }
   }
+});
+
+test('published visual identity is identical in API previews and worker PDF snapshots', async () => {
+  const config=structuredClone(apiRequire('@peanut/validators').DEFAULT_VISUAL_CONFIG);
+  config.name='Empresa Visual';config.font='source-sans-3';config.documents.logoWidth=280;
+  visualSettings={published:config};
+  try {
+    for(const [type,service,method] of [['INVOICE',new InvoicesService(audit,events),'getInvoicePreviewHtml'],['QUOTE',new QuotesService(audit,events),'getQuotePreviewHtml'],['SERVICE_ORDER',new ServiceOrdersService(audit,events),'getServiceOrderPreviewHtml']]) {
+      const html=await service[method]('entity','ws'),preview=rendered.at(-1);
+      await workers.get('pdf-generation')({id:'visual-test',data:{workspaceId:'ws',actorUserId:null,entityId:'entity',entityType:type,documentType:type}});
+      const worker=rendered.at(-1);
+      assert.equal(preview.brand.publicName,'Empresa Visual');assert.equal(worker.brand.publicName,'Empresa Visual');
+      assert.deepEqual(preview.brand.visual,worker.brand.visual);assert.equal(worker.brand.visual.logoWidth,280);
+      assert.match(html,/data:font\/ttf;base64/);
+    }
+  } finally { visualSettings=null; }
 });
 
 test('image upload and authenticated proxy use the record bucket and isolate workspaces', async () => {

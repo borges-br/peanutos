@@ -1,7 +1,8 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import logoImg from "../../../images/layout/logo.webp";
+import BrandMark from "./BrandMark";
+import NavigationIcon from "./NavigationIcon";
 import { usePathname } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
 import { destinations } from "../../lib/navigation";
@@ -31,24 +32,26 @@ export default function Sidebar({
   const entries = destinations.filter(
     (d) => !d.roles || d.roles.includes(user?.role),
   );
-  const icons = [
-    "space_dashboard",
-    "groups",
-    "devices",
-    "confirmation_number",
-    "construction",
-    "description",
-    "receipt_long",
-    "account_balance_wallet",
-    "request_quote",
-    "mail",
-    "folder",
-    "picture_as_pdf",
-    "settings",
-    "palette",
-    "webhook",
-    "history",
-  ];
+  const icons: Record<string, string> = {
+    "/dashboard": "space_dashboard",
+    "/dashboard/clients": "groups",
+    "/dashboard/inventory": "devices",
+    "/dashboard/tickets": "confirmation_number",
+    "/dashboard/service-orders": "construction",
+    "/dashboard/contracts": "description",
+    "/dashboard/invoices": "receipt_long",
+    "/dashboard/financials": "account_balance_wallet",
+    "/dashboard/quotes": "request_quote",
+    "/dashboard/templates-email": "mail",
+    "/dashboard/documentos": "folder",
+    "/dashboard/templates-a4": "picture_as_pdf",
+    "/dashboard/documentos/relatorios": "edit_document",
+    "/dashboard/configuracoes": "settings",
+    "/dashboard/configuracoes/preferencias/aparencia": "palette",
+    "/dashboard/configuracoes/marca": "design_services",
+    "/dashboard/webhooks": "webhook",
+    "/dashboard/auditoria": "history",
+  };
   function item(d: (typeof destinations)[number]) {
     const active =
       entries
@@ -63,9 +66,7 @@ export default function Sidebar({
           onClick={onCloseMobile}
           aria-current={active ? "page" : undefined}
         >
-          <span className="material-symbols-outlined" aria-hidden="true">
-            {icons[destinations.indexOf(d)]}
-          </span>
+          <NavigationIcon name={icons[d.href] || "description"} />
           <span>{d.label}</span>
         </Link>
         <button
@@ -84,19 +85,7 @@ export default function Sidebar({
   return (
     <aside className="app-sidebar">
       <Link href="/dashboard" className="brand" onClick={onCloseMobile}>
-        <img
-          src={logoImg.src}
-          alt=""
-          width={40}
-          height={40}
-          className="rounded-xl"
-        />
-        <span>
-          <strong>
-            peanut<span className="text-primary">os</span>
-          </strong>
-          <small>Seu trabalho, conectado.</small>
-        </span>
+        <BrandMark mobile={!!onCloseMobile} />
       </Link>
       <nav aria-label="Navegação principal" className="sidebar-navigation">
         {pins.length > 0 && (

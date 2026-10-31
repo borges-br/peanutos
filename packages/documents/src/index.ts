@@ -3,11 +3,14 @@
 // ==============================================================================
 
 import { formatCpfCnpj, formatPhone, formatDateTime } from './formatters';
+import { documentIdentityCss, DocumentVisual } from './identity';
+export * from './identity';
 export * from './formatters';
 
 // ─── Snapshot Types ───────────────────────────────────────────────────────────
 
 export interface BrandSnapshot {
+  visual?: DocumentVisual;
   publicName?: string | null;
   brandSubtitle?: string | null;
   legalName?: string | null;
@@ -377,7 +380,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
   const t = translations[locale] || translations["pt-BR"];
 
   // Colors & Brand Settings
-  const primaryColor = escapeHtml(brand.documentPrimaryColor || "#1a56db");
+  const primaryColor = escapeHtml(brand.visual?.accent || brand.documentPrimaryColor || "#1a56db");
   const brandName = escapeHtml(brand.publicName || "Empresa");
   const brandSubtitle = escapeHtml(brand.brandSubtitle || "");
   const legalName = escapeHtml(brand.legalName || "");
@@ -387,7 +390,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
   const companyWebsite = escapeHtml(brand.website || "");
   const companyAddress = escapeHtml(brand.address || "");
   const logoUrl = brand.logoUrl || null;
-  const documentFooterText = escapeHtml(brand.footerText || "Documento Oficial — Peanut OS.");
+  const documentFooterText = escapeHtml(brand.visual?.footer || brand.footerText || "Documento Oficial.");
 
   // Client display mode toggle
   const clientDisplayMode = templateSettings.settings?.clientDisplayMode || "LEGAL_NAME";
@@ -506,7 +509,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     `,
     logo: () => `
       <div class="block-container block-logo" style="margin-bottom: 20px;">
-        ${logoUrl ? `
+        ${logoUrl && brand.visual ? `<div class="brand-logo-slot"><img class="brand-document-logo" src="${escapeHtml(logoUrl)}" alt="${brandName}"></div>` : logoUrl ? `
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
               <td style="width: 76px; vertical-align: middle;">
@@ -567,7 +570,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     `,
     documentTitle: () => `
       <div class="block-container block-document-title" style="margin-bottom: 20px; border-bottom: 2px solid ${primaryColor}; padding-bottom: 6px;">
-        <span style="font-size: 13pt; font-weight: 800; color: #0f172a; tracking-tight: -0.2px;">${customTitle}</span>
+        <span class="brand-document-title" style="font-size: 13pt; font-weight: 800; color: #0f172a; tracking-tight: -0.2px;">${customTitle}</span>
         ${data.billingPeriod ? `<div style="font-size: 9pt; color: #475569; margin-top: 4px;">Competência: ${escapeHtml(data.billingPeriod)}${data.contractNumber ? ` | Contrato: ${escapeHtml(data.contractNumber)}` : ''}</div>` : ''}
       </div>
     `,
@@ -770,6 +773,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
       .monthly-invoice .block-container { margin-bottom: 12px !important; }
       .monthly-invoice .block-items-table tbody td { padding-top: 6px !important; padding-bottom: 6px !important; }
     }
+    ${documentIdentityCss(brand.visual)}
   </style>
 </head>
 <body class="${data.billingPeriod ? 'monthly-invoice' : ''}">

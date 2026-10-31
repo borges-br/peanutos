@@ -8,12 +8,15 @@ import {
   UseGuards,
   Req,
   BadRequestException,
+  Res,
 } from "@nestjs/common";
 import { DocumentTemplatesService } from "./document-templates.service";
 import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import {VisualSettingsService} from '../settings/visual-settings.service';
+import {VisualConfig} from '@peanut/validators';
 import {
   updateDocumentTemplateSettingSchema,
   TEMPLATE_DOCUMENT_TYPES,
@@ -22,7 +25,18 @@ import {
 @UseGuards(AuthGuard, RolesGuard)
 @Controller("document-templates")
 export class DocumentTemplatesController {
-  constructor(private readonly service: DocumentTemplatesService) {}
+  constructor(private readonly service: DocumentTemplatesService,private readonly visuals:VisualSettingsService) {}
+
+  @Post(':documentType/preview')
+  @Roles('OWNER','ADMIN','FINANCIAL','TECHNICIAN','READ_ONLY')
+  async preview(@Param('documentType')type:string,@Body()body:unknown,@CurrentUser()user:any,@Res()res:any){
+    if(!['INVOICE','QUOTE','SERVICE_ORDER','REPORT'].includes(type))throw new BadRequestException('Tipo de prévia inválido.');
+    const parsed=updateDocumentTemplateSettingSchema.safeParse(body);
+    if(!parsed.success||!parsed.data.enabledBlocks||!parsed.data.blockOrder)throw new BadRequestException('Informe os blocos e sua ordem.');
+    const active=await this.visuals.active(user.workspaceId);
+    const config=(active.config || await this.visuals.defaults(user.workspaceId)) as VisualConfig;
+    return res.header('Content-Type','text/html; charset=utf-8').header('Cache-Control','no-store').send(await this.visuals.preview(user.workspaceId,config,type as 'INVOICE'|'QUOTE'|'SERVICE_ORDER'|'REPORT',{enabledBlocks:parsed.data.enabledBlocks,blockOrder:parsed.data.blockOrder,settings:parsed.data.settings}));
+  }
 
   @Get()
   @Roles("OWNER", "ADMIN", "FINANCIAL", "TECHNICIAN", "READ_ONLY")

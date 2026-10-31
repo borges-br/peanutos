@@ -22,4 +22,5 @@ export * from './email-settings';
 export * from './billing-email';
 
 export * from './asaas';
+export * from './visual-settings';
 export * from './billing-gateway';

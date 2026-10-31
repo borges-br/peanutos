@@ -87,6 +87,12 @@ export const destinations: Destination[] = [
     roles: finance,
   },
   {
+    label: 'Relatórios e propostas',
+    href: '/dashboard/documentos/relatorios',
+    terms: 'relatorio tecnico proposta diagnostico recomendacao projeto documento elaborar',
+    group: 'Documentos',
+  },
+  {
     label: "Configurações",
     href: "/dashboard/configuracoes",
     terms:
@@ -98,6 +104,13 @@ export const destinations: Destination[] = [
     href: "/dashboard/configuracoes/preferencias/aparencia",
     terms: "tema escuro cor contraste densidade fonte animacao personalizar",
     group: "Preferências",
+  },
+  {
+    label: 'Marca e aparência',
+    href: '/dashboard/configuracoes/marca',
+    terms: 'branding identidade logo simbolo fonte tema sidebar whitelabel documentos',
+    group: 'Preferências',
+    roles: ['OWNER','ADMIN'],
   },
   {
     label: "Automações",

@@ -1,4 +1,4 @@
-import { getInvoiceBankLink } from '@peanut/db';
+import { getInvoiceBankLink, getPublishedDocumentIdentity } from '@peanut/db';
 import {
   Injectable,
   NotFoundException,
@@ -853,6 +853,7 @@ export class InvoicesService {
       logoUrl: logoDataUri,
       footerText: workspace.documentFooterText,
       signatureName: workspace.signatureName,
+      ...(await getPublishedDocumentIdentity(prisma, workspaceId) || {}),
     };
 
     const templateSetting = await prisma.documentTemplateSetting.findUnique({

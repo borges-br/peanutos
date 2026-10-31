@@ -21,7 +21,8 @@ export function applyAppearance(user: any) {
   const p = readAppearance(user);
   const root = document.documentElement;
   root.dataset.accent = p.accent;
-  root.dataset.density = p.density;
+  const saved = localStorage.getItem(appearanceKey(user));
+  root.dataset.density = saved ? p.density : root.dataset.brandDensity || p.density;
   root.dataset.contrast = p.contrast;
   root.dataset.largeText = String(p.largeText);
   root.dataset.motion = String(p.motion);

@@ -26,3 +26,5 @@ yarn-error.log*
 /data/
 /backups/
 **/storage-migration-report*.json
+/output/
+/tmp/

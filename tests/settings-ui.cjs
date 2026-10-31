@@ -14,7 +14,7 @@ async function main() {
   const port = temporary.address().port; await new Promise(resolve => temporary.close(resolve));
   const server = spawn(process.execPath, [webRequire.resolve('next/dist/bin/next'), 'start', '-H', '127.0.0.1', '-p', String(port)], { cwd: path.join(root, 'apps/web'), windowsHide: true, stdio: 'pipe' });
   let logs = ''; server.stdout.on('data', chunk => logs += chunk); server.stderr.on('data', chunk => logs += chunk);
-  let browser;
+  let browser, reviewPage;
   try {
     let ready = false;
     for (let i = 0; i < 100; i++) { try { if ((await fetch(`http://127.0.0.1:${port}/login`)).ok) { ready = true; break; } } catch {} await new Promise(resolve => setTimeout(resolve, 200)); }
@@ -51,12 +51,16 @@ async function main() {
       } else if (endpoint === '/settings/email/test') result = { jobId: 'synthetic-job' };
       else if (endpoint === '/settings/email/test/synthetic-job') { smtp.lastTestAt = new Date().toISOString(); smtp.lastTestStatus = 'SUCCESS'; result = { state: 'completed', result: { status: 'SUCCESS', message: 'Conexão e autenticação verificadas. Nenhum email foi enviado.' } }; }
       else if (endpoint === '/settings/operations') { if (method === 'PATCH') operations = request.postDataJSON(); result = operations; }
+      else if (endpoint === '/financials/gateways') result = [];
+      else if (endpoint === '/settings/visual/active') result = { config: null, assets: [], version: 0 };
       return route.fulfill({ status: 200, headers, contentType: 'application/json', body: JSON.stringify(result) });
     });
-    const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message));
+    const page = await context.newPage(); reviewPage=page; const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto(`http://127.0.0.1:${port}/dashboard/configuracoes`);
     await page.getByRole('button', { name: 'INTEGRAÇÕES', exact: true }).click();
     await page.getByLabel('Servidor SMTP', { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.visualBrand === 'true'), false);
+    assert.equal(await page.locator('.sidebar-navigation .material-symbols-outlined').first().evaluate(el => getComputedStyle(el).fontFamily.includes('Brand Navigation Symbols')), false);
     assert.equal(await page.getByLabel('Nova senha SMTP').inputValue(), '');
     await page.getByLabel('Nome do remetente', { exact: true }).fill('Company QA');
     assert.equal(await page.getByRole('button', { name: 'Testar conexão salva' }).isDisabled(), true);
@@ -85,6 +89,7 @@ async function main() {
     assert.equal(emailReads, before); assert.equal(await page.getByLabel('Servidor SMTP', { exact: true }).count(), 0);
     assert.deepEqual(errors, []);
     console.log('Settings UI passed: password preservation/replacement, test without email, operation persistence, roles and responsive layout.');
+  } catch(error) { if(reviewPage){fs.mkdirSync(output,{recursive:true});await reviewPage.screenshot({path:path.join(output,'debug-failure.png'),fullPage:true}).catch(()=>{});console.error((await reviewPage.locator('body').innerText()).slice(-3500));}throw error;
   } finally { if (browser) await browser.close(); server.kill(); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

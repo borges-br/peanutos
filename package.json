@@ -24,7 +24,10 @@
     "test:contract-billing:ui": "node tests/contract-billing-ui.cjs",
     "test:contract-billing:pdf": "node tests/render-contract-billing.cjs",
     "test:settings:postgres": "node tests/run-contract-postgres.cjs",
-    "test:settings:ui": "node tests/settings-ui.cjs"
+    "test:settings:ui": "node tests/settings-ui.cjs",
+    "test:branding": "node --test tests/branding-core.test.cjs tests/branding-http.test.cjs tests/static-svg.test.cjs",
+    "test:branding:postgres": "node tests/run-branding-postgres.cjs",
+    "test:branding:ui": "node tests/branding-ui.cjs"
   },
   "devDependencies": {
     "prettier": "^3.2.5",

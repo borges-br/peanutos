@@ -8,7 +8,7 @@ import { Worker, Job, Queue } from 'bullmq';
 import { runContractBilling } from './contract-billing';
 import { testWorkspaceEmailConnection } from './email-settings';
 import type { RenderA4DocumentParams } from '@peanut/documents';
-import { prisma, freezeContractDocument, getInvoiceBankLink } from '@peanut/db';
+import { prisma, freezeContractDocument, getInvoiceBankLink, getPublishedDocumentIdentity } from '@peanut/db';
 import * as crypto from 'crypto';
 import * as https from 'https';
 import * as http from 'http';
@@ -664,6 +664,7 @@ const pdfWorker = new Worker(
       logoUrl: logoDataUri,
       footerText: workspace.documentFooterText,
       signatureName: workspace.signatureName,
+      ...(await getPublishedDocumentIdentity(prisma, workspaceId) || {}),
     };
 
     const responsibleSnapshot = responsibleUser ? {

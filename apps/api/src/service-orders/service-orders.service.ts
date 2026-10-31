@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { prisma, Prisma } from "@peanut/db";
+import { prisma, Prisma, getPublishedDocumentIdentity } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
 import { WebhookEventsService } from "../webhooks/webhook-events.service";
 import { renderA4Document, formatDate as formatDocumentDate, formatDateTime as formatDocumentDateTime } from "@peanut/documents";
@@ -689,6 +689,7 @@ export class ServiceOrdersService {
         logoUrl: logoDataUri,
         footerText: workspace.documentFooterText,
         signatureName: workspace.signatureName,
+        ...(await getPublishedDocumentIdentity(prisma, workspaceId) || {}),
       },
       responsible: serviceOrder.responsibleUser
         ? {

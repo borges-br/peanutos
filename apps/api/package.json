@@ -21,16 +21,17 @@
     "@nestjs/core": "^10.3.8",
     "@nestjs/platform-fastify": "^10.3.8",
     "@peanut/db": "workspace:*",
+    "@peanut/documents": "workspace:*",
     "@peanut/types": "workspace:*",
     "@peanut/utils": "workspace:*",
     "@peanut/validators": "workspace:*",
-    "@peanut/documents": "workspace:*",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.8.1",
     "dotenv": "^16.4.5",
     "jsonwebtoken": "^9.0.3",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "saxes": "^6.0.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.3.2",

@@ -1,6 +1,7 @@
 import { cpf, cnpj } from 'cpf-cnpj-validator';
 import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
 import { z } from 'zod';
+export * from './branding';
 
 export type ClientTypeInput = 'LEGAL_PERSON' | 'NATURAL_PERSON';
 
@@ -834,7 +835,7 @@ export const updateDocumentTemplateSettingSchema = z.object({
   templateKey: z.string().max(50).optional(),
   layoutVariant: z.string().max(50).optional(),
   enabledBlocks: z.record(z.enum(TEMPLATE_BLOCKS), z.boolean()).optional(),
-  blockOrder: z.array(z.enum(TEMPLATE_BLOCKS)).optional(),
+  blockOrder: z.array(z.enum(TEMPLATE_BLOCKS)).max(TEMPLATE_BLOCKS.length).refine(order=>new Set(order).size===order.length,'A ordem não pode repetir blocos.').optional(),
   customTexts: z.record(z.string(), z.string()).optional().nullable(),
   settings: z.record(z.string(), z.unknown()).optional().nullable(),
 }).refine((data) => {

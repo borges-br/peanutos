@@ -540,6 +540,7 @@ export default function SettingsPage() {
           <p className="font-body-md text-[14px] text-on-surface-variant mt-1">Gerencie preferências globais, segurança e integrações do Peanut OS.</p>
         </div>
         <div className="flex flex-wrap items-center gap-sm mt-md md:mt-0">
+          {isEditable&&<Button variant="outline" onClick={()=>router.push('/dashboard/configuracoes/marca')}>Marca e aparência</Button>}
           <Button variant="secondary" onClick={() => router.push('/dashboard/auditoria')}>
             <span className="material-symbols-outlined text-[18px] mr-1">history</span>
             Ver Auditoria

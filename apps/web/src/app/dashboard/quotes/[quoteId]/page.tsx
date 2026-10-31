@@ -268,6 +268,7 @@ export default function QuoteDetailPage() {
               {editing ? 'Cancelar edicao' : 'Editar'}
             </Button>
           )}
+          {quote?.clientId&&<Button variant="outline" onClick={()=>router.push(`/dashboard/documentos/elaborar?kind=PROPOSAL&quoteId=${quoteId}`)}>Elaborar proposta técnica</Button>}
           <Button variant="secondary" onClick={() => router.push(`/dashboard/quotes/${quoteId}/preview`)}>
             <span className="material-symbols-outlined text-[16px] mr-1.5">visibility</span>
             Visualizar A4

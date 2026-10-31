@@ -121,7 +121,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, title }) => {
           tabIndex={-1}
           className="app-main flex-1 overflow-y-auto p-md md:p-lg pb-12 bg-background relative"
         >
-          <div className="max-w-[1400px] mx-auto w-full animate-in fade-in duration-300">
+          <div className="app-content max-w-[1400px] mx-auto w-full animate-in fade-in duration-300">
             {children}
           </div>
         </main>

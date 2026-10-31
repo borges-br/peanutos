@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from "@nestjs/common";
 import { prisma } from "@peanut/db";
 import { LocalObjectStorage } from "@peanut/utils";
 import * as crypto from "crypto";
+import { assertStaticSvg } from "./static-svg";
 
 const ALLOWED_IMAGE_MIMES = new Set([
   "image/png",
@@ -40,11 +41,12 @@ export class StorageService {
     }
 
     if (opts.mimeType === "image/svg+xml") {
-      const svg = buffer.toString("utf8");
-      const unsafeSvgPattern =
-        /<script|on\w+\s*=|<foreignObject|javascript:|data:text\/html/i;
-      if (!svg.includes("<svg") || unsafeSvgPattern.test(svg)) {
-        throw new BadRequestException("SVG inválido ou potencialmente inseguro");
+      try {
+        assertStaticSvg(buffer.toString("utf8"));
+      } catch {
+        throw new BadRequestException(
+          "Use um SVG estático válido, sem scripts, animações ou referências externas. Você também pode enviar PNG ou WebP.",
+        );
       }
     }
 
@@ -96,5 +98,4 @@ export class StorageService {
       where: { id: fileObjectId, workspaceId },
     });
   }
-
 }

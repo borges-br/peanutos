@@ -57,3 +57,7 @@ Thumbs.db
 /data/
 /backups/
 storage-migration-report*.json
+
+# Local review exports and packaging intermediates
+/output/
+/tmp/

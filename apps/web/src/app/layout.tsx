@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import './branding.css';
 import { AuthProvider } from '../context/AuthContext';
+import { BrandProvider } from '../context/BrandContext';
 
 export const metadata: Metadata = {
   title: 'Peanut OS — Sistema de Gestão Operacional de TI',
-  description: 'Gestão completa e integrada de clientes, contatos, inventários, chamados e faturamento da Borges TI.',
+  description: 'Gestão integrada de clientes, inventário, atendimento e financeiro.',
 };
 
 export default function RootLayout({
@@ -16,9 +18,9 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body>
         <AuthProvider>
-          <div id="app-root" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <BrandProvider><div id="app-root" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
             {children}
-          </div>
+          </div></BrandProvider>
         </AuthProvider>
       </body>
     </html>

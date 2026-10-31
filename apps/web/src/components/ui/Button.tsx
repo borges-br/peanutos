@@ -42,6 +42,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         aria-busy={!!loading}
+        data-ui-button={variant}
         disabled={isDisabled}
         className={`${baseClasses} ${variantClasses[variant]} ${isDisabled ? 'opacity-40 cursor-not-allowed active:scale-100' : ''} ${className}`}
         {...props}

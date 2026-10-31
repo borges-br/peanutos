@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAuth } from "../../context/AuthContext";
 import { quickActions } from "../../lib/navigation";
 import CommandPalette from "./CommandPalette";
+import BrandMark from './BrandMark';
 export default function Topbar({
   title,
   onMenuClick,
@@ -46,7 +47,8 @@ export default function Topbar({
               menu
             </span>
           </button>
-          <span className="text-sm font-medium truncate">{title}</span>
+          <span className="md:hidden shrink-0"><BrandMark mobile surface="header"/></span>
+          <span className="topbar-page-title text-sm font-medium truncate">{title}</span>
         </div>
         <button
           type="button"
@@ -66,9 +68,10 @@ export default function Topbar({
               className="create-button"
               aria-expanded={menu}
               aria-controls="quick-create"
+              aria-label="Criar novo registro"
               onClick={() => setMenu(!menu)}
             >
-              <span aria-hidden="true">＋</span> Criar
+              <span aria-hidden="true">＋</span><span className="quick-create-label">Criar</span>
             </button>
             {menu && (
               <div

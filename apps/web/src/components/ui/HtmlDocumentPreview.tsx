@@ -2,9 +2,10 @@
 
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import A4Viewport from './A4Viewport';
+import Button from './Button';
 
 /** Server-rendered document HTML already includes its paper, brand and footer. */
-export default function HtmlDocumentPreview({html,title}: {html:string;title:string}) {
+export default function HtmlDocumentPreview({html,title,printable=false}: {html:string;title:string;printable?:boolean}) {
   const frame = useRef<HTMLIFrameElement>(null);
   const cleanup = useRef<()=>void>(()=>{});
   const [height,setHeight] = useState(1123);
@@ -34,5 +35,5 @@ export default function HtmlDocumentPreview({html,title}: {html:string;title:str
       measure();
     } catch {setError(true);}
   },[]);
-  return <div className="space-y-md">{error&&<p role="alert" className="text-error">Não foi possível exibir a prévia. Recarregue a página para tentar novamente.</p>}<A4Viewport><iframe ref={frame} srcDoc={html} title={title} sandbox="allow-same-origin" scrolling="no" onLoad={loaded} className="document-html-frame" style={{width:794,height}}/></A4Viewport></div>;
+  return <div className="space-y-md">{printable&&<Button variant="outline" onClick={()=>{frame.current?.contentWindow?.focus();frame.current?.contentWindow?.print();}}>Imprimir / Salvar PDF</Button>}{error&&<p role="alert" className="text-error">Não foi possível exibir a prévia. Recarregue a página para tentar novamente.</p>}<A4Viewport><iframe ref={frame} srcDoc={html} title={title} sandbox={printable?'allow-same-origin allow-modals':'allow-same-origin'} scrolling="no" onLoad={loaded} className="document-html-frame" style={{width:794,height}}/></A4Viewport></div>;
 }
