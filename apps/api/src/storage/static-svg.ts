@@ -3,6 +3,31 @@ import { SaxesParser } from "saxes";
 const SVG = "http://www.w3.org/2000/svg";
 const XMLNS = "http://www.w3.org/2000/xmlns/";
 const XLINK = "http://www.w3.org/1999/xlink";
+/** Normalize element prefixes for rasterizers without rewriting the preserved original. */
+export function canonicalStaticSvg(source: string) {
+  assertStaticSvg(source);
+  const parser = new SaxesParser({ xmlns: true });
+  const output: string[] = [], names: string[] = [];
+  const text = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const attr = (value: string) => text(value).replace(/"/g, "&quot;");
+  parser.on("opentag", node => {
+    const root = names.length === 0;
+    names.push(node.local);
+    let tag = `<${node.local}`;
+    if (root) tag += ` xmlns="${SVG}" xmlns:xlink="${XLINK}" xmlns:svg="${SVG}"`;
+    for (const value of Object.values(node.attributes)) {
+      if (value.uri === XMLNS) continue;
+      const name = value.uri === XLINK ? `xlink:${value.local}` : value.uri === SVG ? `svg:${value.local}` : value.uri === "http://www.w3.org/XML/1998/namespace" ? `xml:${value.local}` : value.local;
+      tag += ` ${name}="${attr(value.value)}"`;
+    }
+    output.push(tag + ">");
+  });
+  parser.on("closetag", () => output.push(`</${names.pop()}>`));
+  parser.on("text", value => output.push(text(value)));
+  parser.on("cdata", value => output.push(text(value)));
+  parser.write(source).close();
+  return output.join("");
+}
 const elements = new Set([
   "svg",
   "g",

@@ -3,6 +3,7 @@ import { calendarDateKey, dateKey, zonedDateTime } from '@peanut/utils';
 import { randomUUID } from 'node:crypto';
 import { recurringAddonItems, oneOffItems } from './contract-items';
 import { resolveBillingEmailTemplate, invoiceEmailValues } from './billing-email';
+import { publishedEmailAppearance, resolveEmailImages } from './email-branding';
 
 export class ContractBillingError extends Error {}
 const fail = (message: string): never => { throw new ContractBillingError(message); };
@@ -174,7 +175,9 @@ export async function approveContractInvoice(db: BillingDb, invoiceId: string, w
     await tx.contractHistory.create({ data: { workspaceId, contractId: event.contractId, actorUserId, event: 'BILLING_PERIOD_APPROVED', description: `Competência ${event.periodKey} conferida e agendada (${invoice.number}).` } });
     const template = await resolveBillingEmailTemplate(tx, workspaceId, event.contract.billingEmailTemplateId);
     const values = invoiceEmailValues(invoice, event.contract, event.contract.workspace, event.periodKey);
-    return tx.billingScheduleEvent.update({ where: { id: event.id }, data: { approvedAt: new Date(), approvedById: actorUserId, emailTemplateSnapshot: { ...template, values } } });
+    const appearance = await publishedEmailAppearance(tx, workspaceId);
+    const emailImages = await resolveEmailImages(tx, workspaceId, template.body);
+    return tx.billingScheduleEvent.update({ where: { id: event.id }, data: { approvedAt: new Date(), approvedById: actorUserId, emailTemplateSnapshot: { ...template, values, appearance, emailImages } } });
   });
 }
 

@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { prisma, writeVisualSettings, VisualSettingsError } from "@peanut/db";
 import {
@@ -19,10 +20,12 @@ import {
   DocumentVisual,
 } from "@peanut/documents";
 import { StorageService } from "../storage/storage.service";
+import { PublicBrandService } from "./public-brand.service";
 
 @Injectable()
 export class VisualSettingsService {
-  constructor(private readonly storage: StorageService) {}
+  constructor(private readonly storage: StorageService, @Optional() private readonly publicBrand?: PublicBrandService) {}
+  private publicImages() { return this.publicBrand || new PublicBrandService(this.storage); }
 
   async defaults(workspaceId: string): Promise<VisualConfig> {
     const ws = await prisma.workspace.findUniqueOrThrow({
@@ -59,6 +62,8 @@ export class VisualSettingsService {
       published: row?.published ? normalizeVisualConfig(row.published) : null,
       assets,
       versions,
+      publicAssets: await this.publicImages().assets(workspaceId),
+      publicLoginAvailable: (await this.publicImages().loginWorkspaceId()) === workspaceId,
     };
   }
   async active(workspaceId: string) {
@@ -163,6 +168,7 @@ export class VisualSettingsService {
       version?: number;
     },
   ) {
+    let publicAssetIds: string[] = [];
     if (input.action === "publish") {
       const current = await prisma.workspaceVisualSettings.findUnique({
         where: { workspaceId },
@@ -183,9 +189,10 @@ export class VisualSettingsService {
       )
         issues.push("Selecione o símbolo compacto para o celular.");
       if (issues.length) throw new BadRequestException(issues.join(" "));
+      publicAssetIds = await this.publicImages().prepareConfig(workspaceId, actorUserId, config.data);
     }
     try {
-      await writeVisualSettings(prisma, workspaceId, actorUserId, input);
+      await writeVisualSettings(prisma, workspaceId, actorUserId, { ...input, publicAssetIds });
     } catch (error) {
       if (error instanceof VisualSettingsError)
         throw error.conflict
@@ -195,6 +202,7 @@ export class VisualSettingsService {
     }
     return this.get(workspaceId);
   }
+  emailPreview(workspaceId: string, config: VisualConfig) { return this.publicImages().emailPreview(workspaceId, config); }
   async image(
     workspaceId: string,
     assetId: string | null,

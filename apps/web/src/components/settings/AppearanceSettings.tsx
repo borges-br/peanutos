@@ -15,8 +15,10 @@ const sections = [
 
 export default function AppearanceSettings({
   initialSection,
+  initialBrandTab,
 }: {
   initialSection: Section;
+  initialBrandTab?: string;
 }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -105,7 +107,7 @@ export default function AppearanceSettings({
           aria-labelledby="appearance-tab-company"
           hidden={activeSection !== "company"}
         >
-          <BrandStudio />
+          <BrandStudio initialTab={initialBrandTab} />
         </section>
       )}
       {(visited.personal || activeSection === "personal") && (

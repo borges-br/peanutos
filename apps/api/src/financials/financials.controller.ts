@@ -18,8 +18,8 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { billingScheduleQuerySchema } from "@peanut/validators";
 import { BillingScheduleStatus } from "@peanut/db";
 import { prisma, getFinancialForecast, getContractPeriodSummary, ContractBillingError } from '@peanut/db';
-import { saveBillingEmailTemplate, previewInvoiceEmail } from '@peanut/db';
-import { BILLING_EMAIL_VARIABLES, DEFAULT_BILLING_EMAIL, renderBillingEmail } from '@peanut/utils';
+import { saveBillingEmailTemplate, previewInvoiceEmail, publishedEmailImages, renderWorkspaceBillingEmail } from '@peanut/db';
+import { BILLING_EMAIL_VARIABLES, DEFAULT_BILLING_EMAIL } from '@peanut/utils';
 
 @UseGuards(AuthGuard, RolesGuard)
 @Controller("financials")
@@ -33,10 +33,12 @@ export class FinancialsController {
   }
 
   @Post('email-templates/preview')
-  async templatePreview(@Body() body: any) {
-    try { return renderBillingEmail(body, { cliente: 'Cliente Demonstração', empresa: 'Empresa Demonstração', contrato: 'CTR-DEMO', competencia: '2026-11', fatura: 'FAT-DEMO', total: 'R$ 1.250,00', vencimento: '10/11/2026', fuso: 'America/Sao_Paulo' }); }
+  async templatePreview(@CurrentUser() user: any, @Body() body: any) {
+    try { return await renderWorkspaceBillingEmail(prisma, user.workspaceId, { subject: body.subject, body: body.body }, { cliente: 'Cliente Demonstração', empresa: 'Empresa Demonstração', contrato: 'CTR-DEMO', competencia: '2026-11', fatura: 'FAT-DEMO', total: 'R$ 1.250,00', vencimento: '10/11/2026', fuso: 'America/Sao_Paulo' }); }
     catch (e: any) { throw new BadRequestException(e.message); }
   }
+  @Get('email-images')
+  emailImages(@CurrentUser() user: any) { return publishedEmailImages(prisma, user.workspaceId); }
 
   @Post('email-templates')
   async createTemplate(@CurrentUser() user: any, @Body() body: any) {

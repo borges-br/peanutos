@@ -293,6 +293,51 @@ html[data-visual-brand="true"][data-contrast="high"] .app-sidebar {
   align-items: start;
   flex-wrap: wrap;
 }
+.brand-login-surface {
+  width: 100%; min-height: 100svh; container: login / inline-size;
+  background: var(--login-canvas); color: var(--login-text); font-family: var(--login-font); font-size: 16px;
+}
+.brand-login-layout { display: grid; min-height: inherit; }
+.brand-login-main { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 24px; padding: 32px 20px; }
+.brand-login-card { width: 100%; max-width: 440px; padding: 36px; background: var(--login-surface); border: 1px solid var(--login-border); border-radius: var(--login-radius); box-shadow: 0 16px 48px #00000008; }
+.brand-login-card header { text-align: center; margin-bottom: 28px; }
+.brand-login-card h1 { font-family: var(--login-heading-font); color: var(--login-text); font-size: 26px; font-weight: 600; margin-top: 24px; }
+.brand-login-card header p { color: var(--login-muted); font-size: 14px; line-height: 1.6; margin-top: 8px; }
+.brand-login-card-logo { display: flex; align-items: center; justify-content: center; }
+.brand-login-signature { width: var(--login-logo-width); max-width: 100%; max-height: var(--login-logo-height); height: auto; object-fit: contain; }
+.brand-login-mobile-logo { display: none; align-items: center; justify-content: center; }
+.brand-login-icon { width: 48px; height: 48px; object-fit: contain; }
+.brand-login-name { font: 600 28px var(--login-heading-font); }
+.brand-login-card input { width: 100%; min-height: 48px; color: var(--login-text); background: var(--login-surface); border-color: var(--login-border); }
+.brand-login-card label { color: var(--login-muted); }
+.brand-login-card button[data-ui-button="primary"], .brand-login-preview-form button { color: var(--login-on-action); background: var(--login-action); border: 0; min-height: 48px; border-radius: var(--login-radius); }
+.brand-login-main footer { font-size: 12px; color: var(--login-muted); text-align: center; }
+.brand-login-hero { display: none; background: var(--login-hero); color: var(--login-hero-ink); padding: 64px; align-items: center; justify-content: center; }
+.brand-login-hero p { color: var(--login-hero-ink); opacity: .85; font-size: 18px; max-width: 28ch; line-height: 1.6; margin-top: 28px; }
+.brand-login-surface.is-preview { min-height: 620px; border-radius: var(--brand-radius, 8px); overflow: hidden; }
+.brand-login-preview-viewport { width: 100%; overflow: hidden; }
+.brand-login-preview-viewport.is-phone .brand-login-surface { min-height: 720px; }
+.brand-login-preview-form { display: grid; gap: 16px; }
+.brand-login-preview-form label { display: grid; gap: 6px; font-size: 13px; }
+.brand-login-preview-form input { border: 1px solid var(--login-border); padding: 12px; border-radius: 4px; }
+.brand-login-preview-form small { color: var(--login-muted); font-size: 12px; }
+.brand-email-preview { width: 100%; min-width: 0; height: 800px; border: 1px solid rgb(var(--color-outline-variant)); border-radius: 8px; background: white; }
+.brand-check { display: flex; align-items: start; gap: 10px; font-size: 14px; line-height: 1.5; }
+.brand-check input { margin-top: 3px; flex-shrink: 0; }
+.email-writing-area img { max-width: 100%; height: auto; display: block; margin: 16px 0; }
+.brand-login-loading { min-height: 100svh; display: grid; place-items: center; background: #f4f7fa; color: #526171; }
+@container login (min-width: 880px) {
+  .brand-login-surface[data-layout="split"] .brand-login-layout { grid-template-columns: 1fr 1fr; }
+  .brand-login-surface[data-layout="split"] .brand-login-hero { display: flex; }
+  .brand-login-surface[data-layout="split"] .brand-login-card { border: 0; box-shadow: none; }
+  .brand-login-surface[data-layout="split"] .brand-login-card-logo { display: none; }
+}
+@container login (max-width: 599px) {
+  .brand-login-card { padding: 28px 24px; }
+  .brand-login-card-logo { display: none; }
+  .brand-login-mobile-logo { display: flex; }
+  .brand-login-main { padding: 24px 16px; }
+}
 .brand-studio-header p {
   color: rgb(var(--color-on-surface-variant));
   margin-top: 8px;

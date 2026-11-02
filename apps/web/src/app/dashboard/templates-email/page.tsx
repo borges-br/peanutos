@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { apiRequest } from "../../../lib/api";
 import { useAuth } from "../../../context/AuthContext";
 import { DEFAULT_BILLING_EMAIL } from "@peanut/utils/dist/billing-email";
@@ -22,11 +23,12 @@ export default function EmailTemplatesPage() {
     [busy, setBusy] = useState(false),
     [mobile, setMobile] = useState(false),
     [loading, setLoading] = useState(true);
+  const [images, setImages] = useState<Array<{id: string; title: string; url: string}>>([]);
   const dirty = JSON.stringify(form) !== baseline;
-  const load = () =>
-    apiRequest("/financials/email-templates").then((data) =>
-      setTemplates(data.data),
-    );
+  const load = async () => {
+    const [data, availableImages] = await Promise.all([apiRequest("/financials/email-templates"), apiRequest("/financials/email-images")]);
+    setTemplates(data.data); setImages(availableImages);
+  };
   useEffect(() => {
     if (allowed)
       load()
@@ -36,7 +38,7 @@ export default function EmailTemplatesPage() {
           ),
         )
         .finally(() => setLoading(false));
-  }, [allowed]);
+  }, [allowed, user?.workspaceId]);
   useEffect(() => {
     if (!dirty) return;
     const before = (e: BeforeUnloadEvent) => {
@@ -137,6 +139,7 @@ export default function EmailTemplatesPage() {
         <div>
           <span className="eyebrow">Comunicação com seus clientes</span>
           <h1>Modelos de email</h1>
+          {["OWNER", "ADMIN"].includes(user.role) && <Link className="text-primary text-sm" href="/dashboard/configuracoes/aparencia?secao=empresa&area=email">Configurar logo e imagens dos emails →</Link>}
         </div>
         <Button variant="outline" onClick={() => select("")}>
           ＋ Novo modelo
@@ -218,7 +221,9 @@ export default function EmailTemplatesPage() {
               <EmailComposer
                 value={form.body}
                 onChange={(value) => change("body", value)}
+                images={images}
               />
+              {!images.length && <p className="text-xs text-on-surface-variant">A logo do cabeçalho é configurada em Aparência. Para inserir imagens na mensagem, um administrador precisa liberá-las na biblioteca dos emails.</p>}
               <label className="flex gap-sm items-start text-sm">
                 <input
                   type="checkbox"
@@ -230,7 +235,7 @@ export default function EmailTemplatesPage() {
             </section>
             <section className="email-preview">
               <div className="email-preview-heading">
-                <h2>Prévia</h2>
+                <h2>Prévia HTML</h2>
                 <div className="segmented-control">
                   <button
                     type="button"

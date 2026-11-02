@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
-import { DEFAULT_BILLING_EMAIL, validateBillingEmail, renderBillingEmail } from '@peanut/utils';
+import { DEFAULT_BILLING_EMAIL, validateBillingEmail } from '@peanut/utils';
 import { ContractBillingError } from './contract-billing';
 import { getInvoiceBankLink } from './billing-gateway';
+import { resolveEmailImages, renderWorkspaceBillingEmail } from './email-branding';
 
 export async function resolveBillingEmailTemplate(db: any, workspaceId: string, templateId?: string | null) {
   const row = await db.emailTemplate.findFirst({ where: { workspaceId, active: true, ...(templateId ? { id: templateId } : { isDefault: true }) } });
@@ -17,6 +18,7 @@ export function invoiceEmailValues(invoice: any, contract: any, workspace: any, 
 }
 export async function saveBillingEmailTemplate(db: PrismaClient, workspaceId: string, actorUserId: string, input: any, id?: string) {
   let content; try { content = validateBillingEmail(input); } catch (e: any) { throw new ContractBillingError(e.message); }
+  try { await resolveEmailImages(db, workspaceId, content.body); } catch (e: any) { throw new ContractBillingError(e.message); }
   if (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 100) throw new ContractBillingError('Nome do modelo inválido.');
   return db.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM workspaces WHERE id = ${workspaceId}::uuid FOR UPDATE`;
@@ -39,6 +41,6 @@ export async function previewInvoiceEmail(db: PrismaClient, workspaceId: string,
   const template = event?.emailTemplateSnapshot || await resolveBillingEmailTemplate(db, workspaceId, event?.contract.billingEmailTemplateId);
   const values = invoiceEmailValues(invoice, event?.contract, invoice.workspace, event?.periodKey || invoice.dueDate.toISOString().slice(0, 7));
   const bankLink = await getInvoiceBankLink(db, invoiceId);
-  const content = (template as any).rendered || renderBillingEmail(template as any, { ...((template as any).values || values), link_pagamento: bankLink || '' });
+  const content = await renderWorkspaceBillingEmail(db, workspaceId, template as any, { ...((template as any).values || values), link_pagamento: bankLink || '' });
   return { ...content, templateName: (template as any).name, frozen: !!event?.emailTemplateSnapshot, recipients: event?.emailRecipients || [], hasPdfAttachment: true, bankLinkPending: !bankLink };
 }

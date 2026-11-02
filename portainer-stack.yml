@@ -13,6 +13,7 @@ x-app-env: &app-env
   NODE_ENV: production
   NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:?Mantenha a URL atual do sistema}
   NEXT_PUBLIC_API_URL: /api/v1
+  PUBLIC_BRAND_WORKSPACE_ID: ${PUBLIC_BRAND_WORKSPACE_ID:-}
   CORS_ORIGIN: ${CORS_ORIGIN:?Mantenha a origem atual da API}
   DATABASE_URL: postgresql://${POSTGRES_USER:?Mantenha o usuario atual do banco}:${POSTGRES_PASSWORD:?Mantenha a senha atual do banco}@postgres:5432/${POSTGRES_DB:?Mantenha o nome atual do banco}?schema=public
   REDIS_HOST: redis

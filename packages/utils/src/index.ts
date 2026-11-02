@@ -140,3 +140,4 @@ export function decryptSensitiveData<T = unknown>(cipherText: string): T {
 }
 
 export * from './billing-email';
+export * from './public-brand';

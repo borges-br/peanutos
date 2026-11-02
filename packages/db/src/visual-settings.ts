@@ -65,6 +65,7 @@ export async function writeVisualSettings(
     action: "save" | "publish" | "restore";
     config?: any;
     version?: number;
+    publicAssetIds?: string[];
   },
 ) {
   return db.$transaction(async (tx) => {
@@ -95,7 +96,11 @@ export async function writeVisualSettings(
     if (!config || typeof config !== "object")
       throw new VisualSettingsError("Salve um rascunho antes de aplicar.");
     const ids = [
-      ...new Set(Object.values((config as any).assets || {}).filter(Boolean)),
+      ...new Set([
+        ...Object.values((config as any).assets || {}),
+        (config as any).email?.logoAssetId,
+        ...((config as any).email?.imageAssetIds || []),
+      ].filter(Boolean)),
     ] as string[];
     const assets = await tx.brandAsset.findMany({
       where: { workspaceId, id: { in: ids } },
@@ -105,6 +110,17 @@ export async function writeVisualSettings(
       throw new VisualSettingsError(
         "Uma imagem não pertence à biblioteca desta empresa.",
       );
+    if (input.action === "publish" && input.publicAssetIds?.length) {
+      const prepared = await tx.publicBrandAsset.count({ where: {
+        workspaceId, id: { in: input.publicAssetIds }, sourceAssetId: { in: ids },
+      } });
+      if (prepared !== input.publicAssetIds.length)
+        throw new VisualSettingsError("As imagens públicas não pertencem à seleção desta empresa.");
+      await tx.publicBrandAsset.updateMany({
+        where: { workspaceId, id: { in: input.publicAssetIds }, publishedAt: null },
+        data: { publishedAt: new Date() },
+      });
+    }
     const nextVersion =
       (current?.publishedVersion ?? 0) + (input.action === "publish" ? 1 : 0);
     const data = {

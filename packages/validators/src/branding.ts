@@ -105,6 +105,15 @@ const palette = z
   })
   .strict();
 const asset = z.string().uuid().nullable();
+export const DEFAULT_LOGIN_VISUAL = {
+  enabled: false, layout: "centered" as const, logoWidth: 240, logoHeight: 72,
+  title: "", message: "", showSubtitle: true,
+};
+export const DEFAULT_EMAIL_VISUAL = {
+  enabled: false, logoAssetId: null, imageAssetIds: [] as string[],
+  logoWidth: 220, alignment: "left" as const, padding: 28,
+  showSubtitle: true,
+};
 export const visualConfigSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -113,6 +122,21 @@ export const visualConfigSchema = z
     theme: z.enum(["light", "dark", "system"]),
     font: uiFont,
     customization,
+    login: z.object({
+      enabled: z.boolean(), layout: z.enum(["centered", "split"]),
+      logoWidth: z.number().int().min(120).max(320),
+      logoHeight: z.number().int().min(32).max(120),
+      title: z.string().trim().max(100), message: z.string().trim().max(200),
+      showSubtitle: z.boolean(),
+    }).strict().default(DEFAULT_LOGIN_VISUAL),
+    email: z.object({
+      enabled: z.boolean(), logoAssetId: asset,
+      imageAssetIds: z.array(z.string().uuid()).max(8),
+      logoWidth: z.number().int().min(120).max(280),
+      alignment: z.enum(["left", "center"]),
+      padding: z.number().int().min(16).max(40),
+      showSubtitle: z.boolean(),
+    }).strict().default(DEFAULT_EMAIL_VISUAL),
     assets: z
       .object({
         logoLight: asset,
@@ -171,6 +195,8 @@ export const DEFAULT_VISUAL_CONFIG: VisualConfig = {
   theme: "dark",
   font: "geist",
   customization: DEFAULT_CUSTOMIZATION,
+  login: DEFAULT_LOGIN_VISUAL,
+  email: DEFAULT_EMAIL_VISUAL,
   assets: { logoLight: null, logoDark: null, iconLight: null, iconDark: null },
   navigation: {
     mode: "compact",

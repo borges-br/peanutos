@@ -3,11 +3,12 @@ import AppearanceSettings from "../../../../components/settings/AppearanceSettin
 export default function AppearancePage({
   searchParams,
 }: {
-  searchParams: { secao?: string };
+  searchParams: { secao?: string; area?: string };
 }) {
   return (
     <AppearanceSettings
       initialSection={searchParams.secao === "pessoal" ? "personal" : "company"}
+      initialBrandTab={searchParams.area}
     />
   );
 }

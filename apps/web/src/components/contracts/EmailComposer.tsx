@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
 import { emailDocument, emailText } from "../../lib/email-editor";
 const labels: Record<string, string> = {
   cliente: "Nome do cliente",
@@ -17,9 +18,11 @@ const labels: Record<string, string> = {
 export default function EmailComposer({
   value,
   onChange,
+  images = [],
 }: {
   value: string;
   onChange: (value: string) => void;
+  images?: Array<{ id: string; title: string; url: string }>;
 }) {
   const [url, setUrl] = useState(""),
     [linkOpen, setLinkOpen] = useState(false),
@@ -44,6 +47,7 @@ export default function EmailComposer({
         autolink: false,
         protocols: ["https"],
       }),
+      Image.configure({ allowBase64: false, inline: false }),
     ],
     content: emailDocument(value),
     editorProps: {
@@ -97,6 +101,30 @@ export default function EmailComposer({
         >
           Inserir link
         </button>
+        <select
+          aria-label="Inserir imagem no email"
+          value=""
+          disabled={!images.length}
+          onChange={(e) => {
+            const image = images.find((i) => i.id === e.target.value);
+            if (image)
+              editor
+                .chain()
+                .focus()
+                .setImage({
+                  src: image.url,
+                  alt: image.title.replace(/[\]{}\n]/g, " ").slice(0, 200),
+                })
+                .run();
+          }}
+        >
+          <option value="">＋ Imagem da empresa</option>
+          {images.map((image) => (
+            <option key={image.id} value={image.id}>
+              {image.title}
+            </option>
+          ))}
+        </select>
         <select
           aria-label="Inserir dado automático"
           value=""

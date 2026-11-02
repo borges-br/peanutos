@@ -17,6 +17,12 @@ import AuthenticatedImage from "../../components/ui/AuthenticatedImage";
 import HtmlDocumentPreview from "../../components/ui/HtmlDocumentPreview";
 import BrandImageEditor from "../../components/settings/BrandImageEditor";
 import BrandSystemPreview from "../../components/settings/BrandSystemPreview";
+import LoginBrandPreview from "./LoginBrandPreview";
+import {
+  BrandLoginControls,
+  BrandEmailControls,
+  PublicBrandImage,
+} from "./BrandCommunicationControls";
 import { Range, Color } from "../../components/settings/BrandFields";
 import {
   BrandPresets,
@@ -33,6 +39,8 @@ const tabs = [
   ["interface", "Cores e interface"],
   ["navigation", "Navegação"],
   ["documents", "Documentos"],
+  ["login", "Login"],
+  ["email", "Emails"],
 ] as const;
 const paletteLabels: Record<string, string> = {
   canvas: "Fundo",
@@ -44,7 +52,9 @@ const paletteLabels: Record<string, string> = {
   action: "Ação e foco",
   onAction: "Texto sobre ação",
 };
-export default function BrandStudio() {
+export default function BrandStudio({
+  initialTab,
+}: { initialTab?: string } = {}) {
   const { user } = useAuth(),
     { refresh } = useBrand();
   const [config, setConfig] = useState<VisualConfig>(DEFAULT_VISUAL_CONFIG),
@@ -73,6 +83,13 @@ export default function BrandStudio() {
   const [past, setPast] = useState<VisualConfig[]>([]),
     [future, setFuture] = useState<VisualConfig[]>([]);
   const [assetQuery, setAssetQuery] = useState("");
+  const [publicAssets, setPublicAssets] = useState<PublicBrandImage[]>([]);
+  const [publicLoginAvailable, setPublicLoginAvailable] = useState(true);
+  const [emailPreview, setEmailPreview] = useState<{
+    html: string;
+    subject: string;
+  } | null>(null);
+  const [emailPreviewError, setEmailPreviewError] = useState("");
   const baseline = useRef(JSON.stringify(DEFAULT_VISUAL_CONFIG));
   const editable = ["OWNER", "ADMIN"].includes(user?.role);
   function receive(data: any) {
@@ -82,6 +99,8 @@ export default function BrandStudio() {
     setPast([]);
     setFuture([]);
     setAssets(data.assets);
+    setPublicAssets(data.publicAssets || []);
+    setPublicLoginAvailable(data.publicLoginAvailable !== false);
     setRevision(data.revision);
     setVersion(data.publishedVersion);
     setVersions(data.versions);
@@ -104,6 +123,42 @@ export default function BrandStudio() {
       active = false;
     };
   }, [editable]);
+  useEffect(() => {
+    if (initialTab && tabs.some(([id]) => id === initialTab)) {
+      setTab(initialTab as (typeof tabs)[number][0]);
+      if (initialTab === "login" || initialTab === "email") setView(initialTab);
+    }
+  }, [initialTab]);
+  useEffect(() => {
+    if (view !== "email" || !loaded) return;
+    let active = true;
+    const abort = new AbortController();
+    const timer = setTimeout(() => {
+      setEmailPreviewError("");
+      apiRequest<{ html: string; subject: string }>(
+        "/settings/visual/email-preview",
+        {
+          method: "POST",
+          body: JSON.stringify({ config }),
+          signal: abort.signal,
+        },
+      )
+        .then((data) => {
+          if (active) setEmailPreview(data);
+        })
+        .catch((error) => {
+          if (active) {
+            setEmailPreview(null);
+            setEmailPreviewError(error.message);
+          }
+        });
+    }, 400);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      abort.abort();
+    };
+  }, [view, config, loaded]);
   useEffect(() => {
     if (view !== "document" || !loaded) return;
     const controller = new AbortController();
@@ -169,6 +224,15 @@ export default function BrandStudio() {
   const doc = (key: keyof VisualConfig["documents"], value: any) =>
     update("documents", { ...config.documents, [key]: value });
   const issues = visualIssues(config);
+  if (config.login.enabled && loaded && !publicLoginAvailable)
+    issues.push(
+      "O administrador da instalação precisa vincular esta marca à página de acesso compartilhada.",
+    );
+  if (
+    config.email.enabled &&
+    !(config.email.logoAssetId || config.assets.logoLight)
+  )
+    issues.push("Selecione a logo do cabeçalho do email.");
   if (
     (config.assets.logoLight || config.assets.logoDark) &&
     !config.assets.iconLight
@@ -316,7 +380,12 @@ export default function BrandStudio() {
                 aria-controls="brand-controls"
                 aria-selected={tab === id}
                 variant={tab === id ? "primary" : "ghost"}
-                onClick={() => setTab(id)}
+                onClick={() => {
+                  setTab(id);
+                  if (id === "login" || id === "email") setView(id);
+                  else if (view === "login" || view === "email")
+                    setView("desktop");
+                }}
               >
                 {label}
               </Button>
@@ -732,6 +801,22 @@ export default function BrandStudio() {
                   <BrandDocumentTypography config={config} onChange={change} />
                 </>
               )}
+              {tab === "login" && (
+                <BrandLoginControls
+                  config={config}
+                  onChange={change}
+                  available={publicLoginAvailable}
+                />
+              )}
+              {tab === "email" && (
+                <BrandEmailControls
+                  config={config}
+                  onChange={change}
+                  assets={assets}
+                  publicAssets={publicAssets}
+                  onAddImage={() => setEditor({ asset: null })}
+                />
+              )}
               {issues.length > 0 && (
                 <section className="brand-panel">
                   <h2>Antes de aplicar</h2>
@@ -758,9 +843,11 @@ export default function BrandStudio() {
                       <option value="desktop">Computador</option>
                       <option value="mobile">Celular</option>
                       <option value="document">Documento A4</option>
+                      <option value="login">Página de login</option>
+                      <option value="email">Email HTML</option>
                     </select>
                   </label>
-                  {view !== "document" && (
+                  {(view === "desktop" || view === "mobile") && (
                     <label className="brand-field">
                       <span className="sr-only">Tema da prévia</span>
                       <select
@@ -775,11 +862,37 @@ export default function BrandStudio() {
                   )}
                 </div>
               </div>
-              {view === "document" ? (
+              {view === "login" ? (
+                <LoginBrandPreview config={config} assets={assets} />
+              ) : view === "email" ? (
+                <>
+                  <p className="brand-hint">
+                    {emailPreview?.subject || "Preparando prévia…"}
+                  </p>
+                  {emailPreviewError && (
+                    <p role="alert" className="brand-error">
+                      {emailPreviewError}
+                    </p>
+                  )}
+                  {emailPreview && (
+                    <iframe
+                      className="brand-email-preview"
+                      title="Prévia HTML da identidade no email"
+                      sandbox=""
+                      srcDoc={emailPreview.html}
+                    />
+                  )}
+                  <p className="brand-hint">
+                    A prévia usa o mesmo HTML do envio e dados fictícios. O
+                    corpo usa fontes compatíveis com leitores de email.
+                  </p>
+                </>
+              ) : view === "document" ? (
                 <>
                   <label className="brand-field">
                     Documento de exemplo
                     <select
+                      aria-label="Documento de exemplo"
                       value={documentType}
                       onChange={(e) => setDocumentType(e.target.value)}
                     >

@@ -229,6 +229,7 @@ model Workspace {
   visualSettings           WorkspaceVisualSettings?
   visualVersions           WorkspaceVisualVersion[]
   brandAssets              BrandAsset[]
+  publicBrandAssets        PublicBrandAsset[]
   authoredDocuments        AuthoredDocument[]
 
   @@map("workspaces")
@@ -266,8 +267,27 @@ model BrandAsset {
   mimeType      String   @db.VarChar(100)
   createdAt     DateTime @default(now())
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  publicVariants PublicBrandAsset[]
   @@index([workspaceId, createdAt])
   @@map("brand_assets")
+}
+
+model PublicBrandAsset {
+  id            String   @id @default(uuid()) @db.Uuid
+  workspaceId   String   @db.Uuid
+  sourceAssetId String   @db.Uuid
+  variant       String   @db.VarChar(50)
+  fileObjectId  String   @unique @db.Uuid
+  sha256        String   @db.VarChar(64)
+  width         Int
+  height        Int
+  createdAt     DateTime @default(now())
+  publishedAt   DateTime?
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceAsset   BrandAsset @relation(fields: [sourceAssetId], references: [id], onDelete: Restrict)
+  fileObject    FileObject @relation(fields: [fileObjectId], references: [id], onDelete: Restrict)
+  @@unique([workspaceId, sourceAssetId, variant])
+  @@map("public_brand_assets")
 }
 
 model AuthoredDocument {
@@ -1043,6 +1063,7 @@ model FileObject {
   // Relationships
   workspace        Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   generatedDocuments GeneratedDocument[]
+  publicBrandAsset   PublicBrandAsset?
 
   @@index([workspaceId])
   @@map("file_objects")

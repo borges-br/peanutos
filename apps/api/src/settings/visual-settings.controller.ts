@@ -106,4 +106,10 @@ export class VisualSettingsController {
         ),
       );
   }
+  @Post("email-preview")
+  @Roles("OWNER", "ADMIN")
+  emailPreview(@CurrentUser() user: any, @Body() body: unknown) {
+    const input = parse(saveVisualSchema.pick({ config: true }).strict(), body);
+    return this.service.emailPreview(user.workspaceId, input.config);
+  }
 }

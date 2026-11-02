@@ -45,6 +45,10 @@ const {
   AuthoredDocumentsController,
 } = require("../apps/api/dist/documents/authored-documents.controller");
 const { FilesController } = require("../apps/api/dist/files/files.controller");
+const { PublicBrandController } = require("../apps/api/dist/settings/public-brand.controller");
+const { PublicBrandService } = require("../apps/api/dist/settings/public-brand.service");
+const { FinancialsController } = require("../apps/api/dist/financials/financials.controller");
+const { FinancialsService } = require("../apps/api/dist/financials/financials.service");
 
 async function createFixture() {
   const tokens = new Map(),
@@ -55,11 +59,15 @@ async function createFixture() {
       VisualSettingsController,
       AuthoredDocumentsController,
       FilesController,
+      PublicBrandController,
+      FinancialsController,
     ],
     providers: [
       VisualSettingsService,
       AuthoredDocumentsService,
       StorageService,
+      PublicBrandService,
+      { provide: FinancialsService, useValue: {} },
       AuthGuard,
       RolesGuard,
       {
@@ -146,7 +154,7 @@ async function createFixture() {
       method,
       url: "/api/v1" + endpoint,
       headers: {
-        authorization: `Bearer ${user.id}`,
+        ...(user ? { authorization: `Bearer ${user.id}` } : {}),
         ...(body ? { "content-type": "application/json" } : {}),
       },
       ...(body ? { payload: body } : {}),
@@ -262,6 +270,7 @@ async function createFixture() {
     branded,
     async close() {
       await app.close();
+      await prisma.publicBrandAsset.deleteMany({ where: { workspaceId: { in: workspaces } } });
       await prisma.workspace.deleteMany({ where: { id: { in: workspaces } } });
       await prisma.$disconnect();
     },

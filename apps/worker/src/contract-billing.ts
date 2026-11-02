@@ -1,7 +1,8 @@
 import { prisma as defaultDb, prepareContractPeriod, issueContractInvoice, contractCoversPeriod, loadWorkspaceSmtpConfig, resolveBillingEmailTemplate, invoiceEmailValues, processBillingGatewayEvents, processRequestedInvoiceCharges, getInvoiceBankLink } from '@peanut/db';
-import { dateKey, calendarDateKey, LocalObjectStorage, renderBillingEmail } from '@peanut/utils';
+import { dateKey, calendarDateKey, LocalObjectStorage } from '@peanut/utils';
 import { createHash } from 'node:crypto';
 import { createWorkspaceMailTransport } from './email-settings';
+import { renderWorkspaceBillingEmail } from '@peanut/db';
 
 type Db = typeof defaultDb;
 type PdfQueue = { add(name: string, data: any, options: any): Promise<unknown> };
@@ -87,7 +88,7 @@ export async function sendContractEmails(db: Db, store: LocalObjectStorage, now 
       await db.billingScheduleEvent.update({ where: { id: candidate.id }, data: { emailMessageId: messageId } });
       const snapshot = candidate.emailTemplateSnapshot as any;
       const template = snapshot || await resolveBillingEmailTemplate(db, candidate.workspaceId, candidate.contract.billingEmailTemplateId);
-      const mail = snapshot?.rendered || renderBillingEmail(template, { ...(snapshot?.values || invoiceEmailValues(invoice, candidate.contract, candidate.contract.workspace, candidate.periodKey)), link_pagamento: bankLink || '' });
+      const mail = await renderWorkspaceBillingEmail(db, candidate.workspaceId, template, { ...(snapshot?.values || invoiceEmailValues(invoice, candidate.contract, candidate.contract.workspace, candidate.periodKey)), link_pagamento: bankLink || '' });
       if (!snapshot?.rendered) await db.billingScheduleEvent.update({ where: { id: candidate.id }, data: { emailTemplateSnapshot: { ...template, rendered: mail } } });
       sending = true;
       const info = await sender.sendMail({

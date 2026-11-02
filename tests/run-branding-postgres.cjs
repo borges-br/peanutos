@@ -14,7 +14,8 @@ const docker = (args) =>
   }).trim();
 let container,
   cleanedUp = false;
-const evidence = path.join(root, "data/qa/branding-v2");
+const extendedPublic = process.argv.includes("--public-brand");
+const evidence = path.join(root, extendedPublic ? "data/qa/email-branding-v3" : "data/qa/branding-v2");
 fs.mkdirSync(evidence, { recursive: true });
 const startedAt = new Date().toISOString(),
   steps = [],
@@ -64,6 +65,7 @@ try {
       ...process.env,
       DATABASE_URL: url,
       BRANDING_TEST_DATABASE_URL: url,
+      ...(extendedPublic ? { NEXT_PUBLIC_WEB_URL: "https://branding.example.invalid" } : {}),
     };
   const cli = createRequire(
     path.join(root, "packages/db/package.json"),
@@ -104,7 +106,7 @@ try {
     "--schema",
     "packages/db/prisma/schema.prisma",
   ]);
-  run(["--test", "tests/branding-postgres.test.cjs"]);
+  run(["--test", "tests/branding-postgres.test.cjs", ...(extendedPublic ? ["tests/public-brand-postgres.test.cjs"] : [])]);
   if (process.argv.includes("--ui"))
     run([
       "tests/branding-ui.cjs",
