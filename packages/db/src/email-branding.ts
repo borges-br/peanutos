@@ -153,6 +153,7 @@ export async function renderWorkspaceBillingEmail(
   workspaceId: string,
   template: BillingEmailContent & Record<string, any>,
   values: Record<string, string>,
+  actorUserId?: string,
 ) {
   if (template.rendered) return template.rendered;
   const content = validateBillingEmail(template);
@@ -165,5 +166,27 @@ export async function renderWorkspaceBillingEmail(
   const images =
     template.emailImages ||
     (await resolveEmailImages(db, workspaceId, content.body));
-  return renderBillingEmail(content, values, appearance, images);
+  const signature = Object.prototype.hasOwnProperty.call(template, "signature") ? template.signature : await resolveUserEmailSignature(db, workspaceId, actorUserId);
+  return renderBillingEmail(content, values, appearance, images, signature);
+}
+
+
+/** Only an explicitly identified sender in this workspace can supply a signature. */
+export async function resolveUserEmailSignature(db: any, workspaceId: string, userId?: string, override?: any) {
+  if (!userId || !db.user?.findFirst) return null;
+  const user = await db.user.findFirst({ where: { id: userId, workspaceId, status: 'ACTIVE', deletedAt: null }, select: { name: true, email: true, jobTitle: true, phone: true, role: true, emailSignature: true } });
+  if (!user || !['OWNER','ADMIN','FINANCIAL'].includes(user.role)) return null;
+  const config = override ?? user.emailSignature;
+  if (!config?.enabled) return null;
+  let logoUrl: string | null = null;
+  if (config.showLogo) {
+    const settings = await db.workspaceVisualSettings.findUnique({where:{workspaceId}});
+    const brand = settings?.published;
+    const iconId = brand?.assets?.iconLight;
+    if (iconId) {
+      const image = await db.publicBrandAsset.findFirst({where:{workspaceId,sourceAssetId:iconId,variant:'image',publishedAt:{not:null}}});
+      if (image) logoUrl = publicBrandAssetUrl(image);
+    }
+  }
+  return {displayName:config.displayName,jobTitle:config.jobTitle,company:config.company,email:config.email,phone:config.phone,whatsapp:config.whatsapp,website:config.website,address:config.address,registration:config.registration,logoUrl};
 }

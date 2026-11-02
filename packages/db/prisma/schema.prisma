@@ -458,6 +458,7 @@ model User {
   documentSignatureEnabled  Boolean    @default(false)
   avatarFileObjectId        String?    @db.Uuid
   signatureImageFileObjectId String?   @db.Uuid
+  emailSignature            Json?
 
   // Relationships
   workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

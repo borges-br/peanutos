@@ -380,3 +380,32 @@ test("large decoded PNGs are resized below the public storage limit", async () =
   assert(result.data.length < 2 * 1024 * 1024);
   assert(result.info.width <= 700 && result.info.height <= 700);
 });
+
+test("personal email signatures are isolated, available to financial staff, and frozen independently of later profile edits", async () => {
+  const {resolveUserEmailSignature}=require('../packages/db/dist');
+  const t=await f.tenant('Signature QA');
+  const other=await f.tenant('Foreign signatures');
+  const config={enabled:true,showLogo:false,displayName:'Finance <QA>',jobTitle:'Contas',company:'QA',email:'finance@example.invalid',phone:'+55 11 1234-5678',whatsapp:'551112345678',website:'https://example.invalid',address:'Example address',registration:'Example registration'};
+  const owner=t.users.OWNER,financial=t.users.FINANCIAL;
+  assert.equal((await f.request(financial,'PUT','/users/me/email-signature',config)).status,200);
+  assert.deepEqual((await f.request(financial,'GET','/users/me/email-signature')).json(),config);
+  assert.equal((await f.request(owner,'GET','/users/me/email-signature')).json().enabled,false);
+  assert.equal((await f.request(t.users.READ_ONLY,'PUT','/users/me/email-signature',config)).status,403);
+  assert.equal((await f.request(financial,'PUT','/users/me/email-signature',{...config,userId:owner.id})).status,400);
+  assert.equal((await f.request(financial,'PUT','/users/me/email-signature',{...config,website:'javascript:alert(1)'})).status,400);
+  const signature=await resolveUserEmailSignature(f.prisma,t.ws.id,financial.id);
+  assert.equal(await resolveUserEmailSignature(f.prisma,other.ws.id,financial.id),null);
+  const content={subject:'Signature QA',body:'Hello'};
+  const preview=(await f.request(financial,'POST','/financials/email-templates/preview',content)).json();
+  assert(preview.html.includes('Finance &lt;QA&gt;'));
+  assert(preview.html.includes('mailto:finance@example.invalid'));
+  assert(preview.html.includes('https://wa.me/551112345678'));
+  const frozen={...content,signature,appearance:null,emailImages:{}};
+  const before=await renderWorkspaceBillingEmail(f.prisma,t.ws.id,frozen,{});
+  await f.request(financial,'PUT','/users/me/email-signature',{...config,displayName:'Updated'});
+  assert.deepEqual(await renderWorkspaceBillingEmail(f.prisma,t.ws.id,frozen,{}),before);
+  assert(!(await renderWorkspaceBillingEmail(f.prisma,t.ws.id,content,{})).html.includes('Updated'));
+  assert((await renderWorkspaceBillingEmail(f.prisma,t.ws.id,content,{},financial.id)).html.includes('Updated'));
+  const legacy={...content,rendered:{subject:'Old',html:'Old HTML',text:'Old text'}};
+  assert.deepEqual(await renderWorkspaceBillingEmail(f.prisma,t.ws.id,legacy,{},financial.id),legacy.rendered);
+});

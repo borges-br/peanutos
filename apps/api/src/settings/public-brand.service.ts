@@ -167,6 +167,7 @@ export class PublicBrandService {
           config.light.surface,
         ),
       );
+      if (config.assets.iconLight) rows.push(await this.prepare(workspaceId, actorUserId, config.assets.iconLight, "image"));
       for (const id of new Set(config.email.imageAssetIds))
         rows.push(await this.prepare(workspaceId, actorUserId, id, "image"));
     }

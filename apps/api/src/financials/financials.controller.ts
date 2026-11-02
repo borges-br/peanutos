@@ -34,7 +34,7 @@ export class FinancialsController {
 
   @Post('email-templates/preview')
   async templatePreview(@CurrentUser() user: any, @Body() body: any) {
-    try { return await renderWorkspaceBillingEmail(prisma, user.workspaceId, { subject: body.subject, body: body.body }, { cliente: 'Cliente Demonstração', empresa: 'Empresa Demonstração', contrato: 'CTR-DEMO', competencia: '2026-11', fatura: 'FAT-DEMO', total: 'R$ 1.250,00', vencimento: '10/11/2026', fuso: 'America/Sao_Paulo' }); }
+    try { return await renderWorkspaceBillingEmail(prisma, user.workspaceId, { subject: body.subject, body: body.body }, { cliente: 'Cliente Demonstração', empresa: 'Empresa Demonstração', contrato: 'CTR-DEMO', competencia: '2026-11', fatura: 'FAT-DEMO', total: 'R$ 1.250,00', vencimento: '10/11/2026', fuso: 'America/Sao_Paulo' }, user.id); }
     catch (e: any) { throw new BadRequestException(e.message); }
   }
   @Get('email-images')
@@ -54,7 +54,7 @@ export class FinancialsController {
 
   @Get('invoices/:id/email-preview')
   async emailPreview(@CurrentUser() user: any, @Param('id') id: string) {
-    try { return await previewInvoiceEmail(prisma, user.workspaceId, id); }
+    try { return await previewInvoiceEmail(prisma, user.workspaceId, id, user.id); }
     catch (e) { if (e instanceof ContractBillingError) throw new BadRequestException(e.message); throw e; }
   }
 

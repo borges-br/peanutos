@@ -3,7 +3,7 @@ import { calendarDateKey, dateKey, zonedDateTime } from '@peanut/utils';
 import { randomUUID } from 'node:crypto';
 import { recurringAddonItems, oneOffItems } from './contract-items';
 import { resolveBillingEmailTemplate, invoiceEmailValues } from './billing-email';
-import { publishedEmailAppearance, resolveEmailImages } from './email-branding';
+import { publishedEmailAppearance, resolveEmailImages, resolveUserEmailSignature } from './email-branding';
 
 export class ContractBillingError extends Error {}
 const fail = (message: string): never => { throw new ContractBillingError(message); };
@@ -177,7 +177,8 @@ export async function approveContractInvoice(db: BillingDb, invoiceId: string, w
     const values = invoiceEmailValues(invoice, event.contract, event.contract.workspace, event.periodKey);
     const appearance = await publishedEmailAppearance(tx, workspaceId);
     const emailImages = await resolveEmailImages(tx, workspaceId, template.body);
-    return tx.billingScheduleEvent.update({ where: { id: event.id }, data: { approvedAt: new Date(), approvedById: actorUserId, emailTemplateSnapshot: { ...template, values, appearance, emailImages } } });
+    const signature = await resolveUserEmailSignature(tx, workspaceId, actorUserId);
+    return tx.billingScheduleEvent.update({ where: { id: event.id }, data: { approvedAt: new Date(), approvedById: actorUserId, emailTemplateSnapshot: { ...template, values, appearance, emailImages, signature, senderUserId: actorUserId } } });
   });
 }
 

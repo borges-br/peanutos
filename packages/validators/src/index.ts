@@ -1767,3 +1767,5 @@ export const workspaceOperationSettingsSchema = z.object({
   webhookTimeoutMs: z.number().int().min(1000).max(60000),
   sessionDurationMinutes: z.number().int().min(10).max(1440),
 }).strict();
+
+export * from "./email-signature";

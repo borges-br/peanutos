@@ -1,3 +1,4 @@
+import { renderEmailSignature, EmailSignature } from "./email-signature";
 export const BILLING_EMAIL_VARIABLES = [
   "cliente",
   "fatura",
@@ -82,6 +83,7 @@ export function renderBillingEmail(
   values: Record<string, string>,
   appearance?: BillingEmailAppearance | null,
   images: Record<string, string> = {},
+  signature?: EmailSignature | null,
 ) {
   content = validateBillingEmail(content);
   if (appearance) values = { ...values, empresa: appearance.name };
@@ -144,6 +146,13 @@ export function renderBillingEmail(
   ) {
     paragraphs += `<p style="margin-top:24px"><a href="${escape(values.link_pagamento)}" style="display:inline-block;padding:12px 18px;background:${accent};color:${color(appearance?.onAccent, "#FFFFFF")};text-decoration:none;border-radius:4px">Consultar cobrança e pagamento</a></p>`;
     text += `\n\nConsultar cobrança e pagamento: ${values.link_pagamento}`;
+  }
+  if (signature) {
+    const signed = renderEmailSignature(signature, accent);
+    paragraphs += signed.html;
+    text += "\n\n" + signed.text;
+    const signatureLogo = imageUrl(signature.logoUrl);
+    if (signatureLogo) usedImages.push(signatureLogo);
   }
   const logo = imageUrl(appearance?.logoUrl, true);
   if (logo) usedImages.push(logo);

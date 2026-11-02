@@ -47,6 +47,7 @@ const {
 const { FilesController } = require("../apps/api/dist/files/files.controller");
 const { PublicBrandController } = require("../apps/api/dist/settings/public-brand.controller");
 const { PublicBrandService } = require("../apps/api/dist/settings/public-brand.service");
+const { EmailSignatureController } = require("../apps/api/dist/users/email-signature.controller");
 const { FinancialsController } = require("../apps/api/dist/financials/financials.controller");
 const { FinancialsService } = require("../apps/api/dist/financials/financials.service");
 
@@ -61,6 +62,7 @@ async function createFixture() {
       FilesController,
       PublicBrandController,
       FinancialsController,
+      EmailSignatureController,
     ],
     providers: [
       VisualSettingsService,

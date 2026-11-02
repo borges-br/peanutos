@@ -6,6 +6,7 @@ import { apiRequest, apiBlobRequest } from '../../../../lib/api';
 import Button from '../../../../components/ui/Button';
 import Card from '../../../../components/ui/Card';
 import Breadcrumbs from '../../../../components/layout/Breadcrumbs';
+import EmailSignatureSettings from '../../../../components/settings/EmailSignatureSettings';
 import AvatarCropModal from '../../../../components/ui/AvatarCropModal';
 
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
@@ -265,6 +266,7 @@ export default function UserProfilePage() {
       {/* Tabs */}
       <nav className="flex border-b border-outline-variant gap-lg overflow-x-auto whitespace-nowrap scrollbar-hide text-[13px]">
         <span className="pb-sm border-b-2 border-primary text-primary font-bold">Dados do perfil</span>
+        {["OWNER","ADMIN","FINANCIAL"].includes(user?.role) && <a href="#email-signature-settings" className="text-primary">Assinatura de email</a>}
       </nav>
 
       {/* Layout */}
@@ -482,6 +484,8 @@ export default function UserProfilePage() {
           </Card>
         </aside>
       </div>
+
+      {['OWNER','ADMIN','FINANCIAL'].includes(user?.role) && <EmailSignatureSettings />}
 
       {/* Avatar Crop Modal */}
       <AvatarCropModal

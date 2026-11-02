@@ -29,7 +29,7 @@ export class UsersService {
       where: { workspaceId, deletedAt: null },
       orderBy: { createdAt: "desc" },
     });
-    return users.map(({ passwordHash, ...user }) => user);
+    return users.map(({ passwordHash, emailSignature, ...user }) => user);
   }
 
   async getById(id: string, workspaceId: string) {
@@ -37,7 +37,7 @@ export class UsersService {
       where: { id, workspaceId, deletedAt: null },
     });
     if (!user) throw new NotFoundException("Usuário não encontrado");
-    const { passwordHash, ...result } = user;
+    const { passwordHash, emailSignature, ...result } = user;
     return result;
   }
 

@@ -1,3 +1,4 @@
+import { EmailSignatureController } from "./email-signature.controller";
 import { Module } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { UsersController } from "./users.controller";
@@ -7,7 +8,7 @@ import { StorageModule } from "../storage/storage.module";
 
 @Module({
   imports: [AuthModule, AuditModule, StorageModule],
-  controllers: [UsersController],
+  controllers: [UsersController, EmailSignatureController],
   providers: [UsersService],
   exports: [UsersService],
 })

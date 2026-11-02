@@ -34,13 +34,13 @@ export async function saveBillingEmailTemplate(db: PrismaClient, workspaceId: st
     return row;
   });
 }
-export async function previewInvoiceEmail(db: PrismaClient, workspaceId: string, invoiceId: string) {
+export async function previewInvoiceEmail(db: PrismaClient, workspaceId: string, invoiceId: string, actorUserId?: string) {
   const invoice = await db.invoice.findFirst({ where: { id: invoiceId, workspaceId }, include: { workspace: true, client: true, billingScheduleEvent: { include: { contract: true } } } });
   if (!invoice) throw new ContractBillingError('Fatura não encontrada.');
   const event = invoice.billingScheduleEvent;
   const template = event?.emailTemplateSnapshot || await resolveBillingEmailTemplate(db, workspaceId, event?.contract.billingEmailTemplateId);
   const values = invoiceEmailValues(invoice, event?.contract, invoice.workspace, event?.periodKey || invoice.dueDate.toISOString().slice(0, 7));
   const bankLink = await getInvoiceBankLink(db, invoiceId);
-  const content = await renderWorkspaceBillingEmail(db, workspaceId, template as any, { ...((template as any).values || values), link_pagamento: bankLink || '' });
+  const content = await renderWorkspaceBillingEmail(db, workspaceId, template as any, { ...((template as any).values || values), link_pagamento: bankLink || '' }, event?.emailTemplateSnapshot ? undefined : actorUserId);
   return { ...content, templateName: (template as any).name, frozen: !!event?.emailTemplateSnapshot, recipients: event?.emailRecipients || [], hasPdfAttachment: true, bankLinkPending: !bankLink };
 }
