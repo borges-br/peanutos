@@ -65,7 +65,7 @@ services:
       retries: 10
 
   migrator:
-    image: ghcr.io/borges-br/peanutos/peanut-migrator:sha-94f6f7a
+    image: ghcr.io/borges-br/peanutos/peanut-migrator:sha-03e7609
     container_name: peanut-migrator
     restart: "no"
     environment:
@@ -79,7 +79,7 @@ services:
   # Confere todos os arquivos registrados no banco, sem alterar os objetos.
   # Se a copia ainda nao terminou, API/worker/web ficam bloqueados.
   storage-check:
-    image: ghcr.io/borges-br/peanutos/peanut-api:sha-94f6f7a
+    image: ghcr.io/borges-br/peanutos/peanut-api:sha-03e7609
     container_name: peanut-storage-check
     restart: "no"
     command: ["node", "scripts/migrate-storage.cjs", "--source=verify", "--report=/tmp/storage-verification.json"]
@@ -96,7 +96,7 @@ services:
         condition: service_completed_successfully
 
   api:
-    image: ghcr.io/borges-br/peanutos/peanut-api:sha-94f6f7a
+    image: ghcr.io/borges-br/peanutos/peanut-api:sha-03e7609
     container_name: peanut-api
     restart: unless-stopped
     environment:
@@ -128,7 +128,7 @@ services:
       retries: 4
 
   worker:
-    image: ghcr.io/borges-br/peanutos/peanut-worker:sha-94f6f7a
+    image: ghcr.io/borges-br/peanutos/peanut-worker:sha-03e7609
     container_name: peanut-worker
     restart: unless-stopped
     environment:
@@ -148,7 +148,7 @@ services:
         condition: service_completed_successfully
 
   web:
-    image: ghcr.io/borges-br/peanutos/peanut-web:sha-94f6f7a
+    image: ghcr.io/borges-br/peanutos/peanut-web:sha-03e7609
     container_name: peanut-web
     restart: unless-stopped
     environment:
