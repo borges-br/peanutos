@@ -50,8 +50,10 @@ Thumbs.db
 # Referencias visuais
 /reference/
 
-# Prompts para IA
+# Materiais locais de trabalho
 /prompts/
+/scratch/
+/NEXT_AGENT_PROMPT.md
 /docs/ai-handoff/
 # Private persistent files and migration reports
 /data/
