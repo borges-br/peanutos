@@ -1,5 +1,7 @@
 'use client';
 
+import { NormalizedTextarea } from '../../components/ui/NormalizedInput';
+
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiRequest } from '../../lib/api';
@@ -315,7 +317,7 @@ export default function SetupPage() {
                 required
                 disabled={loading}
               />
-              <Input
+              <Input mask="email"
                 id="adminEmail"
                 type="email"
                 label="E-mail Administrativo *"
@@ -371,7 +373,7 @@ export default function SetupPage() {
                 onChange={(e) => setLegalName(e.target.value)}
                 disabled={loading}
               />
-              <Input
+              <Input mask="taxId"
                 id="taxId"
                 type="text"
                 label="CNPJ / Documento"
@@ -380,7 +382,7 @@ export default function SetupPage() {
                 onChange={(e) => setTaxId(e.target.value)}
                 disabled={loading}
               />
-              <Input
+              <Input mask="email"
                 id="primaryEmail"
                 type="email"
                 label="E-mail Público / Comercial"
@@ -389,7 +391,7 @@ export default function SetupPage() {
                 onChange={(e) => setPrimaryEmail(e.target.value)}
                 disabled={loading}
               />
-              <Input
+              <Input mask="phone"
                 id="phone"
                 type="text"
                 label="Telefone de Contato"
@@ -398,7 +400,7 @@ export default function SetupPage() {
                 onChange={(e) => setPhone(e.target.value)}
                 disabled={loading}
               />
-              <Input
+              <Input mask="website"
                 id="website"
                 type="text"
                 label="Website da Empresa"
@@ -411,7 +413,7 @@ export default function SetupPage() {
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">
                   Endereço Físico
                 </label>
-                <textarea
+                <NormalizedTextarea mask="address"
                   className="bg-background border border-outline-variant rounded-lg p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none min-h-[60px] transition-colors"
                   placeholder="Rua, Número, Bairro, Cidade – Estado, CEP"
                   value={address}

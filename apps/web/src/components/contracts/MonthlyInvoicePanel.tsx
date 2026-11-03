@@ -1,5 +1,7 @@
 "use client";
 
+import { NormalizedTextarea } from '../ui/NormalizedInput';
+
 import InvoiceEmailPreview from "./InvoiceEmailPreview";
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../../lib/api";
@@ -190,7 +192,7 @@ export default function MonthlyInvoicePanel({
           <div className="grid md:grid-cols-2 gap-md">
             <label className="text-sm">
               Destinatários deste mês (um email por linha)
-              <textarea
+              <NormalizedTextarea mask="emailList"
                 className="block w-full rounded border border-outline-variant bg-surface p-sm"
                 rows={3}
                 value={form.emails || ""}

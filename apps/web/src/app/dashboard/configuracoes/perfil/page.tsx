@@ -1,5 +1,7 @@
 'use client';
 
+import { NormalizedInput } from '../../../../components/ui/NormalizedInput';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../../context/AuthContext';
 import { apiRequest, apiBlobRequest } from '../../../../lib/api';
@@ -279,7 +281,7 @@ export default function UserProfilePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-md text-[13px]">
               <div className="flex flex-col gap-xs md:col-span-2">
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Nome Completo *</label>
-                <input
+                <NormalizedInput mask="text"
                   className="bg-background border border-outline-variant focus:border-primary outline-none px-md py-sm rounded text-on-surface font-body-sm"
                   type="text"
                   value={name}
@@ -288,7 +290,7 @@ export default function UserProfilePage() {
               </div>
               <div className="flex flex-col gap-xs">
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Cargo</label>
-                <input
+                <NormalizedInput mask="text"
                   className="bg-background border border-outline-variant focus:border-primary outline-none px-md py-sm rounded text-on-surface font-body-sm"
                   type="text"
                   placeholder="Ex.: Técnico de TI"
@@ -298,7 +300,7 @@ export default function UserProfilePage() {
               </div>
               <div className="flex flex-col gap-xs">
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Telefone</label>
-                <input
+                <NormalizedInput mask="phone"
                   className="bg-background border border-outline-variant focus:border-primary outline-none px-md py-sm rounded text-on-surface font-body-sm"
                   type="tel"
                   placeholder="(11) 99999-9999"
@@ -308,7 +310,7 @@ export default function UserProfilePage() {
               </div>
               <div className="flex flex-col gap-xs">
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">E-mail</label>
-                <input
+                <NormalizedInput mask="email"
                   className="bg-background border border-outline-variant/50 outline-none px-md py-sm rounded text-on-surface-variant/60 font-body-sm cursor-not-allowed"
                   type="email"
                   value={profile?.email || ''}
@@ -338,7 +340,7 @@ export default function UserProfilePage() {
 
               <div className="flex flex-col gap-xs">
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Nome exibido em documentos</label>
-                <input
+                <NormalizedInput mask="text"
                   className="bg-background border border-outline-variant focus:border-primary outline-none px-md py-sm rounded text-on-surface font-body-sm"
                   type="text"
                   placeholder={`Padrão: ${name || 'Seu nome'}`}

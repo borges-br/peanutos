@@ -1,5 +1,7 @@
 'use client';
 
+import { NormalizedTextarea } from '../ui/NormalizedInput';
+
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../lib/api';
 import { dateKey } from '@peanut/utils/dist/timezone';
@@ -20,7 +22,7 @@ export default function ContractBillingPanel({ contract, onSaved }: { contract: 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   useEffect(() => {
-    setForm({ title: contract.title, startDate: String(contract.startDate).slice(0, 10), endDate: contract.endDate?.slice(0, 10) || '', monthlyAmount: (contract.monthlyAmountCents / 100).toFixed(2), billingDay: contract.billingDay, billingIssueDay: contract.billingIssueDay || contract.billingDay, billingIssueTime: contract.billingIssueTime || '09:00', billingAutoIssue: contract.billingAutoIssue, billingAutoEmail: contract.billingAutoEmail, emails: (contract.billingEmailRecipients || []).join('\n'), phones: (contract.billingWhatsappNumbers || []).join('\n'), billingPaymentMethod: contract.billingPaymentMethod || 'PIX', billingPixKey: contract.billingPixKey || '', billingEmailTemplateId: contract.billingEmailTemplateId || '', gatewayBillingType: contract.gatewayBillingType || 'PIX' });
+    setForm({ title: contract.title, startDate: String(contract.startDate).slice(0, 10), endDate: contract.endDate?.slice(0, 10) || '', monthlyAmount: (contract.monthlyAmountCents / 100).toFixed(2), billingDay: contract.billingDay, billingIssueDay: contract.billingIssueDay || contract.billingDay, billingIssueTime: contract.billingIssueTime || '09:00', billingAutoIssue: contract.billingAutoIssue, billingAutoEmail: contract.billingAutoEmail, emails: (contract.billingEmailRecipients || []).join('\n'), phones: (contract.billingWhatsappNumbers || []).map((phone: string) => phone.startsWith('+') ? phone : '+' + phone).join('\n'), billingPaymentMethod: contract.billingPaymentMethod || 'PIX', billingPixKey: contract.billingPixKey || '', billingEmailTemplateId: contract.billingEmailTemplateId || '', gatewayBillingType: contract.gatewayBillingType || 'PIX' });
   }, [contract]);
   const change = (field: string, value: any) => { setForm((old: any) => ({ ...old, [field]: value })); setSuccess(''); };
   const split = (value: string) => value.split(/[\n;,]+/).map(part => part.trim()).filter(Boolean);
@@ -32,7 +34,7 @@ export default function ContractBillingPanel({ contract, onSaved }: { contract: 
         monthlyAmountCents: Math.round(Number(form.monthlyAmount) * 100), billingDay: Number(form.billingDay),
         billingIssueDay: Number(form.billingIssueDay), billingIssueTime: form.billingIssueTime,
         billingAutoIssue: !!form.billingAutoIssue, billingAutoEmail: !!form.billingAutoEmail,
-        billingEmailRecipients: split(form.emails), billingWhatsappNumbers: split(form.phones).map(phone => phone.replace(/\D/g, '')),
+        billingEmailRecipients: split(form.emails), billingWhatsappNumbers: split(form.phones),
         gatewayBillingType: form.gatewayBillingType || 'PIX', billingEmailTemplateId: form.billingEmailTemplateId || null, billingPaymentMethod: form.billingPaymentMethod, billingPixKey: form.billingPixKey || null,
       }) });
       await onSaved(); setSuccess('Contrato salvo. Competências já preparadas conservam os valores e destinatários copiados; revise-as individualmente.');
@@ -74,8 +76,8 @@ export default function ContractBillingPanel({ contract, onSaved }: { contract: 
       <Select label="Modelo de email da cobrança" value={form.billingEmailTemplateId || ''} onChange={event => change('billingEmailTemplateId', event.target.value)} options={[{ value: '', label: 'Padrão do workspace' }, ...templates.map(row => ({ value: row.id, label: row.name }))]} />
       <a href="/dashboard/templates-email" className="text-primary underline text-sm">Criar ou editar templates de email</a>
       <div className="grid md:grid-cols-2 gap-md">
-        <label className="text-sm space-y-xs"><span>Emails do financeiro e diretores (um por linha)</span><textarea value={form.emails || ''} onChange={event => change('emails', event.target.value)} rows={4} className="block w-full rounded border border-outline-variant bg-surface p-sm" /></label>
-        <label className="text-sm space-y-xs"><span>WhatsApp para envio manual (com DDI, um por linha)</span><textarea value={form.phones || ''} onChange={event => change('phones', event.target.value)} rows={4} className="block w-full rounded border border-outline-variant bg-surface p-sm" /></label>
+        <label className="text-sm space-y-xs"><span>Emails do financeiro e diretores (um por linha)</span><NormalizedTextarea mask="emailList" value={form.emails || ''} onChange={event => change('emails', event.target.value)} rows={4} className="block w-full rounded border border-outline-variant bg-surface p-sm" /></label>
+        <label className="text-sm space-y-xs"><span>WhatsApp para envio manual (com DDI, um por linha)</span><NormalizedTextarea mask="phoneList" value={form.phones || ''} onChange={event => change('phones', event.target.value)} rows={4} className="block w-full rounded border border-outline-variant bg-surface p-sm" /></label>
       </div>
       <label className="flex gap-sm items-center text-sm"><input type="checkbox" checked={!!form.billingAutoIssue} onChange={event => { change('billingAutoIssue', event.target.checked); if (!event.target.checked) change('billingAutoEmail', false); }} /> Emitir automaticamente as competências conferidas, na data programada</label>
       <label className="flex gap-sm items-center text-sm"><input type="checkbox" checked={!!form.billingAutoEmail} disabled={!form.billingAutoIssue} onChange={event => change('billingAutoEmail', event.target.checked)} /> Enviar por email após a emissão e a geração do PDF</label>

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 const { recurringAddonItems } = require('../packages/db/dist');
-const { renderA4Document } = require('../packages/documents/dist');
+const { renderA4Document, prepareDocumentPage } = require('../packages/documents/dist');
 const { chromium } = createRequire(path.resolve(__dirname, '../apps/worker/package.json'))('playwright');
 const output = path.resolve(__dirname, '../data/qa/contract-billing');
 const money = number => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(number);
@@ -21,7 +21,7 @@ async function main() {
   try {
     const agreement = { startDate: new Date('2026-01-01T00:00:00Z'), endDate: null, lineItems: [34900,59900,39900,13900].map((value, index) => ({ id: `fixture-${index}`, description: ['Automação complementar','Manutenção adicional de servidor A','Manutenção adicional de servidor B','Apoio técnico complementar'][index], unitPriceCents: value, quantity: '1', recurring: true, billingRole: 'ADDON', startsOn: new Date(index === 0 ? '2026-10-16T00:00:00Z' : '2026-10-01T00:00:00Z'), endsOn: null, endMode: 'OPEN', proration: index === 0 ? 'DAILY' : 'NONE' })) };
     const addons = recurringAddonItems(agreement, '2026-10', 'America/Sao_Paulo');
-    const addonRows = addons.map(item => ({ type: item.type, description: item.description, quantity: String(item.quantity), unit: item.unit, unitPrice: money(Number(item.unitPrice)), totalPrice: money(Number(item.quantity.mul(item.unitPrice))), billingKind: item.billingKind, billingNote: item.recurrenceSnapshot.note }));
+    const addonRows = addons.map(item => ({ type: item.type, description: item.description, quantity: String(item.quantity), unit: item.unit, unitPrice: money(Number(item.unitPrice)), totalPrice: money(Number(item.quantity.mul(item.unitPrice))), billingKind: item.billingKind, billingNote: item.recurrenceSnapshot.note, billingProration: item.recurrenceSnapshot.proration }));
     const short = [makeItem('Mensalidade de suporte e manutenção', 1700.31, 'BASE'), ...addonRows, makeItem('Retirada e devolução de nobreak para conserto', 125.50, 'EXTRA')];
     const shortTotal = (170031 + addons.reduce((sum, item) => sum + Math.round(Number(item.quantity.mul(item.unitPrice)) * 100), 0) + 12550) / 100;
     for (const [name, items] of [['monthly-short', short], ['monthly-bank', short], ['monthly-long', [short[0], ...Array.from({ length: 80 }, (_, index) => makeItem(`Serviço adicional ${index + 1} - descrição detalhada para validar múltiplas páginas e quebra da tabela`, 25.50, 'EXTRA'))]]]) {
@@ -29,7 +29,7 @@ async function main() {
       const html = renderA4Document({ ...seed, data: { number: 'FAT-DEMO-202610', status: name === 'monthly-short' ? 'DRAFT' : 'ISSUED', bankPaymentUrl: name === 'monthly-bank' ? 'https://www.asaas.com/i/qa-synthetic' : null, issueDate: '27/10/2026', dueDate: '05/11/2026', billingPeriod: '2026-10', contractNumber: 'CTR-DEMO', paymentMethod: 'PIX', pixKey: 'chave-ficticia@example.invalid', items, totalAmount: money(total), subtotalServices: money(total), subtotalMaterials: money(0) } });
       fs.writeFileSync(path.join(output, `${name}.html`), html);
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'load' });
+      await prepareDocumentPage(page, html);
       await page.pdf({ path: path.join(output, `${name}.pdf`), format: 'A4', printBackground: true, margin: { top: '0', right: '0', bottom: '0', left: '0' } });
       await page.close();
     }

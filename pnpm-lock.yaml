@@ -111,6 +111,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@peanut/documents':
+        specifier: workspace:*
+        version: link:../../packages/documents
       '@peanut/types':
         specifier: workspace:*
         version: link:../../packages/types

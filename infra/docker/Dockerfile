@@ -73,6 +73,7 @@ ARG NEXT_PUBLIC_API_URL=/api/v1
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
     NEXT_STANDALONE=true
 RUN pnpm turbo run build \
+  --filter=@peanut/documents \
   --filter=@peanut/types \
   --filter=@peanut/ui \
   --filter=@peanut/utils \

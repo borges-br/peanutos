@@ -5,7 +5,7 @@ import {
 } from "@nestjs/common";
 import { prisma, AssetType, AssetStatus } from "@peanut/db";
 import { AuditService } from "../audit/audit.service";
-import { AssetCreateInput, AssetUpdateInput } from "@peanut/validators";
+import { AssetCreateInput, AssetUpdateInput, assetCreateSchema } from "@peanut/validators";
 import { encryptSensitiveData, decryptSensitiveData } from "@peanut/utils";
 import { ContractsQuotaService } from "../contracts/contracts-quota.service";
 
@@ -503,7 +503,13 @@ export class InventoryService {
     };
 
     for (const { row, lineNumber } of parsedRows) {
-      const mapped = this.mapCsvRowToAsset(row);
+      const validation = assetCreateSchema.safeParse(this.mapCsvRowToAsset(row));
+      if (!validation.success) {
+        summary.skipped++;
+        summary.errors.push({ line: lineNumber, message: validation.error.issues.map(issue => issue.message).join(', ') });
+        continue;
+      }
+      const mapped = validation.data;
 
       if (!mapped.name || mapped.name.length < 2) {
         summary.skipped++;
@@ -564,7 +570,7 @@ export class InventoryService {
           macAddress: mapped.macAddress || null,
           operatingSystem: mapped.operatingSystem || null,
           location: mapped.location || null,
-          notes: this.mergeImportedNotes(existing?.notes || null, mapped.notes),
+          notes: this.mergeImportedNotes(existing?.notes || null, mapped.notes || ""),
         };
 
         if (existing) {

@@ -1,6 +1,7 @@
 import React from 'react';
+import { NormalizedInput, type NormalizedInputProps } from './NormalizedInput';
 
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends NormalizedInputProps {
   label?: string;
   error?: string | null;
 }
@@ -16,7 +17,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             {label}
           </label>
         )}
-        <input
+        <NormalizedInput
           id={inputId}
           aria-invalid={!!error}
           aria-describedby={error ? inputId+"-error" : props["aria-describedby"]}

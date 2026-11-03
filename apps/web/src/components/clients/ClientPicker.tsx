@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { clientSchema, formatCpfCnpj, formatPhoneNumber } from '@peanut/validators';
+import { clientSchema, formatCpfCnpj } from '@peanut/validators';
 import { apiRequest } from '../../lib/api';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -242,25 +242,25 @@ export function QuickClientModal({
               disabled={saving}
             />
           )}
-          <Input
+          <Input mask={type === 'NATURAL_PERSON' ? 'cpf' : 'cnpj'}
             label={type === 'LEGAL_PERSON' ? 'CNPJ' : 'CPF'}
             value={documentValue}
             onChange={(event) => setDocumentValue(event.target.value)}
-            onBlur={() => setDocumentValue(formatCpfCnpj(documentValue))}
+
             disabled={saving}
           />
-          <Input
+          <Input mask="email"
             label="E-mail"
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             disabled={saving}
           />
-          <Input
+          <Input mask="phone"
             label="Telefone"
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
-            onBlur={() => setPhone(formatPhoneNumber(phone))}
+
             disabled={saving}
           />
         </div>

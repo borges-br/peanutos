@@ -4,8 +4,12 @@
 
 import { formatCpfCnpj, formatPhone, formatDateTime } from './formatters';
 import { documentIdentityCss, DocumentVisual } from './identity';
+import { invoiceBillingNote } from './billing-note';
+import { invoiceLayoutCss } from './invoice-layout';
 export * from './identity';
 export * from './formatters';
+export * from './billing-note';
+export * from './render-page';
 
 // ─── Snapshot Types ───────────────────────────────────────────────────────────
 
@@ -233,6 +237,7 @@ export interface RenderA4DocumentParams {
       type: string;
       billingKind?: string | null;
       billingNote?: string | null;
+      billingProration?: 'NONE' | 'DAILY' | null;
       description: string;
       quantity: string;
       unit: string;
@@ -377,6 +382,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
   const timeZone = params.timeZone || 'America/Sao_Paulo';
   const generatedAt = params.generatedAt || formatDateTime(new Date(), params.locale, timeZone);
   const locale = params.locale || "pt-BR";
+  const isInvoice = documentType === 'INVOICE';
   const t = translations[locale] || translations["pt-BR"];
 
   // Colors & Brand Settings
@@ -469,12 +475,13 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
   const showItemTypeLabel = templateSettings.settings?.showItemTypeLabel ?? false;
   const itemsRowsHtml = data.items.map((item, idx) => {
     const itemTypeLabel = item.type === "SERVICE" ? t.serviceType : t.materialType;
+    const billingNote = documentType === 'INVOICE' ? invoiceBillingNote(item) : item.billingNote;
     return `
     <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: left;">
         <strong style="color: #1e293b; font-size: 9.5pt; display: block;">${escapeHtml(item.description)}</strong>
-        ${item.billingKind && !item.billingNote ? `<span style="font-size: 7pt; color: #64748b;">${item.billingKind === 'BASE' ? 'Mensalidade contratada' : item.billingKind === 'RECURRING' ? 'Adicional recorrente' : 'Adicional desta competência'}</span>` : ''}
-        ${item.billingNote ? `<span style="display: block; font-family: sans-serif; font-size: 7.5pt; line-height: 1.25; color: #64748b;">Adicional recorrente · ${escapeHtml(item.billingNote)}</span>` : ''}
+        ${item.billingKind && !billingNote ? `<span style="font-size: 7pt; color: #64748b;">${item.billingKind === 'BASE' ? 'Mensalidade contratada' : item.billingKind === 'RECURRING' ? 'Adicional recorrente' : 'Adicional desta competência'}</span>` : ''}
+        ${billingNote ? `<span style="display: block; font-family: sans-serif; font-size: 7.5pt; line-height: 1.25; color: #64748b;">Adicional recorrente · ${escapeHtml(billingNote)}</span>` : ''}
         ${showItemTypeLabel ? `<span style="font-size: 7.5pt; color: #64748b;">${itemTypeLabel}</span>` : ''}
       </td>
       <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569;">${escapeHtml(item.quantity)}</td>
@@ -607,9 +614,10 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
               ${subtotalServices ? `<div>${t.subtotalServices}: <span style="font-weight: bold; min-width: 100px; display: inline-block;">${subtotalServices}</span></div>` : ''}
               ${subtotalMaterials ? `<div>${t.subtotalMaterials}: <span style="font-weight: bold; min-width: 100px; display: inline-block;">${subtotalMaterials}</span></div>` : ''}
               ${discountVal > 0 ? `<div style="color: #dc2626;">${t.discount}: <span style="font-weight: bold; min-width: 100px; display: inline-block;">-${formattedDiscount}</span></div>` : ''}
-              <div style="font-size: 11pt; font-weight: bold; color: #000; margin-top: 8px; border-top: 2px solid #0f172a; padding-top: 6px;">
-                ${t.totalAmount}: <span style="font-weight: 800; min-width: 120px; display: inline-block; color: ${primaryColor};">${totalAmount}</span>
+              <div class="financial-total" style="font-size: 11pt; font-weight: bold; color: #000; margin-top: 8px; border-top: 2px solid #0f172a; padding-top: 6px;">
+                ${t.totalAmount}: <span class="financial-total-value" style="font-weight: 800; min-width: 120px; display: inline-block; color: ${primaryColor};">${totalAmount}</span>
               </div>
+              ${discountVal > 0 && data.discountReason ? `<div class="invoice-discount-reason">${escapeHtml(data.discountReason)}</div>` : ''}
             </td>
           </tr>
         </table>
@@ -692,11 +700,22 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
 
   // Compile blocks HTML matching sequence and checking enabled status
   const activeBlocks = templateSettings.blockOrder
-    .filter(block => templateSettings.enabledBlocks[block] === true && block in blocksMap);
+    .filter(block => templateSettings.enabledBlocks[block] === true && block in blocksMap)
+    .filter(block => !isInvoice || (block !== 'observations' || !!observations.trim()) && (block !== 'terms' || !!terms.trim()));
   const renderedBlocks: string[] = [];
   for (let index = 0; index < activeBlocks.length; index++) {
     const block = activeBlocks[index]!;
-    if (data.billingPeriod && block === 'financialSummary' && activeBlocks[index + 1] === 'paymentInfo') {
+    if (isInvoice && block === 'footer') continue;
+    if (isInvoice && block === 'logo' && activeBlocks[index + 1] === 'companyInfo') {
+      renderedBlocks.push(`<div class="block-container block-invoice-issuer">${blocksMap.logo!()}${blocksMap.companyInfo!()}</div>`);
+      index++;
+    } else if (isInvoice && ['financialSummary', 'paymentInfo', 'qrCode'].includes(block)) {
+      let closing = blocksMap[block]!();
+      while (['financialSummary', 'paymentInfo', 'qrCode'].includes(activeBlocks[index + 1] || '')) {
+        closing += blocksMap[activeBlocks[++index]!]!();
+      }
+      renderedBlocks.push(`<div class="block-container block-billing-closing">${closing}</div>`);
+    } else if (data.billingPeriod && block === 'financialSummary' && activeBlocks[index + 1] === 'paymentInfo') {
       let closing = blocksMap.financialSummary!() + blocksMap.paymentInfo!();
       index++;
       if (activeBlocks[index + 1] === 'footer') { closing += blocksMap.footer!(); index++; }
@@ -774,11 +793,12 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
       .monthly-invoice .block-items-table tbody td { padding-top: 6px !important; padding-bottom: 6px !important; }
     }
     ${documentIdentityCss(brand.visual)}
+    ${isInvoice ? invoiceLayoutCss(brand.visual?.margin || 20, primaryColor) : ''}
   </style>
 </head>
 <body class="${data.billingPeriod ? 'monthly-invoice' : ''}">
-  <div class="page-container">
-    ${blocksHtml}
+  <div class="page-container${isInvoice ? ' invoice-document' : ''}"${isInvoice ? ` data-invoice-page-label="${t.page}" data-invoice-of-label="${t.of}" data-invoice-total-label="${t.totalAmount}${data.discountAmount && /[1-9]/.test(data.discountAmount) ? ` / ${t.discount}` : ''}" data-invoice-payment-label="${t.paymentInstructions}" data-invoice-details-title="${locale === 'en-US' ? 'Invoice details - continued' : 'Detalhamento da fatura - continuação'}" data-invoice-closing-title="${locale === 'en-US' ? 'Financial summary and payment' : 'Resumo financeiro e pagamento'}"` : ''}>
+    ${isInvoice ? `<template data-invoice-header><header class="invoice-continuation-heading"><div class="invoice-continuation-top"><span class="invoice-continuation-brand">${brandName}</span><span>${docTypeLabel}</span></div><h2></h2><div class="invoice-continuation-meta"><div><small>${t.invoice}</small>#${docNumber}</div><div><small>${t.recipient}</small>${clientName}</div><div><small>${t.dueDate}</small>${dueDate}</div></div></header></template><template data-invoice-footer>${activeBlocks.includes('footer') ? blocksMap.footer!() : ''}</template><div class="invoice-flow">${blocksHtml}</div>` : blocksHtml}
   </div>
 </body>
 </html>

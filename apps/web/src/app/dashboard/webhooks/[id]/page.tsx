@@ -1,5 +1,7 @@
 'use client';
 
+import { NormalizedInput } from '../../../../components/ui/NormalizedInput';
+
 import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -447,7 +449,7 @@ export default function WebhookDetailPage({ params }: { params: { id: string } }
               )}
               <div className="flex flex-col gap-xs">
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Nome</label>
-                <input
+                <NormalizedInput mask="text"
                   className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
                   value={formName}
                   onChange={e => setFormName(e.target.value)}
@@ -457,7 +459,7 @@ export default function WebhookDetailPage({ params }: { params: { id: string } }
               </div>
               <div className="flex flex-col gap-xs">
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">URL</label>
-                <input
+                <NormalizedInput mask="website"
                   className="bg-background border border-outline-variant rounded p-sm font-mono text-[12px] text-on-surface focus:border-primary outline-none"
                   value={formUrl}
                   onChange={e => setFormUrl(e.target.value)}

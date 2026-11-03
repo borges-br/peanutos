@@ -1,5 +1,7 @@
 'use client';
 
+import { NormalizedInput } from '../../../../components/ui/NormalizedInput';
+
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiRequest } from '../../../../lib/api';
@@ -142,7 +144,7 @@ export default function NewWebhookPage() {
               <label className="font-label-caps text-[11px] text-on-surface-variant uppercase tracking-wider font-semibold">
                 Nome <span className="text-error">*</span>
               </label>
-              <input
+              <NormalizedInput mask="text"
                 className="bg-background border border-outline-variant rounded-lg px-md py-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none transition-colors w-full"
                 placeholder="Ex.: Notificações de Fatura para n8n"
                 value={name}
@@ -159,7 +161,7 @@ export default function NewWebhookPage() {
                 <label className="font-label-caps text-[11px] text-on-surface-variant uppercase tracking-wider font-semibold">
                   URL <span className="text-error">*</span>
                 </label>
-                <input
+                <NormalizedInput mask="website"
                   className="bg-background border border-outline-variant rounded-lg px-md py-sm font-mono text-[12px] text-on-surface focus:border-primary outline-none transition-colors w-full"
                   placeholder="https://seu-sistema.com/webhooks/peanut"
                   value={url}

@@ -602,14 +602,14 @@ export default function ClientUsersPage() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                 />
-                <Input
+                <Input mask="email"
                   label="E-mail"
                   type="email"
                   placeholder="Ex: maria.souza@acme.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
-                <Input
+                <Input mask="phone"
                   label="Telefone"
                   type="text"
                   placeholder="Ex: (11) 98888-8888"

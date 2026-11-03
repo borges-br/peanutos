@@ -108,7 +108,7 @@ export default function LoginPage() {
 
       {/* Form elements */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-md">
-        <Input
+        <Input mask="email"
           id="email"
           type="email"
           label={t.auth.email}

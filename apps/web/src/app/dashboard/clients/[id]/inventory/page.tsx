@@ -562,15 +562,15 @@ export default function ClientInventoryPage() {
 
               <div className="grid grid-cols-1 gap-md md:grid-cols-2">
                 <Input label="Nome do Ativo *" required placeholder="Ex: NB-FIN-003 ou Licença Office365" value={name} onChange={(e) => setName(e.target.value)} />
-                <Input label={t.inventory.hostname} placeholder="Ex: nb-acme-financeiro" value={hostname} onChange={(e) => setHostname(e.target.value)} />
+                <Input mask="hostname" label={t.inventory.hostname} placeholder="Ex: nb-acme-financeiro" value={hostname} onChange={(e) => setHostname(e.target.value)} />
                 <Select label="Tipo de Ativo *" value={assetType} onChange={(e) => setAssetType(e.target.value)} options={assetTypes} />
                 <Select label="Status *" value={assetStatus} onChange={(e) => setAssetStatus(e.target.value)} options={assetStatuses} />
                 <Input label="Fabricante" placeholder="Ex: Dell" value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} />
                 <Input label="Modelo" placeholder="Ex: Latitude 3420" value={model} onChange={(e) => setModel(e.target.value)} />
                 <Input label="Número de Série" placeholder="Ex: 8XF8SD2" value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} />
                 <Input label="Patrimônio / Asset Tag" placeholder="Ex: ACME-0023" value={assetTag} onChange={(e) => setAssetTag(e.target.value)} />
-                <Input label="Endereço IP" placeholder="Ex: 192.168.1.50" value={ipAddress} onChange={(e) => setIpAddress(e.target.value)} />
-                <Input label="Endereço MAC" placeholder="Ex: AA:BB:CC:DD:EE:FF" value={macAddress} onChange={(e) => setMacAddress(e.target.value)} />
+                <Input mask="ip" label="Endereço IP" placeholder="Ex: 192.168.1.50" value={ipAddress} onChange={(e) => setIpAddress(e.target.value)} />
+                <Input mask="mac" label="Endereço MAC" placeholder="Ex: AA:BB:CC:DD:EE:FF" value={macAddress} onChange={(e) => setMacAddress(e.target.value)} />
                 <Input label="Sistema Operacional" placeholder="Ex: Windows 11 Pro" value={operatingSystem} onChange={(e) => setOperatingSystem(e.target.value)} />
                 <Input label="Localização / Setor" placeholder="Ex: Recepção ou Prédio A - Sala 3" value={location} onChange={(e) => setLocation(e.target.value)} />
                 <Input label="ID Acesso Remoto (RustDesk/AnyDesk)" placeholder="Ex: RustDesk ID: 482 199 432" value={remoteAccessId} onChange={(e) => setRemoteAccessId(e.target.value)} />

@@ -13,7 +13,7 @@ import * as crypto from 'crypto';
 import * as https from 'https';
 import * as http from 'http';
 import { chromium } from 'playwright';
-import { renderA4Document, formatDate as formatDocumentDate, formatDateTime as formatDocumentDateTime } from '@peanut/documents';
+import { renderA4Document, prepareDocumentPage, formatDate as formatDocumentDate, formatDateTime as formatDocumentDateTime } from '@peanut/documents';
 import { LocalObjectStorage, dateKey, calendarDateKey, zonedDateTime } from '@peanut/utils';
 
 // Load environment variables from root or local
@@ -769,6 +769,7 @@ const pdfWorker = new Worker(
         type: item.type,
         billingKind: item.billingKind,
         billingNote: (item.recurrenceSnapshot as any)?.note || null,
+        billingProration: (item.recurrenceSnapshot as any)?.proration || null,
         description: item.description,
         quantity: item.quantity.toString(),
         unit: item.unit,
@@ -780,6 +781,7 @@ const pdfWorker = new Worker(
       subtotalServices: formatCurrency(source.subtotalServices || 0),
       subtotalMaterials: formatCurrency(source.subtotalMaterials || 0),
       discountAmount: formatCurrency(source.discountAmount || 0),
+      discountReason: typedDocumentType === 'INVOICE' ? source.discountReason : null,
     };
 
     // 5. Render dynamic block-based A4 HTML
@@ -812,7 +814,7 @@ const pdfWorker = new Worker(
       const browser = await chromium.launch({ headless: true });
       try {
         const page = await browser.newPage();
-        await page.setContent(html);
+        await prepareDocumentPage(page, html);
         pdfBuffer = await page.pdf({
           format: 'A4',
           printBackground: true,

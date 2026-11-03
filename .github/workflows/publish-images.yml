@@ -57,6 +57,7 @@ jobs:
               - "packages/config/**"
             web:
               - "apps/web/**"
+              - "packages/documents/**"
               - "packages/ui/**"
               - "packages/types/**"
               - "packages/utils/**"

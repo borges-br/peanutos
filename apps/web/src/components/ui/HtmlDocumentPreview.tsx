@@ -3,6 +3,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import A4Viewport from './A4Viewport';
 import Button from './Button';
+import { paginateInvoiceDocument } from '@peanut/documents/dist/invoice-pagination';
 
 /** Server-rendered document HTML already includes its paper, brand and footer. */
 export default function HtmlDocumentPreview({html,title,printable=false}: {html:string;title:string;printable?:boolean}) {
@@ -32,6 +33,14 @@ export default function HtmlDocumentPreview({html,title,printable=false}: {html:
       doc.addEventListener('load',schedule,true);
       doc.fonts?.ready.then(schedule).catch(()=>{});
       cleanup.current=()=>{active=false;cancelAnimationFrame(pending);observer.disconnect();doc.removeEventListener('load',schedule,true);};
+      void (async()=>{
+        await doc.fonts.ready;
+        await Promise.all(Array.from(doc.images,image=>image.decode().catch(()=>{})));
+        if(!active)return;
+        const result=paginateInvoiceDocument(doc);
+        if(result?.overflow)throw new Error('A paginação excedeu a área útil.');
+        measure();
+      })().catch(()=>{if(active)setError(true);});
       measure();
     } catch {setError(true);}
   },[]);

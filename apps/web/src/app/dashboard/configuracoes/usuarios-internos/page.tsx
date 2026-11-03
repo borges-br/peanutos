@@ -1,5 +1,7 @@
 'use client';
 
+import { NormalizedInput } from '../../../../components/ui/NormalizedInput';
+
 import { useWorkspaceFormatters } from '../../../../i18n/useWorkspaceFormatters';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -536,7 +538,7 @@ export default function InternalUsersPage() {
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">
                   Nome completo
                 </label>
-                <input
+                <NormalizedInput mask="text"
                   className="bg-background border border-outline-variant rounded px-md py-sm h-10 font-body-sm text-[13px] text-on-surface focus:outline-none focus:border-primary"
                   placeholder="João Silva"
                   type="text"
@@ -550,7 +552,7 @@ export default function InternalUsersPage() {
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">
                   E-mail
                 </label>
-                <input
+                <NormalizedInput mask="email"
                   className="bg-background border border-outline-variant rounded px-md py-sm h-10 font-body-sm text-[13px] text-on-surface focus:outline-none focus:border-primary"
                   placeholder="usuario@empresa.com"
                   type="email"

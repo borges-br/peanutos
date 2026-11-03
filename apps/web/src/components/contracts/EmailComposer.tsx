@@ -1,4 +1,6 @@
 "use client";
+
+import { NormalizedInput } from '../ui/NormalizedInput';
 import React, { useEffect, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -153,7 +155,7 @@ export default function EmailComposer({
           <label className="sr-only" htmlFor="email-link">
             Endereço do link
           </label>
-          <input
+          <NormalizedInput mask="website"
             id="email-link"
             type="url"
             value={url}

@@ -925,6 +925,7 @@ export class InvoicesService {
         type: item.type,
         billingKind: item.billingKind,
         billingNote: (item.recurrenceSnapshot as any)?.note || null,
+        billingProration: (item.recurrenceSnapshot as any)?.proration || null,
         description: item.description,
         quantity: item.quantity.toString(),
         unit: item.unit,
@@ -937,6 +938,7 @@ export class InvoicesService {
       subtotalServices: formatCurrency(invoice.subtotalServices),
       subtotalMaterials: formatCurrency(invoice.subtotalMaterials),
       discountAmount: formatCurrency(invoice.discountAmount),
+      discountReason: invoice.discountReason,
     };
 
     return renderA4Document({

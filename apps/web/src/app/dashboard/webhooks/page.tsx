@@ -1,5 +1,7 @@
 'use client';
 
+import { NormalizedInput } from '../../../components/ui/NormalizedInput';
+
 import { useWorkspaceFormatters } from '../../../i18n/useWorkspaceFormatters';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -1067,7 +1069,7 @@ export default function WebhooksPage() {
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">
                   Nome do Endpoint <span className="text-error">*</span>
                 </label>
-                <input
+                <NormalizedInput mask="text"
                   className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none"
                   placeholder="Ex: Integração n8n Comercial"
                   value={formName}
@@ -1081,7 +1083,7 @@ export default function WebhooksPage() {
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">
                   URL do Endpoint <span className="text-error">*</span>
                 </label>
-                <input
+                <NormalizedInput mask="website"
                   className="bg-background border border-outline-variant rounded p-sm font-mono text-[12px] text-on-surface focus:border-primary outline-none"
                   placeholder="https://sua-api.com/webhooks/peanut"
                   value={formUrl}

@@ -30,7 +30,10 @@ export function recurringAddonItems(contract: any, period: string, zone: string)
     const monthlyCents = nominalQuantity.mul(item.unitPriceCents).toDecimalPlaces(0);
     const partial = item.proration === 'DAILY' && days < bounds.lastDay;
     const chargedCents = partial ? monthlyCents.mul(days).div(bounds.lastDay).toDecimalPlaces(0) : monthlyCents;
-    const note = `${item.proration === 'DAILY' ? `${nominalQuantity.toString()} × ${cents(item.unitPriceCents)}/mês · Rateio: ${days}/${bounds.lastDay} dias` : 'Valor integral, sem rateio'} · ${displayDate(start)} a ${displayDate(end)}`;
+    const serviceDates = `${displayDate(start)} a ${displayDate(end)}`;
+    const note = item.proration === 'DAILY'
+      ? `${nominalQuantity.toString()} × ${cents(item.unitPriceCents)}/mês · Rateio: ${days}/${bounds.lastDay} dias · ${serviceDates}`
+      : serviceDates;
     // Aggregate a partial month into one charge to avoid rounding unit prices before multiplication.
     return [{ type: 'SERVICE', description: item.description, quantity: partial ? new Prisma.Decimal(1) : nominalQuantity,
       unit: partial ? 'MÊS' : 'UN', unitPrice: new Prisma.Decimal(partial ? chargedCents : item.unitPriceCents).div(100),

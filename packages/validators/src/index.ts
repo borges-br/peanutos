@@ -1,5 +1,7 @@
 import { cpf, cnpj } from 'cpf-cnpj-validator';
 import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
+import { normalizeText, emailValueSchema, phoneValueSchema, addressValueSchema, websiteValueSchema, documentValueSchema, macValueSchema, ipValueSchema, hostnameValueSchema } from './normalization';
+export * from './normalization';
 import { z } from 'zod';
 export * from './branding';
 
@@ -39,24 +41,13 @@ export function isValidCpfCnpj(
   return false;
 }
 
-export function normalizePhone(
-  value: string | null | undefined,
-  defaultCountry: string = 'BR',
-): string | null {
-  if (!value || !value.trim()) return null;
-  const parsed = parsePhoneNumberFromString(value.trim(), defaultCountry as CountryCode);
-  if (parsed?.isValid()) return parsed.number;
-  const digits = onlyDigits(value);
-  return digits || null;
-}
-
 export function formatPhoneNumber(
   value: string | null | undefined,
   defaultCountry: string = 'BR',
 ): string {
   if (!value) return '';
   const parsed = parsePhoneNumberFromString(value, defaultCountry as CountryCode);
-  if (parsed?.isValid()) return parsed.formatNational();
+  if (parsed?.isValid()) return parsed.country === defaultCountry ? parsed.formatNational() : parsed.formatInternational();
 
   const digits = onlyDigits(value);
   if (digits.length === 13 && digits.startsWith('55')) {
@@ -73,28 +64,22 @@ export function formatPhoneNumber(
 const nullableTrimmedString = (max: number) =>
   z.preprocess(
     emptyToUndefined,
-    z.string().trim().max(max).optional().nullable(),
+    z.string().trim().max(max).transform(normalizeText).optional().nullable(),
   );
 
 const nullableEmail = z.preprocess(
   emptyToUndefined,
-  z.string().trim().email({ message: 'E-mail invalido' }).max(150).optional().nullable(),
+  emailValueSchema.max(150).optional().nullable(),
 );
 
 const nullableDocument = z.preprocess(
-  (value) => {
-    const digits = normalizeCpfCnpj(typeof value === 'string' ? value : undefined);
-    return digits || undefined;
-  },
-  z.string().max(20).optional().nullable(),
+  emptyToUndefined,
+  documentValueSchema.pipe(z.string().regex(/^\d*$/, 'CPF/CNPJ deve conter somente números').max(20)).optional().nullable(),
 );
 
 const nullablePhone = z.preprocess(
-  (value) => {
-    const normalized = normalizePhone(typeof value === 'string' ? value : undefined);
-    return normalized || undefined;
-  },
-  z.string().max(30).optional().nullable(),
+  emptyToUndefined,
+  phoneValueSchema.optional().nullable(),
 );
 
 const nullableClientId = z.preprocess(
@@ -104,7 +89,7 @@ const nullableClientId = z.preprocess(
 
 const adHocClientName = z.preprocess(
   emptyToUndefined,
-  z.string().trim().min(2, { message: 'Informe o nome do cliente' }).max(200).optional().nullable(),
+  z.string().trim().min(2, { message: 'Informe o nome do cliente' }).max(200).transform(normalizeText).optional().nullable(),
 );
 
 const commercialClientFields = {
@@ -127,7 +112,7 @@ const requireCommercialClient = (data: { clientId?: string | null; clientName?: 
 
 // Login Validation Schema
 export const loginSchema = z.object({
-  email: z.string().email({ message: 'E-mail inválido' }),
+  email: emailValueSchema.max(150),
   password: z.string().min(6, { message: 'A senha deve ter no mínimo 6 caracteres' }),
 });
 
@@ -138,12 +123,12 @@ export const clientTypeSchema = z.enum(['LEGAL_PERSON', 'NATURAL_PERSON']);
 
 const clientBaseSchema = z.object({
     type: clientTypeSchema.default('LEGAL_PERSON'),
-    legalName: z.string().trim().min(2, { message: 'Nome do cliente e obrigatorio' }).max(200),
+    legalName: z.string().trim().min(2, { message: 'Nome do cliente e obrigatorio' }).max(200).transform(normalizeText),
     tradeName: nullableTrimmedString(200),
     document: nullableDocument,
     email: nullableEmail,
     phone: nullablePhone,
-    website: z.preprocess(emptyToUndefined, z.string().url().max(255).optional().nullable()),
+    website: z.preprocess(emptyToUndefined, websiteValueSchema.pipe(z.string().max(255)).optional().nullable()),
     notes: z.string().optional().nullable(),
     slaPolicyId: z.string().uuid({ message: 'ID de SLA inválido' }).optional().nullable(),
   });
@@ -216,8 +201,8 @@ export type ClientUpdateInput = z.infer<typeof clientUpdateSchema>;
 
 // Asset Validation Schema
 export const assetSchema = z.object({
-  name: z.string().min(2, { message: 'Nome do ativo é obrigatório' }),
-  hostname: z.string().optional().or(z.literal('')),
+  name: z.string().trim().min(2, { message: 'Nome do ativo é obrigatório' }).transform(normalizeText),
+  hostname: hostnameValueSchema.optional().or(z.literal('')),
   type: z.enum([
     'WORKSTATION',
     'NOTEBOOK',
@@ -247,10 +232,10 @@ export const assetSchema = z.object({
     'LOST',
     'PENDING_VALIDATION',
   ]),
-  serialNumber: z.string().optional().or(z.literal('')),
-  assetTag: z.string().optional().or(z.literal('')),
-  operatingSystem: z.string().optional().or(z.literal('')),
-  location: z.string().optional().or(z.literal('')),
+  serialNumber: z.string().transform(normalizeText).optional().or(z.literal('')),
+  assetTag: z.string().transform(normalizeText).optional().or(z.literal('')),
+  operatingSystem: z.string().transform(normalizeText).optional().or(z.literal('')),
+  location: z.string().transform(normalizeText).optional().or(z.literal('')),
   notes: z.string().optional().or(z.literal('')),
 });
 
@@ -262,7 +247,7 @@ const ticketStatuses = ['OPEN', 'TRIAGE', 'IN_PROGRESS', 'WAITING_CLIENT', 'WAIT
 const ticketChannels = ['WHATSAPP', 'EMAIL', 'PHONE', 'PORTAL', 'MANUAL', 'OTHER'] as const;
 
 export const ticketSchema = z.object({
-  title: z.string().min(5, { message: 'O título do chamado deve ter pelo menos 5 caracteres' }),
+  title: z.string().trim().min(5, { message: 'O título do chamado deve ter pelo menos 5 caracteres' }).transform(normalizeText),
   description: z.string().min(10, { message: 'A descrição detalhada do chamado deve ter pelo menos 10 caracteres' }),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']),
   clientId: z.string().uuid({ message: 'Cliente inválido' }),
@@ -273,7 +258,7 @@ export const ticketSchema = z.object({
 export type TicketInput = z.infer<typeof ticketSchema>;
 
 export const ticketCreateSchema = z.object({
-  title: z.string().min(5, { message: 'O título do chamado deve ter pelo menos 5 caracteres' }),
+  title: z.string().trim().min(5, { message: 'O título do chamado deve ter pelo menos 5 caracteres' }).transform(normalizeText),
   description: z.string().min(10, { message: 'A descrição detalhada do chamado deve ter pelo menos 10 caracteres' }),
   priority: z.enum(ticketPriorities),
   channel: z.enum(ticketChannels).default('EMAIL'),
@@ -282,8 +267,8 @@ export const ticketCreateSchema = z.object({
   clientUserId: z.string().uuid({ message: 'Usuário final inválido' }).optional().nullable(),
   assetId: z.string().uuid({ message: 'Ativo inválido' }).optional().nullable(),
   assignedToId: z.string().uuid({ message: 'Técnico designado inválido' }).optional().nullable(),
-  category: z.string().optional().nullable(),
-  subcategory: z.string().optional().nullable(),
+  category: z.string().trim().transform(normalizeText).optional().nullable(),
+  subcategory: z.string().trim().transform(normalizeText).optional().nullable(),
 });
 
 export type TicketCreateInput = z.infer<typeof ticketCreateSchema>;
@@ -321,13 +306,13 @@ export const ticketTimeEntryCreateSchema = z.object({
 export type TicketTimeEntryCreateInput = z.infer<typeof ticketTimeEntryCreateSchema>;
 
 export const ticketCategoryCreateSchema = z.object({
-  name: z.string().trim().min(2, { message: 'A categoria deve ter pelo menos 2 caracteres' }).max(100),
+  name: z.string().trim().min(2, { message: 'A categoria deve ter pelo menos 2 caracteres' }).max(100).transform(normalizeText),
 });
 
 export type TicketCategoryCreateInput = z.infer<typeof ticketCategoryCreateSchema>;
 
 export const slaPolicyCreateSchema = z.object({
-  name: z.string().min(3, { message: 'O nome da política de SLA deve ter pelo menos 3 caracteres' }),
+  name: z.string().trim().min(3, { message: 'O nome da política de SLA deve ter pelo menos 3 caracteres' }).transform(normalizeText),
   description: z.string().optional().nullable(),
   priority: z.enum(ticketPriorities),
   firstResponseMinutes: z.coerce.number().int().min(1, { message: 'Tempo de primeira resposta deve ser de pelo menos 1 minuto' }),
@@ -346,8 +331,8 @@ export type SlaPolicyUpdateInput = z.infer<typeof slaPolicyUpdateSchema>;
 
 // User Validation Schema
 export const userSchema = z.object({
-  name: z.string().min(2, { message: 'Nome deve ter no mínimo 2 caracteres' }),
-  email: z.string().email({ message: 'E-mail inválido' }),
+  name: z.string().trim().min(2, { message: 'Nome deve ter no mínimo 2 caracteres' }).transform(normalizeText),
+  email: emailValueSchema.max(150),
   password: z.string().min(6, { message: 'A senha deve ter no mínimo 6 caracteres' }).optional().or(z.literal('')),
   role: z.enum(['OWNER', 'ADMIN', 'TECHNICIAN', 'FINANCIAL', 'READ_ONLY']),
   status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']).optional(),
@@ -357,12 +342,12 @@ export type UserInput = z.infer<typeof userSchema>;
 
 // Client Contact Validation Schema
 export const clientContactSchema = z.object({
-  name: z.string().min(2, { message: 'Nome é obrigatório' }),
-  email: z.string().email({ message: 'E-mail inválido' }),
-  phone: z.string().optional().nullable().or(z.literal('')),
-  mobile: z.string().optional().nullable().or(z.literal('')),
-  role: z.string().optional().nullable().or(z.literal('')),
-  department: z.string().optional().nullable().or(z.literal('')),
+  name: z.string().trim().min(2, { message: 'Nome é obrigatório' }).transform(normalizeText),
+  email: emailValueSchema.max(150),
+  phone: phoneValueSchema.optional().nullable().or(z.literal('')),
+  mobile: phoneValueSchema.optional().nullable().or(z.literal('')),
+  role: z.string().transform(normalizeText).optional().nullable().or(z.literal('')),
+  department: z.string().transform(normalizeText).optional().nullable().or(z.literal('')),
   isPrimary: z.boolean().default(false),
   notes: z.string().optional().nullable().or(z.literal('')),
 });
@@ -371,11 +356,11 @@ export type ClientContactInput = z.infer<typeof clientContactSchema>;
 
 // Client User Creation Schema
 export const clientUserCreateSchema = z.object({
-  fullName: z.string().min(2, { message: 'Nome completo é obrigatório' }),
-  email: z.string().email({ message: 'E-mail inválido' }).optional().or(z.literal('')),
-  phone: z.string().optional().or(z.literal('')),
-  department: z.string().optional().or(z.literal('')),
-  jobTitle: z.string().optional().or(z.literal('')),
+  fullName: z.string().trim().min(2, { message: 'Nome completo é obrigatório' }).transform(normalizeText),
+  email: emailValueSchema.max(150).optional().or(z.literal('')),
+  phone: phoneValueSchema.optional().or(z.literal('')),
+  department: z.string().transform(normalizeText).optional().or(z.literal('')),
+  jobTitle: z.string().transform(normalizeText).optional().or(z.literal('')),
   status: z.enum(['ACTIVE', 'INACTIVE', 'ON_LEAVE', 'TERMINATED', 'PENDING_REVIEW']).default('ACTIVE'),
   notes: z.string().optional().or(z.literal('')),
 });
@@ -435,19 +420,19 @@ const assetStatuses = [
 
 // Asset Create Schema
 export const assetCreateSchema = z.object({
-  name: z.string().min(2, { message: 'Nome do ativo é obrigatório' }),
-  hostname: z.string().optional().or(z.literal('')),
+  name: z.string().trim().min(2, { message: 'Nome do ativo é obrigatório' }).transform(normalizeText),
+  hostname: hostnameValueSchema.optional().or(z.literal('')),
   type: z.enum(assetTypes),
   status: z.enum(assetStatuses),
-  manufacturer: z.string().optional().or(z.literal('')),
-  model: z.string().optional().or(z.literal('')),
-  serialNumber: z.string().optional().or(z.literal('')),
-  assetTag: z.string().optional().or(z.literal('')),
-  macAddress: z.string().regex(/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/, { message: 'Endereço MAC inválido' }).optional().or(z.literal('')),
-  ipAddress: z.string().ip({ message: 'Endereço IP inválido' }).optional().or(z.literal('')),
-  operatingSystem: z.string().optional().or(z.literal('')),
-  location: z.string().optional().or(z.literal('')),
-  remoteAccessId: z.string().optional().or(z.literal('')),
+  manufacturer: z.string().transform(normalizeText).optional().or(z.literal('')),
+  model: z.string().transform(normalizeText).optional().or(z.literal('')),
+  serialNumber: z.string().transform(normalizeText).optional().or(z.literal('')),
+  assetTag: z.string().transform(normalizeText).optional().or(z.literal('')),
+  macAddress: macValueSchema.optional().or(z.literal('')),
+  ipAddress: ipValueSchema.optional().or(z.literal('')),
+  operatingSystem: z.string().transform(normalizeText).optional().or(z.literal('')),
+  location: z.string().transform(normalizeText).optional().or(z.literal('')),
+  remoteAccessId: z.string().transform(normalizeText).optional().or(z.literal('')),
   sensitiveDataEncrypted: z.string().optional().or(z.literal('')),
   notes: z.string().optional().or(z.literal('')),
   assignedClientUserId: z.string().uuid().optional().nullable(),
@@ -486,7 +471,7 @@ export type AssetNoteCreateInput = z.infer<typeof assetNoteCreateSchema>;
 export const sensitiveDataSchema = z.object({
   remoteAccessNotes: z.string().optional().or(z.literal('')),
   vpnNotes: z.string().optional().or(z.literal('')),
-  managementUrl: z.string().optional().or(z.literal('')),
+  managementUrl: websiteValueSchema.optional().or(z.literal('')),
 });
 
 export type SensitiveDataInput = z.infer<typeof sensitiveDataSchema>;
@@ -500,9 +485,9 @@ const contractLineItemTypeEnum = z.enum(['SERVICE', 'LICENSE', 'STORAGE', 'SUPPO
 const billingScheduleStatusEnum = z.enum(['PENDING', 'DRAFT_READY', 'SKIPPED', 'CANCELLED', 'GENERATED_FUTURE_INVOICE']);
 
 const contractBaseSchema = z.object({
-  title: z.string().min(3, { message: 'O título do contrato deve ter pelo menos 3 caracteres' }),
+  title: z.string().trim().min(3, { message: 'O título do contrato deve ter pelo menos 3 caracteres' }).transform(normalizeText),
   clientId: z.string().uuid({ message: 'ID do cliente inválido' }),
-  number: z.string().optional().or(z.literal('')),
+  number: z.string().trim().transform(normalizeText).optional().or(z.literal('')),
   status: contractStatusEnum.default('DRAFT'),
   type: contractTypeEnum,
   startDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de início inválida' }),
@@ -514,8 +499,8 @@ const contractBaseSchema = z.object({
   billingIssueTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Horário de emissão inválido').default('09:00'),
   billingAutoIssue: z.boolean().default(false),
   billingAutoEmail: z.boolean().default(false),
-  billingEmailRecipients: z.array(z.string().trim().email().max(254)).max(50).default([]),
-  billingWhatsappNumbers: z.array(z.string().regex(/^\d{10,15}$/, 'Use telefone com código do país e somente números')).max(30).default([]),
+  billingEmailRecipients: z.array(emailValueSchema.max(254)).max(50).default([]),
+  billingWhatsappNumbers: z.array(phoneValueSchema.transform(v => v.replace(/^\+/, '')).pipe(z.string().regex(/^\d{7,15}$/, 'Informe um telefone válido com código do país'))).max(30).default([]),
   billingPaymentMethod: z.enum(['PIX', 'TRANSFER', 'CASH', 'OTHER']).default('PIX'),
   gatewayBillingType: z.enum(['PIX', 'BOLETO']).optional(),
   billingEmailTemplateId: z.string().uuid().optional().nullable(),
@@ -563,7 +548,7 @@ export const contractStatusUpdateSchema = z.object({
 export type ContractStatusUpdateInput = z.infer<typeof contractStatusUpdateSchema>;
 
 export const contractLineItemCreateSchema = z.object({
-  description: z.string().min(2, { message: 'A descrição do item deve ter pelo menos 2 caracteres' }),
+  description: z.string().trim().min(2, { message: 'A descrição do item deve ter pelo menos 2 caracteres' }),
   itemType: contractLineItemTypeEnum,
   quantity: z.number().positive({ message: 'A quantidade deve ser um número positivo' }),
   unitPriceCents: z.number().int().min(0, { message: 'O valor unitário deve ser maior ou igual a zero' }),
@@ -628,9 +613,9 @@ export type InvoiceQueryInput = z.infer<typeof invoiceQuerySchema>;
 
 export const invoiceItemCreateSchema = z.object({
   type: invoiceItemTypeEnum.default("SERVICE"),
-  description: z.string().min(2, { message: 'A descrição deve ter pelo menos 2 caracteres' }),
+  description: z.string().trim().min(2, { message: 'A descrição deve ter pelo menos 2 caracteres' }),
   quantity: z.coerce.number().positive({ message: 'A quantidade deve ser positiva' }),
-  unit: z.string().min(1).max(20).default("UN"),
+  unit: z.string().trim().min(1).max(20).transform(normalizeText).default("UN"),
   unitPrice: z.coerce.number().min(0, { message: 'O valor unitário deve ser maior ou igual a zero' }),
   unitCost: z.coerce.number().min(0, { message: 'O custo unitário deve ser maior ou igual a zero' }).optional().default(0),
   totalPrice: z.coerce.number().min(0).optional().nullable(),
@@ -647,7 +632,7 @@ export const invoiceCreateSchema = z.object({
   quoteId: z.string().uuid().optional().nullable(),
   contractId: z.string().uuid().optional().nullable(),
   ticketId: z.string().uuid().optional().nullable(),
-  number: z.string().optional().nullable(),
+  number: z.string().trim().transform(normalizeText).optional().nullable(),
   status: invoiceStatusEnum.default("DRAFT"),
   issueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de emissão inválida' }).optional().nullable(),
   dueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de vencimento inválida' }),
@@ -663,7 +648,7 @@ export type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 export const invoiceUpdateSchema = z.object({
   refreshBase: z.boolean().optional(),
   scheduledFor: z.string().datetime({ offset: true }).optional(),
-  emailRecipients: z.array(z.string().trim().email().max(254)).max(50).optional(),
+  emailRecipients: z.array(emailValueSchema.max(254)).max(50).optional(),
   dueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de vencimento inválida' }).optional(),
   paymentMethod: z.enum(["PIX", "TRANSFER", "CASH", "OTHER"]).optional(),
   pixKey: z.string().optional().nullable(),
@@ -695,7 +680,7 @@ export type QuoteQueryInput = z.infer<typeof quoteQuerySchema>;
 
 export const quoteCreateSchema = z.object({
   ...commercialClientFields,
-  number: z.string().optional().nullable(),
+  number: z.string().trim().transform(normalizeText).optional().nullable(),
   status: quoteStatusEnum.default("DRAFT"),
   issueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de emissão inválida' }).optional().nullable(),
   validUntil: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Data de validade inválida' }),
@@ -743,9 +728,9 @@ const serviceOrderCreateBaseSchema = z.object({
   ticketId: z.string().uuid({ message: 'ID do chamado inválido' }).optional().nullable(),
   contractId: z.string().uuid({ message: 'ID do contrato inválido' }).optional().nullable(),
   responsibleUserId: z.string().uuid({ message: 'ID do responsável inválido' }).optional().nullable(),
-  number: z.string().optional().nullable(),
+  number: z.string().trim().transform(normalizeText).optional().nullable(),
   status: serviceOrderStatusEnum.default("DRAFT"),
-  title: z.string().min(3, { message: 'O título da O.S. deve ter pelo menos 3 caracteres' }),
+  title: z.string().trim().min(3, { message: 'O título da O.S. deve ter pelo menos 3 caracteres' }).transform(normalizeText),
   description: z.string().min(5, { message: 'A descrição da O.S. deve ter pelo menos 5 caracteres' }),
   scheduledFor: z.string().refine((val) => !val || !isNaN(Date.parse(val)), { message: 'Data de agendamento inválida' }).optional().nullable().or(z.literal('')),
   laborMinutes: z.coerce.number().int().min(0).default(0),
@@ -772,15 +757,15 @@ export type ServiceOrderStatusUpdateInput = z.infer<typeof serviceOrderStatusUpd
 const hexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, { message: 'Cor deve ser hexadecimal válido (ex: #1a56db)' }).optional().nullable().or(z.literal(''));
 
 export const workspaceBrandSettingsSchema = z.object({
-  brandName: z.string().max(150, { message: 'O nome público deve ter no máximo 150 caracteres' }).optional().nullable().or(z.literal('')),
-  brandSubtitle: z.string().max(150, { message: 'O subtítulo da marca deve ter no máximo 150 caracteres' }).optional().nullable().or(z.literal('')),
-  legalName: z.string().max(200, { message: 'A razão social deve ter no máximo 200 caracteres' }).optional().nullable().or(z.literal('')),
-  companyDocument: z.string().max(30, { message: 'O documento da empresa deve ter no máximo 30 caracteres' }).optional().nullable().or(z.literal('')),
-  companyEmail: z.string().email({ message: 'E-mail principal inválido' }).max(150).optional().nullable().or(z.literal('')),
-  financialEmail: z.string().email({ message: 'E-mail financeiro inválido' }).max(150).optional().nullable().or(z.literal('')),
-  companyPhone: z.string().max(30, { message: 'O telefone deve ter no máximo 30 caracteres' }).optional().nullable().or(z.literal('')),
-  companyWebsite: z.string().url({ message: 'URL do website inválida' }).max(255).optional().nullable().or(z.literal('')),
-  companyAddress: z.string().max(1000, { message: 'O endereço deve ter no máximo 1000 caracteres' }).optional().nullable().or(z.literal('')),
+  brandName: z.string().max(150, { message: 'O nome público deve ter no máximo 150 caracteres' }).transform(normalizeText).optional().nullable().or(z.literal('')),
+  brandSubtitle: z.string().max(150, { message: 'O subtítulo da marca deve ter no máximo 150 caracteres' }).transform(normalizeText).optional().nullable().or(z.literal('')),
+  legalName: z.string().max(200, { message: 'A razão social deve ter no máximo 200 caracteres' }).transform(normalizeText).optional().nullable().or(z.literal('')),
+  companyDocument: documentValueSchema.pipe(z.string().max(30)).optional().nullable().or(z.literal('')),
+  companyEmail: emailValueSchema.max(150).optional().nullable().or(z.literal('')),
+  financialEmail: emailValueSchema.max(150).optional().nullable().or(z.literal('')),
+  companyPhone: phoneValueSchema.optional().nullable().or(z.literal('')),
+  companyWebsite: websiteValueSchema.pipe(z.string().max(255)).optional().nullable().or(z.literal('')),
+  companyAddress: addressValueSchema.pipe(z.string().max(1000)).optional().nullable().or(z.literal('')),
   primaryColorHex: hexColorSchema,
   documentSecondaryColor: hexColorSchema,
   documentAccentColor: hexColorSchema,
@@ -789,7 +774,7 @@ export const workspaceBrandSettingsSchema = z.object({
   defaultQuoteTerms: z.string().max(2000).optional().nullable().or(z.literal('')),
   defaultServiceOrderTerms: z.string().max(2000).optional().nullable().or(z.literal('')),
   defaultContractTerms: z.string().max(2000).optional().nullable().or(z.literal('')),
-  signatureName: z.string().max(150, { message: 'O nome para assinatura deve ter no máximo 150 caracteres' }).optional().nullable().or(z.literal('')),
+  signatureName: z.string().max(150, { message: 'O nome para assinatura deve ter no máximo 150 caracteres' }).transform(normalizeText).optional().nullable().or(z.literal('')),
 });
 
 export type WorkspaceBrandSettingsInput = z.infer<typeof workspaceBrandSettingsSchema>;
@@ -810,10 +795,10 @@ export type UploadImageInput = z.infer<typeof uploadImageSchema>;
 // --- USER PROFILE VALIDATORS ---
 
 export const updateUserProfileSchema = z.object({
-  name: z.string().min(2, { message: 'Nome deve ter no mínimo 2 caracteres' }).max(150).optional(),
-  jobTitle: z.string().max(150).optional().nullable().or(z.literal('')),
-  phone: z.string().max(30).optional().nullable().or(z.literal('')),
-  documentDisplayName: z.string().max(150).optional().nullable().or(z.literal('')),
+  name: z.string().trim().min(2, { message: 'Nome deve ter no mínimo 2 caracteres' }).max(150).transform(normalizeText).optional(),
+  jobTitle: z.string().max(150).transform(normalizeText).optional().nullable().or(z.literal('')),
+  phone: phoneValueSchema.optional().nullable().or(z.literal('')),
+  documentDisplayName: z.string().max(150).transform(normalizeText).optional().nullable().or(z.literal('')),
   documentSignatureEnabled: z.boolean().optional(),
 });
 
@@ -1581,10 +1566,8 @@ const blockPrivateUrls = (url: string): boolean => {
 };
 
 export const createWebhookEndpointSchema = z.object({
-  name: z.string().min(2, { message: 'O nome do webhook é obrigatório' }).max(150),
-  url: z
-    .string()
-    .url({ message: 'URL inválida. Use http:// ou https://' })
+  name: z.string().trim().min(2, { message: 'O nome do webhook é obrigatório' }).max(150).transform(normalizeText),
+  url: websiteValueSchema.pipe(z.string().min(1, 'Informe a URL do webhook'))
     .refine((url) => /^https?:\/\//i.test(url), {
       message: 'URL deve usar protocolo HTTP ou HTTPS',
     })
@@ -1625,22 +1608,22 @@ export type WebhookDeliveryQueryInput = z.infer<typeof webhookDeliveryQuerySchem
 // --- SETUP VALIDATORS ---
 
 export const setupAdminSchema = z.object({
-  workspaceName: z.string().min(2, { message: 'Nome do workspace é obrigatório' }),
-  adminName: z.string().min(2, { message: 'Nome do administrador é obrigatório' }),
-  adminEmail: z.string().email({ message: 'E-mail inválido' }),
+  workspaceName: z.string().trim().min(2, { message: 'Nome do workspace é obrigatório' }).transform(normalizeText),
+  adminName: z.string().trim().min(2, { message: 'Nome do administrador é obrigatório' }).transform(normalizeText),
+  adminEmail: emailValueSchema.max(150),
   adminPassword: z
     .string()
     .min(8, { message: 'A senha deve ter no mínimo 8 caracteres' })
     .regex(/[A-Z]/, { message: 'A senha deve conter pelo menos uma letra maiúscula' })
     .regex(/[0-9]/, { message: 'A senha deve conter pelo menos um número' }),
   // Optional brand fields for wizard step 2 & 3
-  brandName: z.string().max(150).optional().nullable().or(z.literal('')),
-  legalName: z.string().max(200).optional().nullable().or(z.literal('')),
-  companyDocument: z.string().max(30).optional().nullable().or(z.literal('')),
-  companyEmail: z.string().email().max(150).optional().nullable().or(z.literal('')),
-  companyPhone: z.string().max(30).optional().nullable().or(z.literal('')),
-  companyWebsite: z.string().url().max(255).optional().nullable().or(z.literal('')),
-  companyAddress: z.string().max(1000).optional().nullable().or(z.literal('')),
+  brandName: z.string().max(150).transform(normalizeText).optional().nullable().or(z.literal('')),
+  legalName: z.string().max(200).transform(normalizeText).optional().nullable().or(z.literal('')),
+  companyDocument: documentValueSchema.pipe(z.string().max(30)).optional().nullable().or(z.literal('')),
+  companyEmail: emailValueSchema.max(150).optional().nullable().or(z.literal('')),
+  companyPhone: phoneValueSchema.optional().nullable().or(z.literal('')),
+  companyWebsite: websiteValueSchema.pipe(z.string().max(255)).optional().nullable().or(z.literal('')),
+  companyAddress: addressValueSchema.pipe(z.string().max(1000)).optional().nullable().or(z.literal('')),
   primaryColorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().nullable().or(z.literal('')),
   documentSecondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().nullable().or(z.literal('')),
   documentAccentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().nullable().or(z.literal('')),
@@ -1652,8 +1635,8 @@ export type SetupAdminInput = z.infer<typeof setupAdminSchema>;
 // --- WORKSPACE USER MANAGEMENT VALIDATORS ---
 
 export const createWorkspaceUserSchema = z.object({
-  name: z.string().min(2, { message: 'Nome deve ter no mínimo 2 caracteres' }),
-  email: z.string().email({ message: 'E-mail inválido' }),
+  name: z.string().trim().min(2, { message: 'Nome deve ter no mínimo 2 caracteres' }).transform(normalizeText),
+  email: emailValueSchema.max(150),
   password: z.string().min(8, { message: 'A senha deve ter no mínimo 8 caracteres' }),
   role: z.enum(['ADMIN', 'TECHNICIAN', 'FINANCIAL', 'READ_ONLY'], {
     errorMap: () => ({ message: 'Papel inválido. Use: ADMIN, TECHNICIAN, FINANCIAL ou READ_ONLY' }),
@@ -1724,7 +1707,7 @@ export const INBOUND_ACTIONS = [
 ] as const;
 
 export const createInboundWebhookSchema = z.object({
-  name: z.string().min(2, { message: 'O nome do endpoint de entrada é obrigatório' }).max(150),
+  name: z.string().trim().min(2, { message: 'O nome do endpoint de entrada é obrigatório' }).max(150).transform(normalizeText),
   allowedActions: z.array(z.enum(INBOUND_ACTIONS)).min(1, { message: 'Selecione ao menos uma ação permitida' }),
   isActive: z.boolean().default(true),
 });
@@ -1750,9 +1733,9 @@ export const workspaceEmailSettingsSchema = z.object({
   username: z.string().max(254).refine(value => !/[\r\n]/.test(value), 'Usuário inválido'),
   password: z.string().max(2048).optional(),
   clearPassword: z.boolean().optional(),
-  fromEmail: z.string().trim().email().max(254).or(z.literal('')),
-  fromName: z.string().trim().max(150).refine(value => !/[\r\n]/.test(value), 'Nome inválido'),
-  replyTo: z.string().trim().email().max(254).optional().nullable().or(z.literal('')),
+  fromEmail: emailValueSchema.max(254).or(z.literal('')),
+  fromName: z.string().trim().max(150).refine(value => !/[\r\n]/.test(value), 'Nome inválido').transform(normalizeText),
+  replyTo: emailValueSchema.max(254).optional().nullable().or(z.literal('')),
   revision: z.number().int().min(0),
 }).strict().superRefine((data, ctx) => {
   if (data.enabled && (!data.host || !data.fromEmail)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Informe servidor e remetente para ativar o SMTP.' });

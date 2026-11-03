@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { apiRequest } from '../../../../lib/api';
 import { useRouter } from 'next/navigation';
-import { clientSchema, formatCpfCnpj, formatPhoneNumber } from '@peanut/validators';
+import { clientSchema } from '@peanut/validators';
 import { useI18n } from '../../../../i18n/useI18n';
 import Button from '../../../../components/ui/Button';
 import Input from '../../../../components/ui/Input';
@@ -119,14 +119,14 @@ export default function NewClientPage() {
             )}
 
             <div className={type === 'LEGAL_PERSON' ? 'md:col-span-2' : ''}>
-              <Input
+              <Input mask={type === 'NATURAL_PERSON' ? 'cpf' : 'cnpj'}
                 id="document"
                 type="text"
                 label={type === 'LEGAL_PERSON' ? 'CNPJ' : 'CPF'}
                 placeholder={type === 'LEGAL_PERSON' ? '12.345.678/0001-90' : '123.456.789-00'}
                 value={documentVal}
                 onChange={(e) => setDocumentVal(e.target.value)}
-                onBlur={() => setDocumentVal(formatCpfCnpj(documentVal))}
+
                 disabled={loading}
               />
             </div>
@@ -136,7 +136,7 @@ export default function NewClientPage() {
         {/* Section 2: Contact */}
         <Card title={t.clients.sections.contact}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-            <Input
+            <Input mask="email"
               id="email"
               type="email"
               label="E-mail Principal"
@@ -146,19 +146,19 @@ export default function NewClientPage() {
               disabled={loading}
             />
 
-            <Input
+            <Input mask="phone"
               id="phone"
               type="text"
               label="Telefone de Contato"
               placeholder="1155550199"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              onBlur={() => setPhone(formatPhoneNumber(phone))}
+
               disabled={loading}
             />
 
             <div className="md:col-span-2">
-              <Input
+              <Input mask="website"
                 id="website"
                 type="text"
                 label="Website (Opcional)"

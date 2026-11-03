@@ -8,6 +8,7 @@ import { AuditService } from "../audit/audit.service";
 import { ContractsQuotaService } from "../contracts/contracts-quota.service";
 import {
   ClientUserCreateInput,
+  clientUserCreateSchema,
   ClientUserUpdateInput,
 } from "@peanut/validators";
 
@@ -324,7 +325,13 @@ export class ClientUsersService {
     };
 
     for (const { row, lineNumber } of parsedRows) {
-      const mapped = this.mapAdRowToClientUser(row);
+      const validation = clientUserCreateSchema.safeParse(this.mapAdRowToClientUser(row));
+      if (!validation.success) {
+        summary.skipped++;
+        summary.errors.push({ line: lineNumber, message: validation.error.issues.map(issue => issue.message).join(', ') });
+        continue;
+      }
+      const mapped = validation.data;
       if (!mapped.fullName || mapped.fullName.length < 2) {
         summary.skipped++;
         summary.errors.push({ line: lineNumber, message: "Nome ausente ou inválido." });

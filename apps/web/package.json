@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@peanut/documents": "workspace:*",
     "@peanut/types": "workspace:*",
     "@peanut/ui": "workspace:*",
     "@peanut/utils": "workspace:*",

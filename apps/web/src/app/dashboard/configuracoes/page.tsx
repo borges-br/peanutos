@@ -1,5 +1,7 @@
 'use client';
 
+import { NormalizedInput, NormalizedTextarea } from '../../../components/ui/NormalizedInput';
+
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Button from '../../../components/ui/Button';
@@ -290,7 +292,7 @@ export default function SettingsPage() {
               ].map(({ key, label, placeholder, type, mono }) => (
                 <div key={key} className="flex flex-col gap-xs">
                   <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">{label}</label>
-                  <input
+                  <NormalizedInput mask={key === 'companyPhone' ? 'phone' : key === 'companyDocument' ? 'taxId' : key === 'companyWebsite' ? 'website' : type === 'email' ? 'email' : 'text'}
                     className={`bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none ${mono ? 'font-mono' : ''}`}
                     placeholder={placeholder}
                     type={type}
@@ -302,7 +304,7 @@ export default function SettingsPage() {
               ))}
               <div className="flex flex-col gap-xs md:col-span-3">
                 <label className="font-label-caps text-[10px] text-on-surface-variant uppercase font-semibold">Endereço</label>
-                <textarea
+                <NormalizedTextarea mask="address"
                   className="bg-background border border-outline-variant rounded p-sm font-body-sm text-[13px] text-on-surface focus:border-primary outline-none min-h-[60px]"
                   placeholder="Rua, Número, Bairro, Cidade – Estado, CEP"
                   value={brandSettings.companyAddress || ''}

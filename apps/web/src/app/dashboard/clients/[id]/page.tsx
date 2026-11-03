@@ -259,7 +259,7 @@ export default function ClientDetailPage() {
           required
           disabled={contactSaving}
         />
-        <Input
+        <Input mask="email"
           label={t.clients.labels.contactEmail}
           type="email"
           value={contactEmail}
@@ -267,13 +267,13 @@ export default function ClientDetailPage() {
           required
           disabled={contactSaving}
         />
-        <Input
+        <Input mask="phone"
           label={t.clients.labels.contactPhone}
           value={contactPhone}
           onChange={(e) => setContactPhone(e.target.value)}
           disabled={contactSaving}
         />
-        <Input
+        <Input mask="phone"
           label={t.clients.labels.contactMobile}
           value={contactMobile}
           onChange={(e) => setContactMobile(e.target.value)}

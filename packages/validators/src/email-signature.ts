@@ -1,10 +1,12 @@
 import { z } from "zod";
+import { normalizeText, normalizeAddress, normalizeWebsite, emailValueSchema, phoneValueSchema } from './normalization';
 const line = (max: number) =>
   z
     .string()
     .trim()
     .max(max)
-    .refine((v) => !/[\u0000-\u001f\u007f]/.test(v), "Use uma linha de texto.");
+    .refine((v) => !/[\u0000-\u001f\u007f]/.test(v), "Use uma linha de texto.")
+    .transform(normalizeText);
 export const emailSignatureSchema = z
   .object({
     enabled: z.boolean(),
@@ -15,13 +17,14 @@ export const emailSignatureSchema = z
     ),
     jobTitle: line(150),
     company: line(150),
-    email: z.string().trim().email().max(254).or(z.literal("")),
-    phone: line(40),
-    whatsapp: line(40),
+    email: emailValueSchema.max(254).or(z.literal("")),
+    phone: phoneValueSchema,
+    whatsapp: phoneValueSchema,
     website: z
       .string()
       .trim()
       .max(255)
+      .transform(normalizeWebsite)
       .refine(
         (v) =>
           !v ||
@@ -35,7 +38,7 @@ export const emailSignatureSchema = z
           })(),
         "Use uma URL HTTPS válida.",
       ),
-    address: line(400),
+    address: line(400).transform(normalizeAddress),
     registration: line(80),
   })
   .strict();

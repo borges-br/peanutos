@@ -1,4 +1,6 @@
 "use client";
+
+import { NormalizedInput } from '../ui/NormalizedInput';
 import { useEffect, useState } from "react";
 import type { EmailSignatureConfig } from "@peanut/validators";
 import { apiRequest } from "../../lib/api";
@@ -121,7 +123,7 @@ export default function EmailSignatureSettings() {
               {fields.map(([key, label, type]) => (
                 <label className="brand-field" key={key}>
                   {label}
-                  <input
+                  <NormalizedInput mask={key === "phone" || key === "whatsapp" ? "phone" : key === "address" ? "address" : key === "website" ? "website" : key === "email" ? "email" : "text"}
                     type={type || "text"}
                     value={String(config[key])}
                     maxLength={
