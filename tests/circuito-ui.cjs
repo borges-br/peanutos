@@ -138,6 +138,7 @@ const evidence = {
         });
       let result = {};
       if (endpoint === "/auth/me") result = user;
+      else if (endpoint === "/auth/login" || endpoint === "/auth/refresh") result = { accessToken: "synthetic-circuito-token", user };
       else if (endpoint === "/setup/status")
         result = { initialized: true, needsSetup: false };
       else if (endpoint === "/public/branding/login") result = { brand: null };
@@ -229,6 +230,7 @@ const evidence = {
     });
     const page = await context.newPage();
     page.on("pageerror", (e) => evidence.errors.push(e.message));
+    page.on("console", message => { if (message.type() === "error") evidence.errors.push(message.text()); });
     async function wait() {
       await page.evaluate(async () => {
         await document.fonts.ready;
@@ -306,9 +308,12 @@ const evidence = {
     evidence.checks.push(
       "Neutral login uses selected identity, clear/dark schemes and responsive artwork",
     );
-    await page.evaluate(() =>
-      localStorage.setItem("peanut_token", "synthetic-circuito-token"),
-    );
+    await page.locator("#email").fill("demo@example.invalid");
+    await page.locator("#password").fill("synthetic-login-fixture");
+    await page.getByRole("button", {name:"Entrar",exact:true}).click();
+    await page.waitForURL(origin + "/dashboard");
+    await page.getByRole("heading", {name:"Olá, Marina.",exact:true}).waitFor();
+    evidence.checks.push("Login hands favicon ownership to the authenticated shell without DOM errors");
     for (const theme of ["light", "dark"]) {
       mode = theme;
       await page.setViewportSize({ width: 1440, height: 1000 });
@@ -374,6 +379,20 @@ const evidence = {
       true,
     );
     await capture("legacy-company");
+    for (const [link, heading] of [
+      ["Clientes", "Clientes"],
+      ["Visão geral", "Olá, Marina."],
+    ]) {
+      await page.getByRole("link", { name: link, exact: true }).first().click();
+      await page.waitForFunction(expected =>
+          [...document.querySelectorAll("h1")].some(h => h.textContent.trim() === expected) ||
+          document.body.textContent.includes("Application error:"), heading);
+      assert.equal(evidence.errors.length, 0, evidence.errors.join("\n"));
+      await page.getByRole("heading", { name: heading, exact: true }).waitFor();
+    }
+    evidence.checks.push(
+      "Client-side navigation preserves the company favicon without React DOM errors",
+    );
     evidence.checks.push(
       "Legacy company logo/font/favicon preserved without product images",
     );
