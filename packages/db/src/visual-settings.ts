@@ -1,5 +1,5 @@
 import type { PrismaClient, Prisma } from "@prisma/client";
-import { LocalObjectStorage } from "@peanut/utils";
+import { LocalObjectStorage, brandMediaAssetIds, PRODUCT_LOGO_DATA_URI } from "@peanut/utils";
 
 export class VisualSettingsError extends Error {
   constructor(
@@ -14,11 +14,18 @@ export class VisualSettingsError extends Error {
 export async function getPublishedDocumentIdentity(
   db: PrismaClient,
   workspaceId: string,
-) {
+): Promise<Partial<{ publicName: string; brandSubtitle: string; documentPrimaryColor: string; footerText: string; visual: any; logoUrl: string | null }> | null> {
   const row = await db.workspaceVisualSettings.findUnique({
     where: { workspaceId },
   });
-  if (!row?.published) return null;
+  if (!row?.published) {
+    const ws = await db.workspace?.findUnique({ where: { id: workspaceId }, select: { brandName: true, logoFileObjectId: true, primaryColorHex: true } });
+    if (!ws || ws.logoFileObjectId || (ws.brandName && !["Peanut OS","PeanutOS"].includes(ws.brandName))) return null;
+    return { publicName: "Peanut OS", logoUrl: PRODUCT_LOGO_DATA_URI,
+      documentPrimaryColor: ws.primaryColorHex || "#304FD0",
+      visual: { font: "geist", headingFont: "geist", accent: ws.primaryColorHex || "#304FD0", logoWidth: 240, logoHeight: 64, alignment: "left", margin: 20, style: "standard", footer: "" },
+    };
+  }
   const config = row.published as any;
   const assetId = config.assets?.logoLight;
   let logoUrl: string | null = null;
@@ -51,7 +58,7 @@ export async function getPublishedDocumentIdentity(
           ? config.font
           : config.documents.font,
     },
-    ...(assetId ? { logoUrl } : {}),
+    ...(assetId ? { logoUrl } : config.media?.productIdentity ? { logoUrl: PRODUCT_LOGO_DATA_URI } : {}),
   };
 }
 
@@ -100,6 +107,7 @@ export async function writeVisualSettings(
         ...Object.values((config as any).assets || {}),
         (config as any).email?.logoAssetId,
         ...((config as any).email?.imageAssetIds || []),
+        ...brandMediaAssetIds(config),
       ].filter(Boolean)),
     ] as string[];
     const assets = await tx.brandAsset.findMany({

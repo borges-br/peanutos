@@ -641,6 +641,7 @@ export default function DocumentosPage() {
                   <tr>
                     <td colSpan={8} className="p-xl text-center">
                       <EmptyState
+                        module="documents" filtered={!!(searchTerm || documentTypeFilter || entityTypeFilter || visibilityFilter)}
                         title={t.documents.emptyTitle}
                         description={t.documents.emptyDescription}
                       />

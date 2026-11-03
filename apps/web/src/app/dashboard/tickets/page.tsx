@@ -427,6 +427,7 @@ export default function TicketsPage() {
           </div>
         ) : tickets.length === 0 ? (
           <EmptyState
+            module="tickets" filtered={!!(search || clientId || status || priority || assignedToId)}
             title={t.tickets.emptyList}
             description={t.states.emptyDescription}
             action={

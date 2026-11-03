@@ -25,10 +25,10 @@ test("draft, publication, persistence, stale writers and restore are independent
   });
   assert.equal(r.status, 200, r.body);
   assert.equal(r.json().revision, 1);
-  assert.equal(
-    (await f.request(u, "GET", "/settings/visual/active")).json().config,
-    null,
-  );
+  const activeBeforePublish = (await f.request(u,"GET","/settings/visual/active")).json();
+  assert.equal(activeBeforePublish.version,0);
+  assert.equal(activeBeforePublish.source,"company");
+  assert.equal((await f.request(u,"GET","/settings/visual")).json().published,null);
   assert.equal(
     (
       await f.request(u, "PUT", "/settings/visual/draft", {
@@ -166,9 +166,21 @@ test("invalid contrast can remain a draft but cannot become the active identity"
   assert.match(r.body, /contraste/);
   assert.equal(
     (await f.request(a.users.OWNER, "GET", "/settings/visual/active")).json()
-      .config,
-    null,
+      .version,
+    0,
   );
+});
+
+test("favicon, login artwork and per-module illustrations cannot reference another company", async () => {
+  const a=await f.tenant(),b=await f.tenant(),foreign=await f.asset(b.users.OWNER,"Foreign media");
+  for(const slot of ['favicon','login','empty']){
+    const c=f.config();
+    if(slot==='favicon')c.media.favicon=foreign.id;
+    if(slot==='login')c.media.loginArtwork={mode:'custom',light:foreign.id,dark:null};
+    if(slot==='empty'){c.media.emptyStates.mode='custom';c.media.emptyStates.images.clients.light=foreign.id;}
+    const response=await f.request(a.users.OWNER,'PUT','/settings/visual/draft',{revision:0,config:c});
+    assert.equal(response.status,400,response.body);
+  }
 });
 test("derived assets preserve the original; foreign parent references are refused", async () => {
   const a = await f.tenant(),
@@ -390,6 +402,11 @@ test("legacy identities are normalized on read without rewriting historical JSON
     u = a.users.OWNER,
     old = f.config();
   delete old.customization;
+  delete old.media;
+  for (const mode of ["light", "dark"]) {
+    delete old[mode].fieldBorder;
+    delete old[mode].statusColors;
+  }
   for (const mode of ["light", "dark"])
     for (const key of [
       "sidebarText",
@@ -415,6 +432,10 @@ test("legacy identities are normalized on read without rewriting historical JSON
   const active = (await f.request(u, "GET", "/settings/visual/active")).json();
   assert.equal(active.config.customization.components.fieldHeight, 44);
   assert.equal(active.config.documents.font, "inherit");
+  assert.equal(active.config.media.productIdentity, false);
+  assert.equal(active.config.media.emptyStates.mode, "none");
+  assert.equal(active.config.light.fieldBorder, null);
+  assert.equal(active.config.light.statusColors, null);
   const read = (await f.request(u, "GET", "/settings/visual")).json();
   assert.equal(read.revision, 7);
   assert.equal(read.draft.light.sidebarText, null);
@@ -455,4 +476,12 @@ test("simultaneous new-style writers serialize and preserve the winning customiz
   assert.deepEqual(active, winner.draft);
   assert.equal(active.customization.components.buttonShape, "pill");
   assert.equal(active.light.sidebarText, candidates[0].dark.text);
+});
+
+test("an uncustomized workspace receives the product identity without creating published company settings",async()=>{
+  const t=await f.tenant('Peanut OS');
+  const active=(await f.request(t.users.OWNER,'GET','/settings/visual/active')).json();
+  assert.equal(active.source,'product');assert.equal(active.version,0);
+  assert.equal(active.config.media.productIdentity,true);assert.equal(active.config.email.enabled,true);
+  assert.equal(await f.prisma.workspaceVisualSettings.findUnique({where:{workspaceId:t.ws.id}}),null);
 });

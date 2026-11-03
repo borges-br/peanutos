@@ -16,7 +16,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, fal
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!src) {
+    if (!src || src.startsWith('/brand/peanut-os/')) {
       setBlobUrl(null);
       setLoading(false);
       setError(false);
@@ -63,6 +63,9 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, fal
       }
     };
   }, [src, onLoadError]);
+
+  // Built-in, same-origin product files are public and never carry an API token.
+  if (src?.startsWith('/brand/peanut-os/')) return <img src={src} alt={props.alt || ''} {...props} />;
 
   if (loading) {
     return (

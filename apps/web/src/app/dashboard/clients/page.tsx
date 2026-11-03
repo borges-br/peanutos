@@ -5,6 +5,7 @@ import { apiRequest } from "../../../lib/api";
 import Input from "../../../components/ui/Input";
 import Button from "../../../components/ui/Button";
 import DataTable from "../../../components/ui/DataTable";
+import EmptyState from "../../../components/ui/EmptyState";
 import { useAuth } from "../../../context/AuthContext";
 export default function ClientsPage() {
   const { user } = useAuth();
@@ -230,6 +231,8 @@ export default function ClientsPage() {
             Tentar novamente
           </Button>
         </div>
+      ) : !loading && !search && !status && !groups.active?.data?.length && !groups.other?.data?.length ? (
+        <EmptyState module="clients" title="Seu primeiro cliente começa aqui." description="Cadastre uma empresa para reunir contatos, equipamentos, chamados e contratos em um só lugar." />
       ) : (
         ["active", "other"].map((group) => (
           <section key={group} className="space-y-md" aria-busy={loading}>

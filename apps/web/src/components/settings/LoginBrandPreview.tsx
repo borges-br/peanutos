@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import type { VisualConfig } from "@peanut/validators";
 import type { BrandAsset } from "../../lib/visual-brand";
 import PublicLoginSurface from "../layout/PublicLoginSurface";
+import { publicLoginBrand } from "../../lib/public-login-brand";
 
 export default function LoginBrandPreview({
   config,
@@ -26,12 +27,6 @@ export default function LoginBrandPreview({
   const width = mobile ? 390 : 1100,
     height = mobile ? 720 : 620;
   const scale = Math.min(1, available / width);
-  const logos = Object.fromEntries(
-    Object.entries(config.assets).map(([slot, id]) => [
-      slot,
-      assets.find((a) => a.id === id)?.url || null,
-    ]),
-  ) as Record<keyof VisualConfig["assets"], string | null>;
   return (
     <div className="space-y-sm">
       <div
@@ -69,12 +64,7 @@ export default function LoginBrandPreview({
           <PublicLoginSurface
             preview
             authenticatedImages
-            brand={{
-              ...config,
-              logos,
-              radius: config.interface.radius,
-              headingFont: config.customization.typography.headingFont,
-            }}
+            brand={publicLoginBrand(config, assets)}
           >
             <div
               className="brand-login-preview-form"

@@ -13,6 +13,7 @@ import {
   visualIssues,
   normalizeVisualConfig,
   documentVisualConfig,
+  LEGACY_BRAND_MEDIA,
 } from "@peanut/validators";
 import {
   renderA4Document,
@@ -21,6 +22,7 @@ import {
 } from "@peanut/documents";
 import { StorageService } from "../storage/storage.service";
 import { PublicBrandService } from "./public-brand.service";
+import { brandMediaAssetIds, PRODUCT_LOGO_DATA_URI } from "@peanut/utils";
 
 @Injectable()
 export class VisualSettingsService {
@@ -31,10 +33,13 @@ export class VisualSettingsService {
     const ws = await prisma.workspace.findUniqueOrThrow({
       where: { id: workspaceId },
     });
+    const hasCompanyBrand = !!(ws.logoFileObjectId || (ws.brandName && !["Peanut OS", "PeanutOS"].includes(ws.brandName)));
     return {
       ...DEFAULT_VISUAL_CONFIG,
+      media: hasCompanyBrand ? LEGACY_BRAND_MEDIA : DEFAULT_VISUAL_CONFIG.media,
+      email: hasCompanyBrand ? { ...DEFAULT_VISUAL_CONFIG.email, enabled: false } : DEFAULT_VISUAL_CONFIG.email,
       name: ws.brandName || DEFAULT_VISUAL_CONFIG.name,
-      subtitle: ws.brandSubtitle || "",
+      subtitle: ws.brandSubtitle || (hasCompanyBrand ? "" : DEFAULT_VISUAL_CONFIG.subtitle),
       documents: {
         ...DEFAULT_VISUAL_CONFIG.documents,
         accent: ws.primaryColorHex || DEFAULT_VISUAL_CONFIG.documents.accent,
@@ -70,8 +75,10 @@ export class VisualSettingsService {
     const row = await prisma.workspaceVisualSettings.findUnique({
       where: { workspaceId },
     });
+    const config = row?.published ? normalizeVisualConfig(row.published) : await this.defaults(workspaceId);
     return {
-      config: row?.published ? normalizeVisualConfig(row.published) : null,
+      config,
+      source: row?.published || !config.media.productIdentity ? "company" : "product",
       version: row?.publishedVersion ?? 0,
       assets: row?.published ? await this.assets(workspaceId) : [],
     };
@@ -239,7 +246,7 @@ export class VisualSettingsService {
     },
   ) {
     const ids = [
-      ...new Set(Object.values(config.assets).filter(Boolean)),
+      ...new Set([...Object.values(config.assets), ...brandMediaAssetIds(config)].filter(Boolean)),
     ] as string[];
     if (
       (await prisma.brandAsset.count({
@@ -256,7 +263,7 @@ export class VisualSettingsService {
       workspaceId,
       config.assets.logoLight,
       ws.logoFileObjectId,
-    );
+    ) || (config.media.productIdentity ? PRODUCT_LOGO_DATA_URI : null);
     const visual: DocumentVisual = documentVisualConfig(config);
     if (type === "PROPOSAL" || (type === "REPORT" && !template))
       return renderEditorialDocument({

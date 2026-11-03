@@ -241,6 +241,28 @@ test('email attaches the correct PDF once and never resends accepted recipients'
   assert.equal(messages[0].disableUrlAccess, true);
 });
 
+test('scheduled delivery signs as the approving finance user and preserves that identity after profile edits', async () => {
+  const f=await prepared();
+  let name='Approving Finance';
+  let lookups=0;
+  f.db.user={findFirst:async ({where})=>{
+    lookups++; assert.equal(where.id,actor); assert.equal(where.workspaceId,ws);
+    return {role:'FINANCIAL',emailSignature:{enabled:true,showLogo:false,displayName:name,jobTitle:'Finance',company:'Synthetic Company',email:'finance@example.invalid',phone:'',whatsapp:'',website:'',address:'',registration:''}};
+  }};
+  await issued(f);
+  assert.equal(f.state.events[0].emailTemplateSnapshot.senderUserId,actor);
+  assert.equal(f.state.events[0].emailTemplateSnapshot.signature.displayName,'Approving Finance');
+  name='Changed Later';
+  const messages=[];
+  await sendContractEmails(f.db,f.store,now,{sendMail:async message=>{messages.push(message);return {accepted:message.to,rejected:[]}}});
+  assert.equal(lookups,1);
+  assert.equal(messages.length,1);
+  assert(messages[0].html.includes('Approving Finance'));
+  assert(messages[0].text.includes('Approving Finance'));
+  assert(!messages[0].html.includes('Changed Later'));
+  assert.deepEqual(messages[0].from,{name:'Billing Test',address:'billing@example.invalid'});
+});
+
 test('partial acceptance is visible and a requested retry targets only rejected recipients', async () => {
   const f = await issued(await prepared()); const messages = [];
   const transport = { sendMail: async message => { messages.push(message); return messages.length === 1 ? { accepted: [message.to[0]], rejected: [message.to[1]] } : { accepted: message.to, rejected: [] }; } };

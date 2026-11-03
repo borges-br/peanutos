@@ -3,7 +3,6 @@ import React from "react";
 import { useBrand } from "../../context/BrandContext";
 import { activeAsset } from "../../lib/visual-brand";
 import AuthenticatedImage from "../ui/AuthenticatedImage";
-import logoImg from "../../../images/layout/logo.webp";
 import { surfaceScheme } from "@peanut/validators";
 
 export default function BrandMark({
@@ -15,25 +14,7 @@ export default function BrandMark({
 }) {
   const { config, assets, scheme } = useBrand();
   if (!config)
-    return (
-      <>
-        <img
-          src={logoImg.src}
-          alt=""
-          width={40}
-          height={40}
-          className="rounded-xl"
-        />
-        {!mobile && (
-          <span>
-            <strong>
-              peanut<span className="text-primary">os</span>
-            </strong>
-            <small>Seu trabalho, conectado.</small>
-          </span>
-        )}
-      </>
-    );
+    return <span aria-label="Carregando identidade" className="brand-initial" aria-busy="true">…</span>;
   const brandScheme = surfaceScheme(
     config[scheme][surface === "sidebar" ? "sidebar" : "surface"],
   );

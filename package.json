@@ -28,9 +28,12 @@
     "test:branding": "node --test tests/branding-core.test.cjs tests/branding-http.test.cjs tests/static-svg.test.cjs",
     "test:branding:postgres": "node tests/run-branding-postgres.cjs",
     "test:branding:ui": "node tests/branding-ui.cjs",
+    "test:product-brand": "node --test tests/product-brand.test.cjs",
+    "test:product-brand:ui": "node tests/circuito-ui.cjs",
     "test:input-normalization": "node --test tests/input-normalization.test.cjs tests/input-normalization-api.test.cjs",
     "test:input-normalization:ui": "node tests/input-normalization-ui.cjs",
-    "test:invoice-layout": "node --test tests/invoice-layout.test.cjs"
+    "test:invoice-layout": "node --test tests/invoice-layout.test.cjs",
+    "test:quote-layout": "node --test tests/quote-layout.test.cjs"
   },
   "devDependencies": {
     "prettier": "^3.2.5",

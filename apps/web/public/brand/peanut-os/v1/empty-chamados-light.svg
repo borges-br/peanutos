@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" width="240" height="160">
+  <title>Chamados — caminho de entrada preparado — light</title>
+  <desc>Uma entrada circular vazia se liga por um percurso ortogonal curto a um receptáculo modular. O caminho está disponível, sem indicar solicitação recebida ou atendimento finalizado.</desc>
+  <g>
+    <path d="M64 120 H112 Q116 120 116 116 V76 Q116 72 120 72 H152" fill="none" stroke="#304FD0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="56" cy="120" r="8" fill="none" stroke="#12213A" stroke-width="2" />
+    <rect x="152" y="40" width="48" height="64" rx="4" fill="#BBCEFF" stroke="#12213A" stroke-width="2" />
+    <rect x="160" y="48" width="32" height="8" rx="4" fill="#304FD0" stroke="none" stroke-width="2" />
+    <rect x="160" y="72" width="32" height="16" rx="4" fill="none" stroke="#12213A" stroke-width="2" />
+  </g>
+</svg>

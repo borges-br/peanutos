@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" width="240" height="160">
+  <title>Documentos — folhas coordenadas — light</title>
+  <desc>Três folhas modulares sobrepostas em deslocamento ortogonal regular, com linhas abstratas na folha da frente. Não implica arquivos já enviados, assinados ou protegidos.</desc>
+  <g>
+    <rect x="48" y="64" width="80" height="72" rx="4" fill="#BBCEFF" stroke="#12213A" stroke-width="2" />
+    <rect x="80" y="48" width="80" height="80" rx="4" fill="#304FD0" stroke="#12213A" stroke-width="2" />
+    <rect x="112" y="32" width="80" height="88" rx="4" fill="#BBCEFF" stroke="#12213A" stroke-width="2" />
+    <rect x="128" y="48" width="40" height="8" rx="4" fill="#304FD0" stroke="none" stroke-width="2" />
+    <line x1="128" y1="72" x2="176" y2="72" stroke="#12213A" stroke-width="2" stroke-linecap="round" />
+    <line x1="128" y1="88" x2="168" y2="88" stroke="#12213A" stroke-width="2" stroke-linecap="round" />
+    <line x1="128" y1="104" x2="160" y2="104" stroke="#12213A" stroke-width="2" stroke-linecap="round" />
+  </g>
+</svg>

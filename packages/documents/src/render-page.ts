@@ -22,6 +22,6 @@ export async function prepareDocumentPage(
   });
   const result = await page.evaluate(paginateInvoiceDocument);
   if (result?.overflow)
-    throw new Error("A paginação da fatura excedeu a área útil.");
+    throw new Error("A paginação do documento excedeu a área útil.");
   return result;
 }

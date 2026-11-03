@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import { apiRequest } from '../../lib/api';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import logoImg from '../../../images/layout/logo.webp';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -271,7 +270,7 @@ export default function SetupPage() {
         <div className="text-center mb-lg">
           <div className="flex justify-center items-center gap-xs mb-sm">
             <div className="w-6 h-6 flex items-center justify-center rounded overflow-hidden">
-              <img src={logoImg.src} alt="Peanut OS Logo" className="w-full h-full object-contain" />
+              <img src="/brand/peanut-os/v1/icon-dark.svg" alt="Peanut OS" className="w-full h-full object-contain" />
             </div>
             <span className="font-headline-md text-base font-bold text-primary tracking-tight">Peanut OS</span>
           </div>

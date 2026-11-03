@@ -10,7 +10,7 @@ import Button from "../../components/ui/Button";
 import { useBrand } from "../../context/BrandContext";
 export default function PersonalAppearance() {
   const { user } = useAuth();
-  const { config } = useBrand();
+  const { config, source } = useBrand();
   const [prefs, setPrefs] = useState(defaultAppearance),
     [notice, setNotice] = useState("");
   useEffect(() => {
@@ -40,7 +40,7 @@ export default function PersonalAppearance() {
           Restaurar minhas preferências
         </Button>
       </header>
-      {config ? (
+      {config && source === "company" ? (
         <section className="settings-panel">
           <h2>Identidade da empresa</h2>
           <p className="text-sm text-on-surface-variant mt-2">
@@ -53,6 +53,7 @@ export default function PersonalAppearance() {
           <h2>Cor de destaque</h2>
           <div className="flex flex-wrap gap-md mt-md">
             {[
+              { value: "brand", label: "Circuito", color: "#304FD0" },
               { value: "mint", label: "Maré", color: "#93e2cf" },
               { value: "iris", label: "Íris", color: "#bfc4ff" },
               { value: "amber", label: "Âmbar", color: "#f1c686" },

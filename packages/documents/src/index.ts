@@ -6,6 +6,7 @@ import { formatCpfCnpj, formatPhone, formatDateTime } from './formatters';
 import { documentIdentityCss, DocumentVisual } from './identity';
 import { invoiceBillingNote } from './billing-note';
 import { invoiceLayoutCss } from './invoice-layout';
+import { quoteLayoutCss } from './quote-layout';
 export * from './identity';
 export * from './formatters';
 export * from './billing-note';
@@ -383,6 +384,8 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
   const generatedAt = params.generatedAt || formatDateTime(new Date(), params.locale, timeZone);
   const locale = params.locale || "pt-BR";
   const isInvoice = documentType === 'INVOICE';
+  const isQuote = documentType === 'QUOTE';
+  const isPaginated = isInvoice || isQuote;
   const t = translations[locale] || translations["pt-BR"];
 
   // Colors & Brand Settings
@@ -705,7 +708,7 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
   const renderedBlocks: string[] = [];
   for (let index = 0; index < activeBlocks.length; index++) {
     const block = activeBlocks[index]!;
-    if (isInvoice && block === 'footer') continue;
+    if (isPaginated && block === 'footer') continue;
     if (isInvoice && block === 'logo' && activeBlocks[index + 1] === 'companyInfo') {
       renderedBlocks.push(`<div class="block-container block-invoice-issuer">${blocksMap.logo!()}${blocksMap.companyInfo!()}</div>`);
       index++;
@@ -759,6 +762,9 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     }
     .block-container {
       width: 100%;
+      box-sizing: border-box;
+      min-width: 0;
+      overflow-wrap: anywhere;
       break-inside: avoid;
       page-break-inside: avoid;
     }
@@ -794,11 +800,12 @@ export function renderA4Document(params: RenderA4DocumentParams): string {
     }
     ${documentIdentityCss(brand.visual)}
     ${isInvoice ? invoiceLayoutCss(brand.visual?.margin || 20, primaryColor) : ''}
+    ${isQuote ? quoteLayoutCss(brand.visual?.margin || 20, primaryColor) : ''}
   </style>
 </head>
 <body class="${data.billingPeriod ? 'monthly-invoice' : ''}">
-  <div class="page-container${isInvoice ? ' invoice-document' : ''}"${isInvoice ? ` data-invoice-page-label="${t.page}" data-invoice-of-label="${t.of}" data-invoice-total-label="${t.totalAmount}${data.discountAmount && /[1-9]/.test(data.discountAmount) ? ` / ${t.discount}` : ''}" data-invoice-payment-label="${t.paymentInstructions}" data-invoice-details-title="${locale === 'en-US' ? 'Invoice details - continued' : 'Detalhamento da fatura - continuação'}" data-invoice-closing-title="${locale === 'en-US' ? 'Financial summary and payment' : 'Resumo financeiro e pagamento'}"` : ''}>
-    ${isInvoice ? `<template data-invoice-header><header class="invoice-continuation-heading"><div class="invoice-continuation-top"><span class="invoice-continuation-brand">${brandName}</span><span>${docTypeLabel}</span></div><h2></h2><div class="invoice-continuation-meta"><div><small>${t.invoice}</small>#${docNumber}</div><div><small>${t.recipient}</small>${clientName}</div><div><small>${t.dueDate}</small>${dueDate}</div></div></header></template><template data-invoice-footer>${activeBlocks.includes('footer') ? blocksMap.footer!() : ''}</template><div class="invoice-flow">${blocksHtml}</div>` : blocksHtml}
+  <div class="page-container${isInvoice ? ' invoice-document' : isQuote ? ' quote-document' : ''}"${isPaginated ? ` data-invoice-page-label="${t.page}" data-invoice-of-label="${t.of}" data-invoice-total-label="${t.totalAmount}${data.discountAmount && /[1-9]/.test(data.discountAmount) ? ` / ${t.discount}` : ''}" data-invoice-payment-label="${t.paymentInstructions}" data-invoice-details-title="${isQuote ? (locale === 'en-US' ? 'Quote - continued' : 'Proposta comercial - continuação') : (locale === 'en-US' ? 'Invoice details - continued' : 'Detalhamento da fatura - continuação')}" data-invoice-closing-title="${locale === 'en-US' ? 'Financial summary and payment' : 'Resumo financeiro e pagamento'}"` : ''}>
+    ${isPaginated ? `<template data-invoice-header><header class="invoice-continuation-heading"><div class="invoice-continuation-top"><span class="invoice-continuation-brand">${brandName}</span><span>${docTypeLabel}</span></div><h2></h2><div class="invoice-continuation-meta"><div><small>${isQuote ? t.quote : t.invoice}</small>#${docNumber}</div><div><small>${t.recipient}</small>${clientName}</div><div><small>${secondaryDateLabel}</small>${dueDate}</div></div></header></template><template data-invoice-footer>${activeBlocks.includes('footer') ? blocksMap.footer!() : ''}</template><div class="invoice-flow">${blocksHtml}</div>` : blocksHtml}
   </div>
 </body>
 </html>

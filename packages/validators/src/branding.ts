@@ -95,6 +95,8 @@ const palette = z
     text: hex,
     muted: hex,
     border: hex,
+    fieldBorder: hex.nullable().default(null),
+    statusColors: z.object({ success: hex, warning: hex, error: hex, info: hex, other: hex }).strict().nullable().default(null),
     action: hex,
     onAction: hex,
     sidebar: hex,
@@ -105,6 +107,35 @@ const palette = z
   })
   .strict();
 const asset = z.string().uuid().nullable();
+const artwork = z.object({
+  mode: z.enum(["none", "product", "custom"]).default("none"),
+  light: asset.default(null), dark: asset.default(null),
+}).strict();
+export const EMPTY_STATE_MODULES = ["clients", "inventory", "tickets", "contracts", "invoices", "documents"] as const;
+const emptyPair = z.object({ light: asset.default(null), dark: asset.default(null) }).strict().default({ light: null, dark: null });
+// Missing controls in already-published v1 identities are deliberately neutral.
+export const LEGACY_BRAND_MEDIA = {
+  productIdentity: false, favicon: null,
+  heroTitle: "", heroMessage: "",
+  loginArtwork: { mode: "none" as const, light: null, dark: null },
+  emptyStates: { mode: "none" as const, images: {
+    clients: { light: null, dark: null }, inventory: { light: null, dark: null },
+    tickets: { light: null, dark: null }, contracts: { light: null, dark: null },
+    invoices: { light: null, dark: null }, documents: { light: null, dark: null },
+  } },
+};
+const media = z.object({
+  productIdentity: z.boolean().default(false), favicon: asset.default(null),
+  heroTitle: z.string().trim().max(100).default(""),
+  heroMessage: z.string().trim().max(200).default(""),
+  loginArtwork: artwork.default(LEGACY_BRAND_MEDIA.loginArtwork),
+  emptyStates: z.object({
+    mode: z.enum(["none", "product", "custom"]).default("none"),
+    images: z.object({ clients: emptyPair, inventory: emptyPair, tickets: emptyPair,
+      contracts: emptyPair, invoices: emptyPair, documents: emptyPair,
+    }).strict().default(LEGACY_BRAND_MEDIA.emptyStates.images),
+  }).strict().default(LEGACY_BRAND_MEDIA.emptyStates),
+}).strict().default(LEGACY_BRAND_MEDIA);
 export const DEFAULT_LOGIN_VISUAL = {
   enabled: false, layout: "centered" as const, logoWidth: 240, logoHeight: 72,
   title: "", message: "", showSubtitle: true,
@@ -122,6 +153,7 @@ export const visualConfigSchema = z
     theme: z.enum(["light", "dark", "system"]),
     font: uiFont,
     customization,
+    media,
     login: z.object({
       enabled: z.boolean(), layout: z.enum(["centered", "split"]),
       logoWidth: z.number().int().min(120).max(320),
@@ -192,62 +224,77 @@ export const DEFAULT_VISUAL_CONFIG: VisualConfig = {
   schemaVersion: 1,
   name: "Peanut OS",
   subtitle: "Seu trabalho, conectado.",
-  theme: "dark",
+  theme: "system",
   font: "geist",
-  customization: DEFAULT_CUSTOMIZATION,
-  login: DEFAULT_LOGIN_VISUAL,
-  email: DEFAULT_EMAIL_VISUAL,
+  customization: { ...DEFAULT_CUSTOMIZATION,
+    navigation: { ...DEFAULT_CUSTOMIZATION.navigation, itemStyle: "rail", logoBlockHeight: 88 },
+    layout: { ...DEFAULT_CUSTOMIZATION.layout, topbarHeight: 68 },
+  },
+  media: { ...LEGACY_BRAND_MEDIA, productIdentity: true,
+    heroTitle: "Cada operação, no seu lugar.",
+    heroMessage: "Clientes, atendimento e financeiro. Conectados ao trabalho da sua equipe.",
+    loginArtwork: { mode: "product", light: null, dark: null },
+    emptyStates: { ...LEGACY_BRAND_MEDIA.emptyStates, mode: "product" },
+  },
+  login: { ...DEFAULT_LOGIN_VISUAL, layout: "split",
+    title: "Seu trabalho começa aqui.", message: "Entre para acompanhar sua operação.",
+  },
+  email: { ...DEFAULT_EMAIL_VISUAL, enabled: true },
   assets: { logoLight: null, logoDark: null, iconLight: null, iconDark: null },
   navigation: {
-    mode: "compact",
-    sidebarWidth: 260,
-    logoWidth: 200,
+    mode: "expanded",
+    sidebarWidth: 232,
+    logoWidth: 180,
     logoHeight: 56,
     iconSize: 40,
     padding: 24,
   },
   light: {
-    canvas: "#F4F7FA",
+    canvas: "#F1F4FA",
     surface: "#FFFFFF",
-    raised: "#EAF0F5",
-    text: "#1E2A38",
-    muted: "#526171",
-    border: "#C6D0DC",
-    action: "#0968C4",
+    raised: "#E5EBF7",
+    text: "#14233D",
+    muted: "#52617A",
+    border: "#C6CFDF",
+    fieldBorder: "#7685A0",
+    statusColors: { success: "#17663A", warning: "#805300", error: "#B42318", info: "#2546B5", other: "#6941A0" },
+    action: "#304FD0",
     onAction: "#FFFFFF",
-    sidebar: "#FFFFFF",
-    sidebarText: null,
-    sidebarMuted: null,
-    sidebarAction: null,
-    sidebarOnAction: null,
+    sidebar: "#12213A",
+    sidebarText: "#F1F5FF",
+    sidebarMuted: "#BAC8E0",
+    sidebarAction: "#BBCEFF",
+    sidebarOnAction: "#12213A",
   },
   dark: {
-    canvas: "#101D2B",
-    surface: "#172838",
-    raised: "#213547",
-    text: "#EDF4F7",
-    muted: "#B7C9D8",
-    border: "#3C566C",
-    action: "#93E2CF",
-    onAction: "#0C312B",
-    sidebar: "#162735",
+    canvas: "#101827",
+    surface: "#17243A",
+    raised: "#22324D",
+    text: "#EEF3FF",
+    muted: "#B6C5DF",
+    border: "#4B607F",
+    fieldBorder: "#7A8CA4",
+    statusColors: { success: "#86E0AE", warning: "#F2CF7C", error: "#FFB4AB", info: "#B8CCFF", other: "#D6B9FF" },
+    action: "#BBCEFF",
+    onAction: "#14233D",
+    sidebar: "#101827",
     sidebarText: null,
     sidebarMuted: null,
     sidebarAction: null,
     sidebarOnAction: null,
   },
   interface: {
-    radius: 12,
+    radius: 4,
     density: "comfortable",
     spacing: 24,
-    shadow: "subtle",
+    shadow: "none",
   },
   documents: {
     logoWidth: 240,
     logoHeight: 64,
     alignment: "left",
     margin: 20,
-    accent: "#0968C4",
+    accent: "#304FD0",
     footer: "",
     style: "standard",
     font: "inherit",
@@ -407,6 +454,12 @@ export function visualIssues(config: VisualConfig): string[] {
       label = key === "light" ? "Tema claro" : "Tema escuro",
       side = resolvedSidebar(config, key);
     const solid = config.customization.navigation.itemStyle === "solid";
+    if (p.statusColors) for (const [status,color] of Object.entries(p.statusColors)) {
+      if ([p.canvas,p.surface,p.raised].some(bg=>contrastRatio(color,bg)<4.5))
+        issues.push(`${label}: a cor de status ${status} precisa de contraste mínimo 4,5:1 nas superfícies.`);
+    }
+    if (p.fieldBorder && [p.canvas,p.surface,config.customization.components.fieldStyle === "filled" ? p.raised : p.surface].some(bg=>contrastRatio(p.fieldBorder!,bg)<3))
+      issues.push(`${label}: o contorno dos campos precisa de contraste mínimo 3:1.`);
     const softBackground =
       "#" +
       [0, 1, 2]

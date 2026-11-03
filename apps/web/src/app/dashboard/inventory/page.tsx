@@ -500,6 +500,7 @@ function InventoryTable({ initialClientId }: { initialClientId: string }) {
           </div>
         ) : assets.length === 0 ? (
           <EmptyState
+            module="inventory" filtered={!!(search || type || status)}
             title={t.states.emptyTitle}
             description={t.inventory.emptyDescription}
           />

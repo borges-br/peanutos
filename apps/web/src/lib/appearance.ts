@@ -1,5 +1,5 @@
 export const defaultAppearance = {
-  accent: "mint",
+  accent: "brand",
   density: "comfortable",
   contrast: "normal",
   largeText: false,

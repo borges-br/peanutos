@@ -752,7 +752,9 @@ export class DocumentsService {
                 : doc.documentType === "CONTRACT"
                   ? "contrato"
                   : "fatura";
-        filename = `${prefix}-${sanitizedNumber}-v${doc.version}.pdf`;
+        filename = doc.documentType === "QUOTE"
+          ? `${prefix}-${sanitizedNumber}.pdf`
+          : `${prefix}-${sanitizedNumber}-v${doc.version}.pdf`;
       } catch {
         filename = doc.fileObject.originalFilename;
       }

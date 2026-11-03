@@ -18,6 +18,7 @@ import HtmlDocumentPreview from "../../components/ui/HtmlDocumentPreview";
 import BrandImageEditor from "../../components/settings/BrandImageEditor";
 import BrandSystemPreview from "../../components/settings/BrandSystemPreview";
 import LoginBrandPreview from "./LoginBrandPreview";
+import BrandMediaControls from "./BrandMediaControls";
 import {
   BrandLoginControls,
   BrandEmailControls,
@@ -216,7 +217,9 @@ export default function BrandStudio({
     setMessage("");
   }
   const update = (key: keyof VisualConfig, value: any) =>
-    change({ ...config, [key]: value });
+    change({ ...config, [key]: value,
+      ...(key === "name" && !["Peanut OS","PeanutOS"].includes(value) ? { media: { ...config.media, productIdentity: false } } : {}),
+    });
   const nav = (key: keyof VisualConfig["navigation"], value: any) =>
     update("navigation", { ...config.navigation, [key]: value });
   const ui = (key: keyof VisualConfig["interface"], value: any) =>
@@ -230,7 +233,7 @@ export default function BrandStudio({
     );
   if (
     config.email.enabled &&
-    !(config.email.logoAssetId || config.assets.logoLight)
+    !(config.email.logoAssetId || config.assets.logoLight || config.media.productIdentity)
   )
     issues.push("Selecione a logo do cabeçalho do email.");
   if (
@@ -433,6 +436,7 @@ export default function BrandStudio({
                     <p>A escolha da fonte não altera o desenho dos logos.</p>
                   </section>
                   <BrandTypographyControls config={config} onChange={change} />
+                  <BrandMediaControls config={config} assets={assets} onChange={change} />
                   <section className="brand-panel">
                     <h2>Imagens por aplicação</h2>
                     {(
@@ -611,6 +615,9 @@ export default function BrandStudio({
                         }
                       />
                     ))}
+                    <Color label="Contorno dos campos" value={config[paletteMode].fieldBorder || config[paletteMode].border} onChange={value=>update(paletteMode,{...config[paletteMode],fieldBorder:value})} />
+                    <label className="brand-check"><input type="checkbox" checked={!!config[paletteMode].statusColors} onChange={e=>update(paletteMode,{...config[paletteMode],statusColors:e.target.checked ? DEFAULT_VISUAL_CONFIG[paletteMode].statusColors : null})}/>Personalizar cores de status</label>
+                    {config[paletteMode].statusColors && (Object.entries({success:"Sucesso",warning:"Atenção",error:"Erro",info:"Informação",other:"Outros status"}) as Array<[keyof NonNullable<VisualConfig['light']['statusColors']>,string]>).map(([key,label])=><Color key={key} label={label} value={config[paletteMode].statusColors![key]} onChange={value=>update(paletteMode,{...config[paletteMode],statusColors:{...config[paletteMode].statusColors!,[key]:value}})} />)}
                   </section>
                   <BrandComponentControls config={config} onChange={change} />
                   <BrandLayoutControls config={config} onChange={change} />

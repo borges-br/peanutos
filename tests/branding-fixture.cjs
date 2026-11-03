@@ -185,6 +185,11 @@ async function createFixture() {
   }
   function config(name = "QA Company") {
     const c = structuredClone(DEFAULT_VISUAL_CONFIG);
+    c.email.enabled = false;
+    c.media = { ...c.media, productIdentity: false,
+      loginArtwork: { mode: "none", light: null, dark: null },
+      emptyStates: { ...c.media.emptyStates, mode: "none" }, heroTitle: "", heroMessage: "",
+    };
     c.name = name;
     c.font = "source-sans-3";
     c.theme = "light";

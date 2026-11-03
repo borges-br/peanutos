@@ -4,6 +4,7 @@ import type { VisualConfig } from "@peanut/validators";
 import { surfaceScheme } from "@peanut/validators";
 import { brandFont } from "../../lib/visual-brand";
 import AuthenticatedImage from "../ui/AuthenticatedImage";
+import { useBrandFavicon } from "./BrandFavicon";
 
 type Palette = Pick<
   VisualConfig["light"],
@@ -15,7 +16,7 @@ type Palette = Pick<
   | "action"
   | "onAction"
   | "sidebar"
->;
+> & { sidebarText?: string | null; fieldBorder?: string | null };
 export type PublicLoginBrand = Pick<
   VisualConfig,
   "name" | "subtitle" | "font" | "theme" | "login"
@@ -28,6 +29,10 @@ export type PublicLoginBrand = Pick<
     "logoLight" | "logoDark" | "iconLight" | "iconDark",
     string | null
   >;
+  artwork?: { light: string | null; dark: string | null };
+  favicon?: string | null;
+  heroTitle?: string;
+  heroMessage?: string;
 };
 export default function PublicLoginSurface({
   brand,
@@ -55,6 +60,7 @@ export default function PublicLoginSurface({
   const scheme =
     brand.theme === "system" ? (systemDark ? "dark" : "light") : brand.theme;
   const palette = brand[scheme];
+  useBrandFavicon(brand.favicon, brand.name, authenticatedImages, !preview);
   const signature = (background: string) =>
     surfaceScheme(background) === "dark"
       ? brand.logos.logoDark || brand.logos.logoLight
@@ -79,11 +85,12 @@ export default function PublicLoginSurface({
     "--login-text": palette.text,
     "--login-muted": palette.muted,
     "--login-border": palette.border,
+    "--login-field-border": palette.fieldBorder || palette.border,
     "--login-action": palette.action,
     "--login-on-action": palette.onAction,
     "--login-hero": palette.sidebar,
     "--login-hero-ink":
-      surfaceScheme(palette.sidebar) === "dark" ? "#F4F7FA" : "#1E2A38",
+      palette.sidebarText || (surfaceScheme(palette.sidebar) === "dark" ? "#F4F7FA" : "#1E2A38"),
     "--login-radius": `${brand.radius}px`,
     "--login-logo-width": `${brand.login.logoWidth}px`,
     "--login-logo-height": `${brand.login.logoHeight}px`,
@@ -104,12 +111,15 @@ export default function PublicLoginSurface({
             className="brand-login-hero"
             aria-label={`Identidade ${brand.name}`}
           >
-            <div>
+            <div className="brand-login-hero-content">
               {image(signature(palette.sidebar), "brand-login-signature")}
+              {brand.heroTitle && <h2>{brand.heroTitle}</h2>}
+              {brand.heroMessage && <p>{brand.heroMessage}</p>}
               {brand.login.showSubtitle && brand.subtitle && (
                 <p>{brand.subtitle}</p>
               )}
             </div>
+            {brand.artwork?.[scheme] && image(brand.artwork[scheme], "brand-login-artwork")}
           </section>
         )}
         <div className="brand-login-main">

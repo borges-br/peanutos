@@ -7,13 +7,16 @@ export interface InvoicePaginationResult {
 /**
  * Browser-only, with no imports or captured state: the same function runs inside
  * Chromium for PDF generation and against the sandboxed preview's document.
- * Call after fonts and images have loaded. Never scale or discard invoice text.
+ * Call after fonts and images have loaded. Never scale or discard document text.
+ * Quotes use the same measured text/table splitting, with their footer only on
+ * the last page and their original spacing instead of invoice compaction.
  */
 export function paginateInvoiceDocument(
   doc: Document = document,
 ): InvoicePaginationResult | null {
-  const root = doc.querySelector<HTMLElement>(".invoice-document");
+  const root = doc.querySelector<HTMLElement>(".invoice-document, .quote-document");
   if (!root) return null;
+  const isQuote = root.classList.contains("quote-document");
   if (root.dataset.paginated === "true")
     return JSON.parse(root.dataset.paginationResult!);
   const flow = root.querySelector<HTMLElement>(".invoice-flow");
@@ -32,8 +35,8 @@ export function paginateInvoiceDocument(
   const ofLabel = root.dataset.invoiceOfLabel || "de";
   const totalLabel = root.dataset.invoiceTotalLabel || "Valor total";
   const paymentLabel = root.dataset.invoicePaymentLabel || "Pagamento";
-  const hasTotal = !!flow.querySelector(".block-financial-summary");
-  const hasPayment = !!flow.querySelector(".block-payment-info");
+  const hasTotal = !isQuote && !!flow.querySelector(".block-financial-summary");
+  const hasPayment = !isQuote && !!flow.querySelector(".block-payment-info");
   const referencePlaceholder = [
     hasTotal && totalLabel,
     hasPayment && paymentLabel,
@@ -103,8 +106,11 @@ export function paginateInvoiceDocument(
     pages = [];
   };
 
-  // Prefer one page by reducing whitespace, not by shrinking legible type.
-  for (const density of ["comfortable", "compact"] as const) {
+  // Invoices may reduce whitespace; quotes retain their configured spacing.
+  const densities: InvoicePaginationResult["density"][] = isQuote
+    ? ["comfortable"]
+    : ["comfortable", "compact"];
+  for (const density of densities) {
     root.classList.toggle("invoice-density-compact", density === "compact");
     const page = makePage();
     source.forEach((element) => body(page).append(element.cloneNode(true)));
@@ -182,7 +188,10 @@ export function paginateInvoiceDocument(
     }
     const word = text.lastIndexOf(" ", best);
     if (word > best * 0.8) best = word + 1;
-    if (!best) throw new Error("O conteúdo não cabe na área útil da fatura.");
+    // Prefer a complete quote condition at the page boundary when it fits.
+    const paragraph = text.lastIndexOf("\n", best);
+    if (isQuote && paragraph > best * 0.5) best = paragraph + 1;
+    if (!best) throw new Error("O conteúdo não cabe na área útil do documento.");
     return split(element, best);
   }
 
@@ -322,6 +331,9 @@ export function paginateInvoiceDocument(
       pages.findIndex((page) => !!page.querySelector(".block-payment-info")) +
       1;
     pages.forEach((page, index) => {
+      // Reserve footer space while measuring, then retain it only at the end.
+      if (isQuote && index < pages.length - 1)
+        page.querySelector(".block-footer")?.remove();
       page.dataset.pageNumber = String(index + 1);
       page.querySelector(".invoice-page-number")!.textContent =
         `${pageLabel} ${index + 1} ${ofLabel} ${pages.length}`;
@@ -339,7 +351,7 @@ export function paginateInvoiceDocument(
     const overflow = pages.some((page) => !fits(page));
     const result: InvoicePaginationResult = {
       pages: pages.length,
-      density: "compact",
+      density: isQuote ? "comfortable" : "compact",
       overflow,
     };
     root.dataset.paginationResult = JSON.stringify(result);

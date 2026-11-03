@@ -751,12 +751,15 @@ const pdfWorker = new Worker(
           ? source.clientNotes || source.description || null
           : source.observations || workspace.defaultInvoiceNotes || null;
 
+    const generationTime = new Date();
     const renderData = {
       number: source.number,
       billingPeriod: source.billingScheduleEvent?.periodKey,
       contractNumber: source.billingScheduleEvent ? (await prisma.contract.findUnique({ where: { id: source.contractId }, select: { number: true } }))?.number : undefined,
       status: source.status,
-      issueDate: formatDate(source.issueDate || source.createdAt),
+      issueDate: typedDocumentType === 'QUOTE'
+        ? formatDocumentDate(generationTime, 'pt-BR', workspace.timeZone)
+        : formatDate(source.issueDate || source.createdAt),
       dueDate: typedDocumentType === 'SERVICE_ORDER'
         ? dueDate ? formatDocumentDateTime(dueDate, 'pt-BR', workspace.timeZone) : '--/--/----'
         : formatDate(dueDate),
@@ -798,7 +801,7 @@ const pdfWorker = new Worker(
       },
       data: renderData,
       templateSettings: templateSnapshot,
-      generatedAt: formatDocumentDateTime(new Date(), 'pt-BR', workspace.timeZone),
+      generatedAt: formatDocumentDateTime(generationTime, 'pt-BR', workspace.timeZone),
       timeZone: workspace.timeZone,
       locale: 'pt-BR',
     };
@@ -878,7 +881,9 @@ const pdfWorker = new Worker(
             workspaceId,
             bucket: objects.bucket,
             key,
-            originalFilename: `${displayPrefix}-${sanitizedNumber}-v${version}.pdf`,
+            originalFilename: typedDocumentType === 'QUOTE'
+              ? `${displayPrefix}-${sanitizedNumber}.pdf`
+              : `${displayPrefix}-${sanitizedNumber}-v${version}.pdf`,
             mimeType: 'application/pdf',
             sizeBytes,
             sha256,
@@ -895,6 +900,7 @@ const pdfWorker = new Worker(
             documentType: typedDocumentType,
             version,
             fileObjectId: fileObject.id,
+            generatedAt: generationTime,
             sha256,
             generatedById: actorUserId,
             metadata: JSON.stringify({

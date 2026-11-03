@@ -251,6 +251,7 @@ export default function InvoicesPage() {
           </div>
         ) : invoices.length === 0 ? (
           <EmptyState
+            module="invoices" filtered={!!(search || status)}
             title={t.invoices.emptyTitle}
             description={t.invoices.emptyDescription}
             action={

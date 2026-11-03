@@ -70,6 +70,7 @@ export function visualStyle(
         : `rgb(${rgb(p.action)})`,
     "--brand-button-text": `rgb(${rgb(c.components.buttonStyle === "outline" ? p.action : p.onAction)})`,
     "--brand-field-bg": `rgb(${rgb(c.components.fieldStyle === "filled" ? p.raised : p.surface)})`,
+    "--brand-field-border": `rgb(${rgb(p.fieldBorder || p.border)})`,
     "--brand-table-row-alt":
       c.components.tableStyle === "striped"
         ? `rgb(${rgb(p.raised)})`
@@ -162,6 +163,8 @@ export function visualStyle(
     scheme === "light" ? "#FFF0EE" : "#492A2B",
   );
   vars["--color-on-error-container"] = rgb(error);
+  for (const [key,value] of Object.entries(p.statusColors || {}))
+    vars[`--brand-status-${key}`] = value;
   return vars as CSSProperties;
 }
 export function activeAsset(
@@ -175,5 +178,25 @@ export function activeAsset(
   const id =
     config.assets[key] ||
     config.assets[`${kind}Light` as keyof VisualConfig["assets"]];
-  return assets.find((a) => a.id === id)?.url || null;
+  return assets.find((a) => a.id === id)?.url ||
+    (!id && config.media.productIdentity ? `/brand/peanut-os/v1/${kind}-${scheme}.svg` : null);
+}
+
+export function artworkAsset(config: VisualConfig, assets: BrandAsset[], scheme: "light" | "dark", module?: "clients" | "inventory" | "tickets" | "contracts" | "invoices" | "documents") {
+  const control = module ? config.media.emptyStates : config.media.loginArtwork;
+  if (control.mode === "none") return null;
+  if (control.mode === "product") {
+    if (!module) return "/brand/peanut-os/v1/login-artwork.svg";
+    const names = { clients: "clientes", inventory: "inventario", tickets: "chamados", contracts: "contratos", invoices: "faturas", documents: "documentos" };
+    return `/brand/peanut-os/v1/empty-${names[module]}-${scheme}.svg`;
+  }
+  const pair = module ? config.media.emptyStates.images[module] : config.media.loginArtwork;
+  const id = pair[scheme] || pair.light;
+  return assets.find(a => a.id === id)?.url || null;
+}
+
+export function faviconAsset(config: VisualConfig, assets: BrandAsset[], scheme: "light" | "dark") {
+  const id = config.media.favicon || config.assets[scheme === "dark" ? "iconDark" : "iconLight"] || config.assets.iconLight;
+  return id ? assets.find(a=>a.id===id)?.url || null :
+    config.media.productIdentity ? "/brand/peanut-os/v1/favicon.svg" : null;
 }

@@ -387,6 +387,7 @@ export default function ContractsPage() {
           </div>
         ) : contracts.length === 0 ? (
           <EmptyState
+            module="contracts" filtered={!!(search || status || type)}
             title={t.contracts.emptyList}
             description={t.states.emptyDescription}
             action={

@@ -3,6 +3,7 @@ import {
   emailImageReferences,
   renderBillingEmail,
   validateBillingEmail,
+  publicBrandOrigin, PRODUCT_BRAND_ROOT,
 } from "@peanut/utils";
 import type { BillingEmailContent } from "@peanut/utils";
 import type { BillingEmailAppearance } from "@peanut/utils";
@@ -21,7 +22,15 @@ export async function publishedEmailAppearance(
     where: { workspaceId },
   });
   const config = row?.published;
-  if (!config?.email?.enabled) return null;
+  if (!config) {
+    const ws = await db.workspace?.findUnique({where:{id:workspaceId},select:{brandName:true,logoFileObjectId:true}});
+    if (!ws || ws.logoFileObjectId || (ws.brandName && !["Peanut OS","PeanutOS"].includes(ws.brandName))) return null;
+    return emailAppearance({ name:"Peanut OS",subtitle:"Seu trabalho, conectado.",media:{productIdentity:true},
+      email:{showSubtitle:true,logoWidth:220,alignment:"left",padding:28},
+      light:{canvas:"#F1F4FA",surface:"#FFFFFF",text:"#14233D",muted:"#52617A",action:"#304FD0",onAction:"#FFFFFF"},
+    },null);
+  }
+  if (!config.email?.enabled) return null;
   const sourceAssetId = emailLogoAssetId(config);
   const logo = sourceAssetId
     ? await db.publicBrandAsset.findFirst({
@@ -56,11 +65,11 @@ export function emailAppearance(
   return {
     name: config.name,
     subtitle: config.email.showSubtitle ? config.subtitle : "",
-    logoUrl: logo?.url || null,
+    logoUrl: logo?.url || (config.media?.productIdentity ? `${publicBrandOrigin()}${PRODUCT_BRAND_ROOT}/logo-light.png` : null),
     logoWidth: config.email.logoWidth,
     logoHeight: logo
       ? Math.round((config.email.logoWidth * logo.height) / logo.width)
-      : 0,
+      : config.media?.productIdentity ? Math.round(config.email.logoWidth * 95 / 492) : 0,
     alignment: config.email.alignment,
     padding: config.email.padding,
     canvas: config.light.canvas,

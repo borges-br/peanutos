@@ -18,7 +18,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'peanut-storage-test-'));
 const previousPath = process.env.STORAGE_PATH;
 process.env.STORAGE_PATH = temp;
 const realDate = Date;
-const instant = '2026-10-27T01:30:00.000Z';
+let instant = '2026-10-27T01:30:00.000Z';
 global.Date = class extends realDate {
   constructor(...args) { super(...(args.length ? args : [instant])); }
   static now() { return new realDate(instant).getTime(); }
@@ -31,7 +31,7 @@ let transactionError = false;
 let visualSettings = null;
 const source = {
   id: 'entity', workspaceId: 'ws', number: 'TEST-1', status: 'DRAFT', clientName: 'Cliente Teste',
-  issueDate: new Date(instant), createdAt: new Date(instant), dueDate: new Date('2026-10-30T00:00:00Z'),
+  issueDate: new Date('2026-10-01T00:00:00Z'), createdAt: new Date('2026-10-01T00:00:00Z'), dueDate: new Date('2026-10-30T00:00:00Z'),
   validUntil: new Date('2026-10-30T00:00:00Z'), scheduledFor: new Date(instant), title: 'Serviço',
   subtotalServices: 10, subtotalMaterials: 0, discountAmount: 0, totalAmount: 10,
   items: [{ type: 'SERVICE', description: 'Teste', quantity: 1, unit: 'UN', unitPrice: 10, totalPrice: 10 }],
@@ -55,7 +55,7 @@ const db = {
   },
   generatedDocument: {
     findFirst: async ({ where }) => {
-      if (!where.id) return null;
+      if (!where.id) return generatedRows.filter(d => d.workspaceId === where.workspaceId && d.entityId === where.entityId && d.entityType === where.entityType && d.documentType === where.documentType).sort((a, b) => b.version - a.version)[0] || null;
       const doc = generatedRows.find(d => d.id === where.id && d.workspaceId === where.workspaceId);
       return doc ? { ...doc, fileObject: fileRows.find(f => f.id === doc.fileObjectId) } : null;
     },
@@ -85,7 +85,7 @@ Module._load = function (id, ...args) {
     Worker: class { constructor(name, processor) { workers.set(name, processor); } on() {} },
   };
   if (id === 'playwright') return { chromium: { launch: async () => ({
-    newPage: async () => ({ setContent: async () => {}, pdf: async () => pdfBytes }), close: async () => {},
+    newPage: async () => ({ setContent: async () => {}, evaluate: async () => {}, pdf: async () => pdfBytes }), close: async () => {},
   }) } };
   return originalLoad.call(this, id, ...args);
 };
@@ -193,6 +193,8 @@ test('actual API previews and worker PDF inputs agree in three zones for all thr
       assert.equal(preview.generatedAt, documents.formatDateTime(new Date(instant), 'pt-BR', zone));
       assert.equal(preview.generatedAt, pdf.generatedAt);
       assert.equal(preview.data.issueDate, pdf.data.issueDate);
+      if (type === 'QUOTE') assert.equal(pdf.data.issueDate, documents.formatDate(new Date(instant), 'pt-BR', zone));
+      else assert.equal(pdf.data.issueDate, documents.formatDate(source.issueDate, 'pt-BR', zone, type === 'INVOICE'));
       assert.equal(preview.data.dueDate, pdf.data.dueDate);
       assert.ok(html.includes(zone));
       if (type !== 'SERVICE_ORDER') assert.equal(preview.data.dueDate, '30/10/2026');
@@ -200,6 +202,45 @@ test('actual API previews and worker PDF inputs agree in three zones for all thr
       assert.equal(JSON.parse(generatedRows.at(-1).metadata).timeZone, zone);
       await verifyFile(store, fileRows.at(-1));
     }
+  }
+});
+
+test('regenerating a quote refreshes its issue date in the workspace zone and hides versions in downloads', async () => {
+  const previousInstant = instant, previousWorkspace = workspace;
+  const originalIssueDate = source.issueDate.toISOString();
+  try {
+    workspace = { ...workspace, timeZone: 'America/Sao_Paulo' };
+    const service = new QuotesService(audit, events);
+    const documentService = new DocumentsService(audit);
+    let previousVersion = 0;
+    for (const [time, expected] of [
+      ['2026-11-03T02:59:59.000Z', '02/11/2026'],
+      ['2026-11-03T03:00:00.000Z', '03/11/2026'],
+      ['2026-11-04T03:00:00.000Z', '04/11/2026'],
+      ['2026-11-05T00:00:00.000Z', '04/11/2026'],
+    ]) {
+      instant = time;
+      await service.getQuotePreviewHtml('entity', 'ws');
+      assert.equal(rendered.at(-1).data.issueDate, expected);
+      const result = await workers.get('pdf-generation')({ id: 'regenerate', data: { workspaceId: 'ws', actorUserId: null, entityId: 'entity', entityType: 'QUOTE', documentType: 'QUOTE' } });
+      const params = rendered.at(-1);
+      assert.equal(params.data.issueDate, expected);
+      assert.equal(params.generatedAt, documents.formatDateTime(new Date(time), 'pt-BR', workspace.timeZone));
+      assert(result.version > previousVersion);
+      previousVersion = result.version;
+      const file = fileRows.find(f => f.id === result.fileObjectId);
+      assert.equal(file.originalFilename, 'orcamento-TEST-1.pdf');
+      assert.equal(generatedRows.at(-1).generatedAt.toISOString(), time);
+      // Downloading a historical file must also suppress its legacy suffix.
+      file.originalFilename = 'orcamento-TEST-1-v13.pdf';
+      const download = await documentService.getFileStream(result.generatedDocumentId, 'ws', 'FINANCIAL', 'admin', 'attachment');
+      assert.equal(download.filename, 'orcamento-TEST-1.pdf');
+      assert.deepEqual(await bytes(download.stream), pdfBytes);
+    }
+    assert.equal(source.issueDate.toISOString(), originalIssueDate);
+  } finally {
+    instant = previousInstant;
+    workspace = previousWorkspace;
   }
 });
 

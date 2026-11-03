@@ -594,6 +594,7 @@ export class QuotesService {
           settings: {},
         };
 
+    const generationTime = new Date();
     return renderA4Document({
       documentType: "QUOTE",
       brand: {
@@ -620,7 +621,7 @@ export class QuotesService {
       data: {
         number: quote.number,
         status: quote.status,
-        issueDate: formatDate(quote.issueDate),
+        issueDate: formatDocumentDate(generationTime, "pt-BR", workspace.timeZone),
         dueDate: formatDate(quote.validUntil),
         totalAmount: formatCurrency(quote.totalAmount),
         title: "Proposta Comercial",
@@ -639,7 +640,7 @@ export class QuotesService {
         discountAmount: formatCurrency(quote.discountAmount),
       },
       templateSettings: templateSnapshot,
-      generatedAt: formatDocumentDateTime(new Date(), "pt-BR", workspace.timeZone),
+      generatedAt: formatDocumentDateTime(generationTime, "pt-BR", workspace.timeZone),
       locale: "pt-BR",
       timeZone: workspace.timeZone,
     });

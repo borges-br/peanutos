@@ -151,14 +151,17 @@ export class PublicBrandService {
         Object.values(config.assets).filter(Boolean) as string[],
       ))
         rows.push(await this.prepare(workspaceId, actorUserId, id, "image"));
+      for (const id of new Set([config.media.favicon,
+        ...(config.media.loginArtwork.mode === "custom" ? [config.media.loginArtwork.light, config.media.loginArtwork.dark] : []),
+      ].filter(Boolean) as string[])) rows.push(await this.prepare(workspaceId,actorUserId,id,"image"));
     }
     if (config.email.enabled) {
       const logoId = emailLogoAssetId(config);
-      if (!logoId)
+      if (!logoId && !config.media.productIdentity)
         throw new BadRequestException(
           "Selecione a logo do email na biblioteca da empresa.",
         );
-      rows.push(
+      if (logoId) rows.push(
         await this.prepare(
           workspaceId,
           actorUserId,
@@ -220,13 +223,16 @@ export class PublicBrandService {
     const rows = await prisma.publicBrandAsset.findMany({
       where: { workspaceId, variant: "image", publishedAt: { not: null } },
     });
+    const publicUrl = (id: string | null) => {
+      const asset = rows.find(r=>r.sourceAssetId===id);
+      return asset ? publicBrandAssetPath(asset) : null;
+    };
     const logos = Object.fromEntries(
-      Object.entries(config.assets)
-        .map(([slot, id]) => [slot, rows.find((r) => r.sourceAssetId === id)])
-        .map(([slot, asset]) => [
-          slot,
-          asset ? publicBrandAssetPath(asset as any) : null,
-        ]),
+      Object.entries(config.assets).map(([slot,selected])=> {
+        const id = selected || config.assets[slot.startsWith("logo") ? "logoLight" : "iconLight"];
+        return [slot, publicUrl(id) || (!id && config.media.productIdentity
+          ? `/brand/peanut-os/v1/${slot.startsWith("logo")?"logo":"icon"}-${slot.endsWith("Dark")?"dark":"light"}.svg` : null),
+      ]; }),
     );
     const palette = (p: VisualConfig["light"]) => ({
       canvas: p.canvas,
@@ -234,9 +240,11 @@ export class PublicBrandService {
       text: p.text,
       muted: p.muted,
       border: p.border,
+      fieldBorder: p.fieldBorder,
       action: p.action,
       onAction: p.onAction,
       sidebar: p.sidebar,
+      sidebarText: p.sidebarText,
     });
     return {
       brand: {
@@ -250,6 +258,13 @@ export class PublicBrandService {
         dark: palette(config.dark),
         login: config.login,
         logos,
+        favicon: config.media.favicon ? publicUrl(config.media.favicon) : config.assets.iconLight ? publicUrl(config.assets.iconLight) :
+          (config.media.productIdentity ? "/brand/peanut-os/v1/favicon.svg" : null),
+        heroTitle: config.media.heroTitle, heroMessage: config.media.heroMessage,
+        artwork: Object.fromEntries((["light","dark"] as const).map(s=>[s,
+          config.media.loginArtwork.mode === "product" ? "/brand/peanut-os/v1/login-artwork.svg" :
+          config.media.loginArtwork.mode === "custom" ? publicUrl(config.media.loginArtwork[s] || config.media.loginArtwork.light) : null,
+        ])),
       },
     };
   }

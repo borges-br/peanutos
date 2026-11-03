@@ -388,7 +388,9 @@ test("personal email signatures are isolated, available to financial staff, and 
   const config={enabled:true,showLogo:false,displayName:'Finance <QA>',jobTitle:'Contas',company:'QA',email:'finance@example.invalid',phone:'+55 11 1234-5678',whatsapp:'551112345678',website:'https://example.invalid',address:'Example address',registration:'Example registration'};
   const owner=t.users.OWNER,financial=t.users.FINANCIAL;
   assert.equal((await f.request(financial,'PUT','/users/me/email-signature',config)).status,200);
-  assert.deepEqual((await f.request(financial,'GET','/users/me/email-signature')).json(),config);
+  assert.deepEqual((await f.request(financial,'GET','/users/me/email-signature')).json(),{
+    ...config,phone:'+551112345678',whatsapp:'+551112345678',website:'https://example.invalid/',
+  });
   assert.equal((await f.request(owner,'GET','/users/me/email-signature')).json().enabled,false);
   assert.equal((await f.request(t.users.READ_ONLY,'PUT','/users/me/email-signature',config)).status,403);
   assert.equal((await f.request(financial,'PUT','/users/me/email-signature',{...config,userId:owner.id})).status,400);
@@ -408,4 +410,36 @@ test("personal email signatures are isolated, available to financial staff, and 
   assert((await renderWorkspaceBillingEmail(f.prisma,t.ws.id,content,{},financial.id)).html.includes('Updated'));
   const legacy={...content,rendered:{subject:'Old',html:'Old HTML',text:'Old text'}};
   assert.deepEqual(await renderWorkspaceBillingEmail(f.prisma,t.ws.id,legacy,{},financial.id),legacy.rendered);
+});
+
+test("public login publishes only its artwork and favicon; empty-state artwork remains private",async()=>{
+  const a=await f.tenant('Custom media QA');
+  const icon=await f.asset(a.users.OWNER,'Favicon');
+  const hero=await f.asset(a.users.OWNER,'Login artwork');
+  const empty=await f.asset(a.users.OWNER,'Private empty illustration');
+  const c=f.config('Custom media QA');c.login.enabled=true;c.media.favicon=icon.id;
+  c.media.loginArtwork={mode:'custom',light:hero.id,dark:null};
+  c.media.emptyStates.mode='custom';c.media.emptyStates.images.clients.light=empty.id;
+  let r=await f.request(a.users.OWNER,'PUT','/settings/visual/draft',{revision:0,config:c});assert.equal(r.status,200,r.body);
+  r=await f.request(a.users.OWNER,'POST','/settings/visual/publish',{revision:1});assert.equal(r.status,201,r.body);
+  const publicAssets=await f.prisma.publicBrandAsset.findMany({where:{workspaceId:a.ws.id,publishedAt:{not:null}}});
+  assert.equal(publicAssets.length,2);assert(!publicAssets.some(r=>r.sourceAssetId===empty.id));
+  const old=process.env.PUBLIC_BRAND_WORKSPACE_ID;process.env.PUBLIC_BRAND_WORKSPACE_ID=a.ws.id;
+  try{const b=(await f.request(null,'GET','/public/branding/login')).json().brand;
+    assert.match(b.favicon,/public\/brand-assets\//);assert.match(b.artwork.light,/public\/brand-assets\//);
+    assert.equal(b.artwork.dark,b.artwork.light);assert(!JSON.stringify(b).includes(empty.id));
+  }finally{if(old===undefined)delete process.env.PUBLIC_BRAND_WORKSPACE_ID;else process.env.PUBLIC_BRAND_WORKSPACE_ID=old;}
+});
+
+test("an uploaded light logo and symbol take priority over product fallbacks on public dark surfaces",async()=>{
+  const a=await f.tenant('Fallback QA'),asset=await f.asset(a.users.OWNER,'Own logo and symbol');
+  const c=f.config('Fallback QA');c.login.enabled=true;c.media.productIdentity=true;
+  c.assets.logoLight=asset.id;c.assets.iconLight=asset.id;
+  let r=await f.request(a.users.OWNER,'PUT','/settings/visual/draft',{revision:0,config:c});assert.equal(r.status,200,r.body);
+  r=await f.request(a.users.OWNER,'POST','/settings/visual/publish',{revision:1});assert.equal(r.status,201,r.body);
+  const old=process.env.PUBLIC_BRAND_WORKSPACE_ID;process.env.PUBLIC_BRAND_WORKSPACE_ID=a.ws.id;
+  try{const b=(await f.request(null,'GET','/public/branding/login')).json().brand;
+    assert.match(b.logos.logoLight,/public\/brand-assets\//);assert.equal(b.logos.logoDark,b.logos.logoLight);
+    assert.equal(b.logos.iconDark,b.logos.iconLight);assert.equal(b.favicon,b.logos.iconLight);
+  }finally{if(old===undefined)delete process.env.PUBLIC_BRAND_WORKSPACE_ID;else process.env.PUBLIC_BRAND_WORKSPACE_ID=old;}
 });

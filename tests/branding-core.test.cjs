@@ -184,10 +184,44 @@ test("outline actions validate text contrast against their transparent backgroun
   Object.assign(c.light, {
     action: "#5681A8",
     onAction: "#000000",
+    sidebar: "#FFFFFF", sidebarText: "#14233D", sidebarMuted: "#52617A",
     sidebarAction: c.light.action,
     sidebarOnAction: c.light.onAction,
   });
   assert.equal(visualIssues(c).length, 0);
   c.customization.components.buttonStyle = "outline";
   assert(visualIssues(c).some((i) => i.includes("botão de contorno")));
+});
+
+test("Circuito defaults are opt-out while older published identities acquire no product artwork", () => {
+  const current = normalizeVisualConfig(DEFAULT_VISUAL_CONFIG);
+  assert.equal(current.font,"geist");
+  assert.equal(current.media.productIdentity,true);
+  assert.equal(current.media.emptyStates.mode,"product");
+  const legacy=structuredClone(current);delete legacy.media;legacy.name="Empresa existente";
+  const before=JSON.stringify(legacy), upgraded=normalizeVisualConfig(legacy);
+  assert.equal(upgraded.media.productIdentity,false);
+  assert.equal(upgraded.media.emptyStates.mode,"none");
+  assert.equal(upgraded.media.loginArtwork.mode,"none");
+  assert.equal(upgraded.media.favicon,null);
+  assert.equal(JSON.stringify(legacy),before);
+  const noArtwork=structuredClone(current);noArtwork.media.productIdentity=false;noArtwork.media.loginArtwork.mode="none";noArtwork.media.emptyStates.mode="none";
+  assert(visualConfigSchema.safeParse(noArtwork).success);
+});
+
+test("new visual slots accept only tenant asset identifiers and known modes", () => {
+  for(const patch of [ {favicon:"https://example.invalid/favicon.svg"},
+    {loginArtwork:{mode:"video",light:null,dark:null}},
+    {heroTitle:"x".repeat(101)},
+    {emptyStates:{mode:"custom",images:{clients:{light:"foreign-url",dark:null}}}},
+  ]) assert(!visualConfigSchema.safeParse({...DEFAULT_VISUAL_CONFIG,media:{...DEFAULT_VISUAL_CONFIG.media,...patch}}).success);
+});
+
+test("semantic status colors validate text contrast and remain absent from historical palettes",()=>{
+  const c=structuredClone(DEFAULT_VISUAL_CONFIG);
+  assert.equal(visualIssues(c).length,0);
+  c.light.statusColors.warning='#F5C354';
+  assert(visualIssues(c).some(i=>i.includes('status warning')));
+  delete c.light.statusColors;
+  assert.equal(normalizeVisualConfig(c).light.statusColors,null);
 });

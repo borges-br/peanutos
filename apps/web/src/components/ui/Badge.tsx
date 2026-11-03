@@ -17,7 +17,7 @@ export const Badge: React.FC<BadgeProps> = ({ children, variant = 'neutral', cla
   };
 
   return (
-    <span className={`${baseClasses} ${variantClasses[variant]} ${className}`} {...props}>
+    <span data-ui-badge={variant} className={`${baseClasses} ${variantClasses[variant]} ${className}`} {...props}>
       {children}
     </span>
   );

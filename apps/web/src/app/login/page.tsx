@@ -7,7 +7,7 @@ import { useI18n } from "../../i18n/useI18n";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import { apiRequest } from "../../lib/api";
-import logoImg from "../../../images/layout/logo.webp";
+import { DEFAULT_PUBLIC_LOGIN_BRAND } from "../../lib/public-login-brand";
 import PublicLoginSurface, {
   PublicLoginBrand,
 } from "../../components/layout/PublicLoginSurface";
@@ -147,10 +147,9 @@ export default function LoginPage() {
         Carregando…
       </main>
     );
-  if (publicBrand)
-    return (
+  return (
       <PublicLoginSurface
-        brand={publicBrand}
+        brand={publicBrand || DEFAULT_PUBLIC_LOGIN_BRAND}
         title={t.auth.loginTitle}
         message={t.auth.loginSubtitle}
       >
@@ -158,44 +157,4 @@ export default function LoginPage() {
       </PublicLoginSurface>
     );
 
-  return (
-    <main className="min-h-screen bg-background flex flex-col justify-center items-center p-md relative overflow-hidden select-none">
-      {/* Subtle background ambient light */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-[radial-gradient(circle,rgba(157,183,255,0.05)_0%,rgba(0,0,0,0)_70%)] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[45%] h-[45%] rounded-full bg-[radial-gradient(circle,rgba(157,183,255,0.05)_0%,rgba(0,0,0,0)_70%)] pointer-events-none" />
-
-      {/* Main Login Card Container */}
-      <section className="w-full max-w-[440px] bg-surface border border-outline-variant/30 rounded-xl p-lg md:p-xl shadow-2xl shadow-black/80 z-10 animate-in fade-in duration-300">
-        {/* Header Branding */}
-        <div className="text-center mb-xl">
-          <div className="flex justify-center items-center gap-xs mb-sm">
-            <div className="w-6 h-6 flex items-center justify-center rounded overflow-hidden">
-              <img
-                src={logoImg.src}
-                alt="Peanut OS Logo"
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <span className="font-headline-md text-base font-bold text-primary tracking-tight">
-              Peanut OS
-            </span>
-          </div>
-
-          <h2 className="font-display-lg text-xl text-on-surface font-semibold mt-2">
-            {t.auth.loginTitle}
-          </h2>
-          <p className="text-[13px] text-on-surface-variant/80 mt-1">
-            {t.auth.loginSubtitle}
-          </p>
-        </div>
-
-        {credentialsForm}
-      </section>
-
-      {/* Simplified Localized Footer */}
-      <footer className="mt-xl text-[11px] text-on-surface-variant/40 z-10 pointer-events-none text-center">
-        {t.auth.copyright}
-      </footer>
-    </main>
-  );
 }

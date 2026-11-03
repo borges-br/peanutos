@@ -268,7 +268,7 @@ test("full descriptions longer than a page are split without losing text or dupl
   }
 });
 
-test("optional blocks and regular invoices use the same pagination; quotes remain unaffected", async () => {
+test("optional blocks and regular invoices use the same pagination; service orders remain unaffected", async () => {
   const data = structuredClone(seed);
   delete data.data.billingPeriod;
   data.templateSettings.enabledBlocks.paymentInfo = false;
@@ -281,12 +281,12 @@ test("optional blocks and regular invoices use the same pagination; quotes remai
   } finally {
     await page.close();
   }
-  const quote = structuredClone(seed);
-  quote.documentType = "QUOTE";
+  const serviceOrder = structuredClone(seed);
+  serviceOrder.documentType = "SERVICE_ORDER";
   const other = await browser.newPage();
   try {
     assert.equal(
-      await prepareDocumentPage(other, renderA4Document(quote)),
+      await prepareDocumentPage(other, renderA4Document(serviceOrder)),
       null,
     );
     assert.equal(await other.locator(".invoice-page").count(), 0);
